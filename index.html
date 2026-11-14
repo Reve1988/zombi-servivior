@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OUTPOST ZERO — 모던 전술 디펜스 & 쉘터 빌더</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Top Tactical HUD -->
+  <header id="top-hud">
+    <div class="hud-group hud-status">
+      <div class="wave-badge">
+        <span id="hud-phase-icon">☀️</span>
+        <div>
+          <div id="hud-wave-num" class="wave-title">WAVE 1</div>
+          <div id="hud-phase-text" class="wave-sub">주간 정비 페이즈</div>
+        </div>
+      </div>
+      <div class="hq-health-box" title="전술 지휘 본부 내구도">
+        <div class="hq-label">🏛️ 지휘 본부 <span id="hud-hq-hp">800 / 800</span></div>
+        <div class="bar-track"><div id="hud-hq-bar" class="bar-fill hp-fill" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <div class="hud-group hud-resources">
+      <div class="res-pill" title="구조 목재: 방벽, 전술 막사, 전투원 초소, 모던 가구 제작">
+        <span class="res-icon">🪵</span>
+        <div>
+          <div class="res-label">목재</div>
+          <div id="res-wood" class="res-val">150</div>
+        </div>
+      </div>
+
+      <div class="res-pill" title="합금 고철: 강화 장갑벽, 자동화 포탑, 발전·배터리 설비 제작">
+        <span class="res-icon">🔩</span>
+        <div>
+          <div class="res-label">고철</div>
+          <div id="res-scrap" class="res-val">130</div>
+        </div>
+      </div>
+
+      <div class="res-pill coin-pill" id="btn-open-trader-pill" title="크레딧 코인: 외부 기지 보급 상인과 자재·특수 가구·요원 거래 (클릭하여 상인 열기)">
+        <span class="res-icon">🪙</span>
+        <div>
+          <div class="res-label">코인</div>
+          <div id="res-coin" class="res-val">95</div>
+        </div>
+      </div>
+
+      <div class="res-pill power-pill" title="배터리 전력: 낮에 태양광·풍력 설비로 충전되며, 밤 동안 자동 포탑과 전기 조명이 실시간 소모합니다.">
+        <span class="res-icon">⚡</span>
+        <div class="power-col">
+          <div class="res-row-top">
+            <span class="res-label">전력</span>
+            <span id="res-power" class="res-val">85 / 85</span>
+          </div>
+          <div class="bar-track mini-track"><div id="res-power-bar" class="bar-fill pwr-fill" style="width:100%"></div></div>
+          <div id="res-power-sub" class="res-micro">낮 충전 +42⚡ · 대기 -0.0/s</div>
+        </div>
+      </div>
+
+      <div class="res-pill pop-pill" title="작전 요원(인구): 전기를 쓰지 않는 전투원 초소에 배치됩니다. 막사/숙소 빈자리에 매일 아침 합류하거나 상인에게서 스카우트 가능!">
+        <span class="res-icon">👥</span>
+        <div>
+          <div class="res-label">요원 (배치/가용)</div>
+          <div id="res-pop" class="res-val">0 / 2 <span class="pop-cap">(숙소 2)</span></div>
+        </div>
+      </div>
+
+      <div class="res-pill cozy-pill" id="cozy-pill">
+        <span class="res-icon">💛</span>
+        <div>
+          <div class="res-label">안락함·사기</div>
+          <div id="res-cozy" class="res-val">Lv.1 (8)</div>
+        </div>
+        <div id="cozy-tooltip" class="cozy-popover"></div>
+      </div>
+    </div>
+
+    <div class="hud-group hud-sys">
+      <button id="btn-sound" class="sys-btn" title="효과음 켜기/끄기">🔊</button>
+      <button id="btn-center" class="sys-btn" title="본부 중심으로 카메라 초기화 (Space)">🎯</button>
+      <button id="btn-guide" class="sys-btn" title="작전 가이드 열기">❔ 가이드</button>
+      <button id="btn-reset" class="sys-btn danger-outline" title="새 기지 처음부터 시작">🔄 새 작전</button>
+    </div>
+  </header>
+
+  <!-- Wave / Event Toast Banner -->
+  <div id="wave-banner" class="wave-banner hidden">
+    <div id="banner-title" class="banner-title"></div>
+    <div id="banner-sub" class="banner-sub"></div>
+  </div>
+
+  <!-- Right Side Tactical Controls -->
+  <aside id="right-controls">
+    <!-- Day Controls -->
+    <div id="day-actions" class="action-stack">
+      <button id="btn-start-wave" class="cta-wave-btn">
+        <span class="cta-main">🌙 웨이브 시작</span>
+        <span id="cta-wave-sub" class="cta-sub">WAVE 1 야간 방어 돌입</span>
+      </button>
+      <button id="btn-trader" class="tactical-btn trader-btn">
+        <span>🛒 외부 기지 보급 상인</span>
+        <small>코인으로 물자·가구·요원 교역</small>
+      </button>
+      <button id="btn-repair-all" class="tactical-btn repair-btn">
+        <span>🛠️ 기지 일괄 정비</span>
+        <small id="repair-cost-label">모든 시설 내구도 100%</small>
+      </button>
+    </div>
+
+    <!-- Night Combat Controls -->
+    <div id="night-actions" class="action-stack hidden">
+      <div class="enemy-counter">
+        <span>남은 감염체</span>
+        <strong id="hud-enemies-left">0</strong>
+      </div>
+      <button id="btn-speed" class="tactical-btn speed-btn">
+        <span>⏩ 전투 배속: <b id="speed-label">1x</b></span>
+        <small>클릭하여 1x / 2x 전환</small>
+      </button>
+      <button id="btn-skill-repair" class="tactical-btn skill-btn">
+        <span>🛠️ 긴급 나노 수리 드론</span>
+        <small id="skill-repair-cd">즉시 전체 시설 +95 HP</small>
+      </button>
+      <button id="btn-skill-airstrike" class="tactical-btn skill-btn strike-btn">
+        <span>🚀 전술 조명탄 & 폭격</span>
+        <small id="skill-strike-cd">지정 위치 광역 폭격 + 야간 조명</small>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Bottom Construction & Interior Dock -->
+  <section id="build-dock">
+    <div class="dock-header">
+      <div id="category-tabs" class="dock-tabs"></div>
+      <div class="dock-tools">
+        <button id="tool-inspect" class="tool-btn active" title="시설 정보 및 버프 반경 확인 (ESC)">🖱️ 조회</button>
+        <button id="tool-move" class="tool-btn" title="낮 동안 이미 설치한 시설을 무료로 다른 위치로 옮깁니다 (단축키 M)">🔄 무료 이동 (M)</button>
+        <button id="tool-remove" class="tool-btn danger" title="설치한 시설이나 바닥재를 철거하고 비용의 80%를 돌려받습니다 (단축키 X)">🗑️ 철거·환급 (X)</button>
+      </div>
+    </div>
+
+    <div id="item-cards" class="dock-cards"></div>
+
+    <div id="detail-bar" class="dock-detail">
+      <span id="detail-text">건설할 항목을 선택하거나 기지 시설을 클릭해 상세 능력치와 오라 시너지를 확인하세요. (우클릭 드래그 / WASD: 화면 이동, 휠: 확대·축소)</span>
+    </div>
+  </section>
+
+  <!-- Armored Trader Modal -->
+  <div id="trader-modal" class="modal-backdrop hidden">
+    <div class="modal-card trader-card">
+      <div class="modal-head">
+        <div>
+          <h2>🛒 외부 기지 장갑 보급대 (교역소)</h2>
+          <p>크레딧 코인(🪙)으로 전략 자재, 급속 파워셀, 작전 요원, 특수 인테리어 보급품을 거래합니다.</p>
+        </div>
+        <button id="btn-close-trader" class="close-btn">✕</button>
+      </div>
+      <div class="trader-toolbar">
+        <div class="trader-balance">보유 코인: <strong id="trader-coin-val">95 🪙</strong></div>
+        <button id="btn-refresh-trader" class="sys-btn">🔄 무전 보급 목록 갱신 (15 🪙)</button>
+      </div>
+      <div id="trader-grid" class="trader-grid"></div>
+    </div>
+  </div>
+
+  <!-- Tactical Briefing Guide Modal -->
+  <div id="guide-modal" class="modal-backdrop hidden">
+    <div class="modal-card guide-card">
+      <div class="modal-head">
+        <div>
+          <h2>📡 OUTPOST ZERO — 전술 지휘관 매뉴얼</h2>
+          <p>현대 전술 기지를 건설·꾸미고 밤마다 몰려오는 감염체 웨이브를 방어하세요.</p>
+        </div>
+        <button id="btn-close-guide" class="close-btn">✕</button>
+      </div>
+      <div class="guide-body">
+        <div class="guide-grid">
+          <div class="guide-box">
+            <h3>1. 목재(🪵) · 고철(🔩) 기초 건설</h3>
+            <p>낮(정비 페이즈)에는 시간 제한이 없습니다. 방벽으로 길목(킬존)을 유도하고 방어 거점과 발전 설비를 구축하세요. 설치한 건물은 <b>[🔄 무료 이동]</b>으로 언제든 재배치할 수 있습니다.</p>
+          </div>
+          <div class="guide-box">
+            <h3>2. 주간 충전 & 야간 전력(⚡) 소모</h3>
+            <p><b>태양광 어레이·풍력 터빈</b>을 지으면 낮마다 배터리가 충전됩니다. 밤에는 <b>발칸·유탄·EMP 자동포탑</b>과 <b>LED 투광등</b>이 실시간으로 전력을 소모하며, 방전되면 <b>정전(블랙아웃)</b>이 발생합니다!</p>
+          </div>
+          <div class="guide-box">
+            <h3>3. 무전력 전투원(👥) vs 전력 포탑</h3>
+            <p><b>전술 막사·모듈러 숙소</b>를 지으면 요원 수용량이 늘어나고 매일 아침 신규 요원이 합류합니다. 요원이 배치된 <b>벙커·샷건·저격탑</b>은 전기가 끊겨도 끝까지 사격합니다!</p>
+          </div>
+          <div class="guide-box">
+            <h3>4. 모던 꾸미기(💛) & 보급 상인(🪙)</h3>
+            <p><b>파티오 히터·투광등·자판기·플랜터·테라스 타일</b>을 다양하게 꾸미면 <b>안락함 등급</b>과 <b>주변 오라 버프</b>로 화력과 코인 보상이 급증합니다. 코인으로 <b>보급 상인</b>에게서 물자와 희귀 설비를 구매하세요!</p>
+          </div>
+        </div>
+        <div class="guide-controls">
+          <span><b>좌클릭 / 드래그</b>: 설치 및 시설 조회</span>
+          <span><b>우클릭 드래그 또는 WASD</b>: 카메라 이동</span>
+          <span><b>마우스 휠</b>: 줌 인/아웃</span>
+          <span><b>M / X / ESC</b>: 이동 / 철거 / 취소</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="js/data.js"></script>
+  <script defer src="js/audio.js"></script>
+  <script defer src="js/iso.js"></script>
+  <script defer src="js/pathfinding.js"></script>
+  <script defer src="js/renderer.js"></script>
+  <script defer src="js/game.js"></script>
+  <script defer src="js/main.js"></script>
+</body>
+</html>
