@@ -1,12 +1,8 @@
 window.ZS = window.ZS || {};
 
-ZS.DATA = {
-  VERSION: 'v0.1.0',
-  GRID_SIZE: 18,
-  HQ_POS: { x: 8, y: 8 },
-
+ZS.DATA = (function () {
   // Single-source-of-truth Semantic Palette (share/design/issue-03-palette-tokens.md)
-  PALETTE: {
+  const PALETTE = {
     // 1. Semantic Tokens (1 Color = 1 Meaning)
     power: '#5EF2FF',
     powerDim: '#2A7F8C',
@@ -67,8 +63,34 @@ ZS.DATA = {
     outlineDark: '#1B2430',
     resWood: '#D49A5A',
     resScrap: '#AEB8C4',
-    warmGlow: 'rgba(255, 210, 122, 0.42)'
-  },
+    warmGlow: 'rgba(255, 210, 122, 0.42)',
+
+    // 4. Enemy (Zombie) Complementary Palette (share/design/issue-03-palette-tokens.md §4 approved)
+    zombieWalkerCoat: '#6E1E3E',
+    zombieWalkerSkin: '#F2CCD0',
+    zombieWalkerEye: '#FF4D6D',
+
+    zombieRunnerCoat: '#991B2E',
+    zombieRunnerAccent: '#FF9466',
+    zombieRunnerSkin: '#FFF0E6',
+    zombieRunnerEye: '#FFB347',
+
+    zombieBruteCoat: '#3B1029',
+    zombieBruteArmor: '#C97A9E',
+    zombieBruteSkin: '#E8BBD0',
+    zombieBruteEye: '#FF4D6D',
+
+    zombieBossCoat: '#591259',
+    zombieBossCrack: '#E040FB',
+    zombieBossSkin: '#F9DBFF',
+    zombieBossEye: '#FF4D6D'
+  };
+
+  return {
+  VERSION: 'v0.1.0',
+  GRID_SIZE: 18,
+  HQ_POS: { x: 8, y: 8 },
+  PALETTE,
 
   INITIAL_RESOURCES: {
     wood: 150,
@@ -518,8 +540,10 @@ ZS.DATA = {
       scrapDrop: [2, 4],
       coinDrop: [1, 2],
       scale: 1.0,
-      coatColor: '#4c5b52',
-      skinColor: '#7ca87c'
+      coatColor: PALETTE.zombieWalkerCoat,
+      skinColor: PALETTE.zombieWalkerSkin,
+      eyeColor: PALETTE.zombieWalkerEye,
+      eyeGlow: 'rgba(255, 77, 109, 0.56)'
     },
     runner: {
       id: 'runner',
@@ -530,9 +554,12 @@ ZS.DATA = {
       attackRate: 1.4,
       scrapDrop: [2, 5],
       coinDrop: [1, 3],
-      scale: 0.9,
-      coatColor: '#7a3338',
-      skinColor: '#98b880'
+      scale: 0.92,
+      coatColor: PALETTE.zombieRunnerCoat,
+      accentColor: PALETTE.zombieRunnerAccent,
+      skinColor: PALETTE.zombieRunnerSkin,
+      eyeColor: PALETTE.zombieRunnerEye,
+      eyeGlow: 'rgba(255, 179, 71, 0.58)'
     },
     brute: {
       id: 'brute',
@@ -544,8 +571,11 @@ ZS.DATA = {
       scrapDrop: [7, 12],
       coinDrop: [4, 7],
       scale: 1.32,
-      coatColor: '#363f4d',
-      skinColor: '#67946d'
+      coatColor: PALETTE.zombieBruteCoat,
+      armorColor: PALETTE.zombieBruteArmor,
+      skinColor: PALETTE.zombieBruteSkin,
+      eyeColor: PALETTE.zombieBruteEye,
+      eyeGlow: 'rgba(255, 77, 109, 0.62)'
     },
     boss: {
       id: 'boss',
@@ -558,8 +588,11 @@ ZS.DATA = {
       coinDrop: [28, 38],
       isBoss: true,
       scale: 1.72,
-      coatColor: '#4b234d',
-      skinColor: '#8ee89e'
+      coatColor: PALETTE.zombieBossCoat,
+      accentColor: PALETTE.zombieBossCrack,
+      skinColor: PALETTE.zombieBossSkin,
+      eyeColor: PALETTE.zombieBossEye,
+      eyeGlow: 'rgba(255, 77, 109, 0.78)'
     }
   },
 
@@ -637,4 +670,5 @@ ZS.DATA = {
       itemId: 'emp_coil'
     }
   ]
-};
+  };
+})();

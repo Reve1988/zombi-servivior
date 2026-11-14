@@ -626,6 +626,8 @@ ZS.Game = (function () {
     else { gx = 0.45; gy = idx + 0.5; }
 
     const maxHp = Math.round(def.hp * entry.hpScale);
+    const hqCx = DATA.HQ_POS.x + 0.5;
+    const hqCy = DATA.HQ_POS.y + 0.5;
     state.zombies.push({
       type: entry.type,
       x: gx,
@@ -637,6 +639,7 @@ ZS.Game = (function () {
       attackRate: def.attackRate,
       atkCooldown: 0,
       slowTimer: 0,
+      facingAngle: Math.atan2(hqCy - gy, hqCx - gx),
       seed: Math.random() * 10
     });
   }
@@ -1054,6 +1057,9 @@ ZS.Game = (function () {
       const hqStruct = state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
 
       if (distHq <= 0.92 && hqStruct) {
+        if (distHq > 0.01) {
+          z.facingAngle = Math.atan2(hqCy - z.y, hqCx - z.x);
+        }
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
           hqStruct.hp -= z.damage;
@@ -1106,6 +1112,9 @@ ZS.Game = (function () {
       }
 
       const distGoal = Math.hypot(goalX - z.x, goalY - z.y);
+      if (distGoal > 0.01) {
+        z.facingAngle = Math.atan2(goalY - z.y, goalX - z.x);
+      }
       if (blockingTarget && distGoal <= 0.86) {
         // Melee attack blocking structure
         if (z.atkCooldown <= 0) {
