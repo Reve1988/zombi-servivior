@@ -1,6 +1,7 @@
 window.ZS = window.ZS || {};
 
 ZS.DATA = {
+  VERSION: 'v0.1.0',
   GRID_SIZE: 18,
   HQ_POS: { x: 8, y: 8 },
 

@@ -603,6 +603,13 @@ window.ZS = window.ZS || {};
     resizeCanvas();
     ZS.Iso.resetCamera();
 
+    const ver = ZS.DATA.VERSION || 'v0.1.0';
+    const hudVer = document.getElementById('hud-version');
+    const guideVer = document.getElementById('guide-version');
+    if (hudVer) hudVer.textContent = ver;
+    if (guideVer) guideVer.textContent = ver;
+    document.title = `OUTPOST ZERO (${ver}) — 모던 전술 디펜스 & 쉘터 빌더`;
+
     ZS.Game.setCallbacks({
       onUiChange: updateHud,
       onWaveBanner: showWaveBanner
