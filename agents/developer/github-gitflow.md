@@ -29,20 +29,26 @@
 
 ---
 
-## 3. 이슈 기반 개발 및 PR 워크플로우
+## 3. 이슈 기반 개발 및 `git worktree` 워크플로우
 
-### 3.1 작업 시작 (Issue 확인 → `feature` 브랜치 분기)
+복수의 개발 에이전트가 동시에 서로 다른 이슈를 작업하더라도 브랜치와 작업 파일이 섞이지 않도록, **모든 개발 작업은 반드시 `git worktree`를 사용해 독립된 작업 디렉토리에서 진행**합니다.
+
+### 3.1 작업 시작 (Issue 확인 → `git worktree` 생성)
 1. 기획·디자인 에이전트가 등록한 이슈를 조회하여 요구사항과 인수 조건을 파악합니다.
    ```powershell
    gh issue list
    gh issue view <issueNumber>
    ```
-2. `develop` 브랜치를 최신 상태로 동기화한 뒤 `feature` 브랜치를 생성합니다.
+2. 루트 저장소(`zombi-servivior/`)의 체크아웃 브랜치(`develop`)는 직접 변경하지 않고, 원격 정보를 최신화한 뒤 `.worktrees/` 하위에 이슈 전용 워크트리와 `feature` 브랜치를 동시에 생성합니다.
+   - *(예외: Antigravity 서브에이전트/스웜의 `workspace: "share"` 등 이미 시스템 차원에서 분리된 워크트리를 할당받은 에이전트는 현재 할당된 워크스페이스에서 바로 브랜치를 생성해 작업할 수 있습니다.)*
    ```powershell
-   git checkout develop
-   git pull origin develop
-   git checkout -b feature/<issueNumber>-<short-slug>
+   git fetch origin
+   git worktree add -b feature/<issueNumber>-<short-slug> .worktrees/feature-<issueNumber>-<short-slug> origin/develop
    ```
+   - `release/*` 작업 시: `git worktree add -b release/v<X.Y.Z> .worktrees/release-v<X.Y.Z> origin/develop`
+   - `hotfix/*` 작업 시: `git worktree add -b hotfix/<issueNumber>-<short-slug> .worktrees/hotfix-<issueNumber>-<short-slug> origin/main`
+3. 코드 수정, 구문/동작 검증, 스테이징(`git add`), 커밋(`git commit`), 푸시(`git push`)는 모두 **생성한 해당 워크트리 경로(`.worktrees/feature-<issueNumber>-<short-slug>`) 내부**에서 수행합니다.
+   - 참고: `.worktrees/` 경로는 `.gitignore`에 등록되어 있어 루트 디렉토리의 Git 상태에 영향을 주지 않습니다.
 
 ### 3.2 커밋 메시지 컨벤션 (필수 준수)
 커밋 메시지는 반드시 아래 형식을 따릅니다.
@@ -68,10 +74,10 @@
   - 시설 조회 패널 내 강화 비용 표시 및 강화 버튼 UI 연동
   ```
 
-### 3.3 원격 푸시 및 PR 생성 (`develop` 타겟)
-1. 작업 및 검증이 완료되면 원격 저장소에 `feature` 브랜치를 푸시합니다.
+### 3.3 원격 푸시, PR 생성 (`develop` 타겟) 및 워크트리 정리
+1. 해당 워크트리 디렉토리에서 작업 및 검증이 완료되면 원격 저장소에 `feature` 브랜치를 푸시합니다.
    ```powershell
-   git push -u origin feature/<issueNumber>-<short-slug>
+   git -C .worktrees/feature-<issueNumber>-<short-slug> push -u origin feature/<issueNumber>-<short-slug>
    ```
 2. `gh pr create`를 사용해 **`develop` 브랜치를 타겟(`--base develop`)** 으로 Pull Request를 생성합니다.
    ```powershell
@@ -80,6 +86,13 @@
 3. **권한 경계 (중요)**:
    - 개발 에이전트는 **PR 생성까지만 직접 수행**하고 사용자에게 PR 링크와 요약 결과를 보고합니다.
    - **코드 리뷰 및 머지(`merge`)는 사용자가 직접 진행**합니다. 에이전트는 사용자의 명시적 지시 없이 `gh pr merge`를 실행하거나 `main` / `develop` 브랜치에 직접 커밋·푸시하지 않습니다.
+4. **워크트리 유지 및 정리**:
+   - PR 리뷰 대기 중에는 추가 피드백 수정에 바로 대응할 수 있도록 해당 워크트리를 그대로 두어도 무방합니다(다른 에이전트의 워크트리와 간섭 없음).
+   - PR이 `develop`에 최종 병합된 이후 더 이상 작업이 필요 없다면 아래 명령어로 워크트리를 깔끔하게 제거합니다.
+   ```powershell
+   git worktree remove .worktrees/feature-<issueNumber>-<short-slug>
+   git worktree prune
+   ```
 
 ---
 

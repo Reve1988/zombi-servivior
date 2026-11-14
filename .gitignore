@@ -5,3 +5,7 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+# Isolated agent git worktrees
+.worktrees/
+

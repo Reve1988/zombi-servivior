@@ -16,7 +16,7 @@
 | :--- | :--- | :--- |
 | **기획 (Planner) Agent** | 게임 시스템·밸런스·신규 콘텐츠 기획 및 요구사항 정의 | `gh issue create`로 기능/밸런스 이슈 등록 및 명세 작성 |
 | **디자인 (Designer) Agent** | UI/UX 레이아웃, 복셀 오브젝트 외형·이펙트·아트 명세 정의 | `gh issue create` / `gh issue comment`로 디자인 이슈·가이드 등록 |
-| **개발 (Developer) Agent** | **등록된 GitHub 이슈(`#{issueNumber}`)를 기반으로 코드 구현 및 검증** | 이슈 조회(`gh issue view`) → `feature` 브랜치 생성 → 구현·커밋 → `develop` 대상 **PR 생성(`gh pr create`)까지만 수행** |
+| **개발 (Developer) Agent** | **등록된 GitHub 이슈(`#{issueNumber}`)를 기반으로 코드 구현 및 검증** | 이슈 조회(`gh issue view`) → **`git worktree` 독립 작업 공간 생성(`feature/*`)** → 구현·커밋 → `develop` 대상 **PR 생성(`gh pr create`)까지만 수행** |
 
 - **주의**: 개발 에이전트는 별도 지시가 없는 한 임의로 기획/디자인 이슈를 생성하지 않으며, 등록된 이슈의 요구사항을 정확히 구현하는 데 집중합니다.
 - **리뷰 및 머지(Merge)**: 생성된 PR의 코드 리뷰와 병합(`merge`)은 **사용자(프로젝트 오너)가 직접 수행**합니다.
