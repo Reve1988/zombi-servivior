@@ -73,9 +73,12 @@ ZS.Renderer = (function () {
       }
     }
 
-    // Selected structure range / aura indicator
+    // Selected structure range / aura indicator + base tile floor highlight (occluded by 3D structures)
     if (uiState.inspectedTile) {
       const { tx, ty } = uiState.inspectedTile;
+      if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
+        Iso.drawTilePoly(ctx, tx, ty, 2.2, P.selectFill, P.selectStroke, 1.8);
+      }
       const st = state.structGrid[ty] && state.structGrid[ty][tx];
       if (st && st.id !== 'command_hq') {
         const def = DATA.ITEMS[st.id];
@@ -148,7 +151,11 @@ ZS.Renderer = (function () {
       drawNightLighting(ctx, w, h, state, powered, timeSec, zScale);
     }
 
-    // 9. Floating Texts (Damage, Loot, Buff Callouts - Drawn Crisp Above Darkness!)
+    // ── Info Layer (Drawn above darkness: identical daytime brightness & contrast) ──
+    // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout ⚡OFF Warnings
+    drawInfoLayer(ctx, state, uiState, renderList, powered, timeSec, zScale);
+
+    // 10. Floating Texts (Damage, Loot, Buff Callouts)
     drawFloatingTexts(ctx, state.floatingTexts, zScale);
   }
 
@@ -795,27 +802,6 @@ ZS.Renderer = (function () {
         break;
       }
     }
-
-    // Power-Off Warning Indicator for Electric Buildings during Blackout
-    if (isUnpowered) {
-      const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, 29);
-      ctx.font = `bold ${Math.round(11 * zScale)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = P.danger;
-      ctx.fillText('⚡OFF', warnPos.x, warnPos.y);
-    }
-
-    // Structure HP Bar if Damaged
-    if (st.hp < st.maxHp && st.hp > 0) {
-      const barPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, id === 'command_hq' ? 40 : 28);
-      const bw = (id === 'command_hq' ? 38 : 26) * zScale;
-      const bh = 4 * zScale;
-      const ratio = Math.max(0, st.hp / st.maxHp);
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(barPos.x - bw * 0.5 - 1, barPos.y - 1, bw + 2, bh + 2);
-      ctx.fillStyle = ratio > 0.5 ? P.health : ratio > 0.25 ? P.healthMid : P.danger;
-      ctx.fillRect(barPos.x - bw * 0.5, barPos.y, bw * ratio, bh);
-    }
   }
 
   function drawOperatorFigure(ctx, gx, gy, zBase, vestColor, helmetAccent, aimAngle, zScale, hasLaser) {
@@ -895,17 +881,6 @@ ZS.Renderer = (function () {
       ctx.beginPath();
       ctx.ellipse(basePos.x, basePos.y, 9 * sc * zScale, 5 * sc * zScale, 0, 0, Math.PI * 2);
       ctx.stroke();
-    }
-
-    // HP Bar
-    if (z.hp < z.maxHp || zDef.isBoss) {
-      const hpTop = Iso.gridToScreen(z.x, z.y, 20 * sc + bob);
-      const bw = (zDef.isBoss ? 40 : 20) * zScale;
-      const bh = (zDef.isBoss ? 5 : 3.2) * zScale;
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(hpTop.x - bw * 0.5 - 1, hpTop.y - 1, bw + 2, bh + 2);
-      ctx.fillStyle = ZS.DATA.PALETTE.danger;
-      ctx.fillRect(hpTop.x - bw * 0.5, hpTop.y, bw * Math.max(0, z.hp / z.maxHp), bh);
     }
   }
 
@@ -1050,6 +1025,105 @@ ZS.Renderer = (function () {
       ctx.arc(p.x, p.y, rPx, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
+  }
+
+  function drawInfoLayer(ctx, state, uiState, renderList, powered, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const DATA = ZS.DATA;
+    const P = DATA.PALETTE;
+    const N = DATA.GRID_SIZE;
+
+    ctx.save();
+
+    // 1. Selected / Inspected Tile Border (crisp above night darkness without cutting through 3D structures)
+    if (uiState.inspectedTile) {
+      const { tx, ty } = uiState.inspectedTile;
+      if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
+        const selSt = state.structGrid[ty] && state.structGrid[ty][tx];
+        const selDef = selSt ? (selSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[selSt.id]) : null;
+        const hasSolidStruct = selSt && !(selDef && selDef.passable);
+        if (hasSolidStruct) {
+          const l = Iso.gridToScreen(tx, ty + 1, 2.2);
+          const f = Iso.gridToScreen(tx + 1, ty + 1, 2.2);
+          const r = Iso.gridToScreen(tx + 1, ty, 2.2);
+          ctx.strokeStyle = P.selectStroke;
+          ctx.lineWidth = 1.8;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(l.x, l.y);
+          ctx.lineTo(f.x, f.y);
+          ctx.lineTo(r.x, r.y);
+          ctx.stroke();
+        } else {
+          Iso.drawTilePoly(ctx, tx, ty, 2.2, null, P.selectStroke, 1.8);
+        }
+      }
+    }
+
+    // 2. Depth-sorted Structure HP Bars, ⚡OFF Warnings, and Zombie HP Bars
+    for (let i = 0; i < renderList.length; i++) {
+      const item = renderList[i];
+      if (item.kind === 'struct') {
+        const st = item.st;
+        const tx = item.tx;
+        const ty = item.ty;
+        const id = st.id;
+        const def = id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[id];
+        const isDamaged = st.hp < st.maxHp && st.hp > 0;
+        const isUnpowered = state.isNight && def && def.requiresPower && !powered;
+
+        if (isDamaged) {
+          const barPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, id === 'command_hq' ? 40 : 28);
+          const bw = (id === 'command_hq' ? 38 : 26) * zScale;
+          const bh = 4 * zScale;
+          const ratio = Math.max(0, st.hp / st.maxHp);
+          ctx.fillStyle = P.outlineDark || '#1B2430';
+          ctx.fillRect(barPos.x - bw * 0.5 - 1.2, barPos.y - 1.2, bw + 2.4, bh + 2.4);
+          ctx.fillStyle = ratio > 0.5 ? P.heal : ratio > 0.25 ? P.caution : P.danger;
+          ctx.fillRect(barPos.x - bw * 0.5, barPos.y, bw * ratio, bh);
+        }
+
+        if (isUnpowered) {
+          const warnZ = isDamaged ? 35 : 29;
+          const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, warnZ);
+          const badgeScale = Math.max(9 / 11, zScale);
+          const fontPx = Math.round(11 * badgeScale);
+          const pillW = 40 * badgeScale;
+          const pillH = 14 * badgeScale;
+          const pillY = warnPos.y - pillH + 2 * badgeScale;
+          ctx.fillStyle = P.outlineDark || '#1B2430';
+          ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+          ctx.strokeStyle = P.danger;
+          ctx.lineWidth = 1.2;
+          ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+
+          ctx.font = `bold ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+          ctx.textAlign = 'center';
+          const textY = pillY + pillH * 0.5 + fontPx * 0.34;
+          ctx.fillStyle = P.power;
+          ctx.fillText('⚡', warnPos.x - 11.5 * badgeScale, textY);
+          ctx.fillStyle = P.danger;
+          ctx.fillText('OFF', warnPos.x + 5.5 * badgeScale, textY);
+        }
+      } else {
+        const z = item.z;
+        const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
+        if (z.hp < z.maxHp || zDef.isBoss) {
+          const sc = zDef.scale || 1.0;
+          const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
+          const hpTop = Iso.gridToScreen(z.x, z.y, 20 * sc + bob);
+          const bw = (zDef.isBoss ? 40 : 20) * zScale;
+          const bh = (zDef.isBoss ? 5 : 3.2) * zScale;
+          ctx.fillStyle = P.outlineDark || '#1B2430';
+          ctx.fillRect(hpTop.x - bw * 0.5 - 1.2, hpTop.y - 1.2, bw + 2.4, bh + 2.4);
+          ctx.fillStyle = P.danger;
+          ctx.fillRect(hpTop.x - bw * 0.5, hpTop.y, bw * Math.max(0, z.hp / z.maxHp), bh);
+        }
+      }
+    }
+
     ctx.restore();
   }
 
