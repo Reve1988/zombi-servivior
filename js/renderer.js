@@ -30,11 +30,18 @@ ZS.Renderer = (function () {
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. 3D Miniature Diorama Island Base Slab
+    // Apply subtle day/night ambient tint to matte voxel surfaces (emissive faces stay untouched)
+    if (state.nightAlpha > 0.02) {
+      Iso.setSceneTint('#7aa6e8', 0.07 * state.nightAlpha);
+    } else {
+      Iso.setSceneTint('#fff3db', 0.03);
+    }
+
+    // 2. 3D Miniature Diorama Island Base Slab (grass top seam-guard + pre-shaded soil strata sides)
     Iso.drawVoxelBox(ctx, 0, 0, -14, N, N, 14, {
       top: P.terrainB,
-      left: P.slabSideLeft,
-      right: P.slabSideRight,
+      left: P.slabSideLeft || '#3A3027',
+      right: P.slabSideRight || '#2C241D',
       stroke: 'rgba(255,255,255,0.08)'
     });
 
@@ -142,6 +149,8 @@ ZS.Renderer = (function () {
       }
     }
 
+    Iso.resetRenderModifiers();
+
     // 7. Projectiles & Lightning Arcs (World Space)
     drawProjectiles(ctx, state.projectiles, zScale);
     drawParticles(ctx, state.particles, zScale);
@@ -163,9 +172,7 @@ ZS.Renderer = (function () {
     const Iso = ZS.Iso;
     if (floorId === 'asphalt') {
       Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 1.5, {
-        top: '#323842',
-        left: '#232830',
-        right: '#1c2026'
+        base: '#323842'
       });
       // Neutral white-gray lane dash (separated from Gold #FFC94A)
       const p1 = Iso.gridToScreen(x + 0.35, y + 0.5, 1.8);
@@ -178,9 +185,7 @@ ZS.Renderer = (function () {
       ctx.stroke();
     } else if (floorId === 'steel_deck') {
       Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2, {
-        top: '#606f80',
-        left: '#434f5c',
-        right: '#343e49',
+        base: '#606f80',
         stroke: 'rgba(210,230,250,0.22)'
       });
       const c = Iso.gridToScreen(x + 0.5, y + 0.5, 2.2);
@@ -189,20 +194,16 @@ ZS.Renderer = (function () {
     } else if (floorId === 'lounge_tile') {
       const sub = (x + y) % 2 === 0 ? '#d8d2c5' : '#cbc4b5';
       Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2, {
-        top: sub,
-        left: '#9e9788',
-        right: '#847e71',
+        base: sub,
         stroke: 'rgba(255,255,255,0.28)'
       });
     } else if (floorId === 'hazard_mat') {
-      Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2, {
-        top: '#3b424c',
-        left: '#b87d4b',
-        right: '#8f5e36',
-        stroke: '#c98e5b'
+      Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 1.5, {
+        base: '#c48650',
+        stroke: '#d69c68'
       });
-      Iso.drawVoxelBox(ctx, x + 0.16, y + 0.16, 2, 0.68, 0.68, 0.5, {
-        top: '#2a3038'
+      Iso.drawVoxelBox(ctx, x + 0.12, y + 0.12, 1.5, 0.76, 0.76, 0.7, {
+        base: '#3b424c'
       });
     }
   }
@@ -331,25 +332,22 @@ ZS.Renderer = (function () {
       ctx.fill();
     }
 
+    Iso.setEntityFlash(st.hitFlash || 0);
+
     switch (id) {
       case 'command_hq': {
         // Armored Modern Command HQ (warm command visor instead of power-cyan)
         Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.05, 1, 0.90, 0.90, 18, {
-          top: '#4e6073',
-          left: '#364452',
-          right: '#293440',
+          base: '#4e6073',
           stroke: 'rgba(255,255,255,0.22)'
         });
         Iso.drawVoxelBox(ctx, tx + 0.04, ty + 0.04, 13, 0.92, 0.92, 3, {
-          top: P.baseLight,
-          left: '#ddb464',
-          right: '#b8944d'
+          base: P.baseLight,
+          emissive: true
         });
         // Upper tactical bridge
         Iso.drawVoxelBox(ctx, tx + 0.18, ty + 0.18, 19, 0.64, 0.64, 11, {
-          top: '#dce4ec',
-          left: '#aebbc9',
-          right: '#8a98a8'
+          base: '#dce4ec'
         });
         // Rotating radar dish on roof
         const dishPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, 34);
@@ -379,16 +377,12 @@ ZS.Renderer = (function () {
       case 'hesco_wall': {
         // Modern HESCO military gabion bastion
         Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.08, 1, 0.84, 0.84, 16, {
-          top: '#d6c49e',
-          left: '#b8a47c',
-          right: '#968460',
+          base: '#d6c49e',
           stroke: '#635947'
         });
         // Wire mesh frame band
         Iso.drawVoxelBox(ctx, tx + 0.07, ty + 0.07, 8, 0.86, 0.86, 2, {
-          top: '#6c7680',
-          left: '#555e66',
-          right: '#41484f'
+          base: '#6c7680'
         });
         break;
       }
@@ -396,24 +390,18 @@ ZS.Renderer = (function () {
       case 'blast_wall': {
         // Heavy Armored Alloy Blast Barrier (copper-bronze stripe instead of coin gold)
         Iso.drawVoxelBox(ctx, tx + 0.06, ty + 0.06, 1, 0.88, 0.88, 20, {
-          top: '#5f6f82',
-          left: '#414d5c',
-          right: '#2e3844',
+          base: '#5f6f82',
           stroke: '#8396ad'
         });
         Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.05, 5, 0.90, 0.90, 3, {
-          top: '#c4834b',
-          left: '#a36b3b',
-          right: '#82542d'
+          base: '#c4834b'
         });
         break;
       }
 
       case 'razor_pad': {
         Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 2, {
-          top: '#454e59',
-          left: '#303740',
-          right: '#252b33'
+          base: '#454e59'
         });
         const c = Iso.gridToScreen(tx + 0.5, ty + 0.5, 4);
         ctx.strokeStyle = '#bcc8d6';
@@ -429,21 +417,17 @@ ZS.Renderer = (function () {
       case 'rifle_bunker': {
         // Sandbag/Composite Bunker + Modern Kevlar Rifleman
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 10, {
-          top: '#6e7d68',
-          left: '#54614f',
-          right: '#3f4a3b',
+          base: '#6e7d68',
           stroke: '#85967e'
         });
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 11, '#4b5d46', '#2e3830', st.aimAngle || 0, zScale, false);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 11, '#4b5d46', '#38463a', st.aimAngle || 0, zScale, false);
         break;
       }
 
       case 'shotgun_post': {
         // Ballistic Shield Breacher Post
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 11, {
-          top: '#4d5968',
-          left: '#38424f',
-          right: '#2a323d',
+          base: '#4d5968',
           stroke: '#8fa1b3'
         });
         drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 12, '#3a4654', '#b87d4b', st.aimAngle || 0, zScale, false);
@@ -460,15 +444,11 @@ ZS.Renderer = (function () {
         ];
         legs.forEach(([lx, ly]) => {
           Iso.drawVoxelBox(ctx, tx + lx, ty + ly, 1, 0.12, 0.12, 20, {
-            top: '#7c8b99',
-            left: '#5b6875',
-            right: '#434d57'
+            base: '#7c8b99'
           });
         });
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 21, 0.80, 0.80, 4, {
-          top: '#637282',
-          left: '#495563',
-          right: '#37414d',
+          base: '#637282',
           stroke: '#94a6b8'
         });
         drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25, '#3d4d42', '#6f8072', st.aimAngle || 0, zScale, true);
@@ -478,14 +458,10 @@ ZS.Renderer = (function () {
       case 'vulcan_turret': {
         // CIWS Radar Dome Auto-Turret
         Iso.drawVoxelBox(ctx, tx + 0.14, ty + 0.14, 1, 0.72, 0.72, 9, {
-          top: '#525f6e',
-          left: '#3b4552',
-          right: '#2c343e'
+          base: '#525f6e'
         });
         Iso.drawVoxelBox(ctx, tx + 0.25, ty + 0.25, 10, 0.50, 0.50, 13, {
-          top: isUnpowered ? '#7a828a' : '#eef4fa',
-          left: isUnpowered ? '#5c636b' : '#cad5e2',
-          right: isUnpowered ? '#464c52' : '#a4b3c4'
+          base: isUnpowered ? '#7a828a' : '#eef4fa'
         });
         drawTurretBarrel(ctx, tx + 0.5, ty + 0.5, 16, st.aimAngle || 0, 15, '#2b333d', zScale);
         break;
@@ -494,14 +470,10 @@ ZS.Renderer = (function () {
       case 'missile_pod': {
         // Multi-cell Tactical Grenade/SAM Pod
         Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 1, 0.76, 0.76, 9, {
-          top: '#4c574a',
-          left: '#384237',
-          right: '#2a3329'
+          base: '#4c574a'
         });
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.20, 10, 0.60, 0.60, 12, {
-          top: isUnpowered ? '#596159' : '#6c7d65',
-          left: '#4e5c48',
-          right: '#3b4737',
+          base: isUnpowered ? '#596159' : '#6c7d65',
           stroke: '#94a3b8'
         });
         const podTop = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22);
@@ -516,14 +488,10 @@ ZS.Renderer = (function () {
       case 'emp_coil': {
         // Futuristic Tesla EMP Pylon
         Iso.drawVoxelBox(ctx, tx + 0.16, ty + 0.16, 1, 0.68, 0.68, 8, {
-          top: '#3e4a59',
-          left: '#2c3540',
-          right: '#202730'
+          base: '#3e4a59'
         });
         Iso.drawVoxelBox(ctx, tx + 0.34, ty + 0.34, 9, 0.32, 0.32, 17, {
-          top: '#60748a',
-          left: '#445566',
-          right: '#323f4d'
+          base: '#60748a'
         });
         const orb = Iso.gridToScreen(tx + 0.5, ty + 0.5, 29);
         const pulse = isUnpowered ? 0.55 : 0.85 + 0.2 * Math.sin(timeSec * 7);
@@ -535,16 +503,15 @@ ZS.Renderer = (function () {
       }
 
       case 'solar_array': {
-        // Pedestal + Glossy Photovoltaic Panel
+        // Pedestal + Aluminum Tray + Glossy Photovoltaic Panel
         Iso.drawVoxelBox(ctx, tx + 0.35, ty + 0.35, 1, 0.30, 0.30, 8, {
-          top: '#7b8996',
-          left: '#5b6773',
-          right: '#454f59'
+          base: '#7b8996'
         });
-        Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.12, 9, 0.84, 0.76, 4, {
-          top: '#2466b5',
-          left: '#90a2b5',
-          right: '#708294',
+        Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.12, 9, 0.84, 0.76, 2.2, {
+          base: '#9cb0c4'
+        });
+        Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.15, 11.2, 0.78, 0.70, 1.8, {
+          base: '#286ec2',
           stroke: '#8ec8ff'
         });
         // Solar reflection line
@@ -562,14 +529,10 @@ ZS.Renderer = (function () {
       case 'wind_turbine': {
         // Sleek Modern 3-Blade Wind Turbine
         Iso.drawVoxelBox(ctx, tx + 0.28, ty + 0.28, 1, 0.44, 0.44, 5, {
-          top: '#758594',
-          left: '#55626e',
-          right: '#404a54'
+          base: '#758594'
         });
         Iso.drawVoxelBox(ctx, tx + 0.40, ty + 0.40, 6, 0.20, 0.20, 28, {
-          top: '#f0f5fa',
-          left: '#d0dbe6',
-          right: '#b0becd'
+          base: '#f0f5fa'
         });
         const hub = Iso.gridToScreen(tx + 0.5, ty + 0.5, 35);
         const bladeAngle = timeSec * 2.8 + (tx + ty);
@@ -590,19 +553,16 @@ ZS.Renderer = (function () {
       }
 
       case 'battery_bank': {
-        // Lithium ESS Battery Cabinet with Charge LED
+        // Lithium ESS Battery Cabinet with Emissive Charge LED
         Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 1, 0.76, 0.76, 19, {
-          top: '#e2ebf2',
-          left: '#b8c7d4',
-          right: '#8fa1b3',
+          base: '#e2ebf2',
           stroke: P.power
         });
         const ratio = Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0));
         const ledColor = ratio > 0.35 ? P.power : ratio > 0.05 ? P.healthMid : P.danger;
         Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.25, 6, 0.78, 0.50, Math.max(2, 10 * ratio), {
-          top: ledColor,
-          left: ledColor,
-          right: ledColor
+          base: ledColor,
+          emissive: true
         });
         break;
       }
@@ -610,43 +570,36 @@ ZS.Renderer = (function () {
       case 'field_tent': {
         // Modern Olive Tactical Dome Tent
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 9, {
-          top: '#5d7059',
-          left: '#495946',
-          right: '#384536'
+          base: '#5d7059'
         });
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.20, 10, 0.60, 0.60, 6, {
-          top: '#72876d',
-          left: '#5b6e57',
-          right: '#475744'
+          base: '#72876d'
         });
-        // Warm tent window
+        // Warm illuminated tent window
         Iso.drawVoxelBox(ctx, tx + 0.35, ty + 0.86, 4, 0.30, 0.06, 4, {
-          top: '#ffd480',
-          left: '#ffd480',
-          right: '#e6b85c'
+          base: P.baseLight,
+          emissive: true
         });
         break;
       }
 
       case 'shelter_pod': {
-        // Modern Modular Container Home
-        Iso.drawVoxelBox(ctx, tx + 0.06, ty + 0.12, 1, 0.88, 0.76, 16, {
-          top: '#ea6a3b',
-          left: '#dce5ed',
-          right: '#b8c5d1',
-          stroke: '#ffffff33'
+        // Modern Modular Container Home (container wall + terracotta roof cap)
+        Iso.drawVoxelBox(ctx, tx + 0.06, ty + 0.12, 1, 0.88, 0.76, 13.5, {
+          base: '#dce5ed',
+          stroke: 'rgba(255,255,255,0.2)'
+        });
+        Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.11, 14.5, 0.90, 0.78, 2.5, {
+          base: '#ea6a3b'
         });
         // Warm illuminated panoramic window
-        Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.85, 6, 0.55, 0.06, 7, {
-          top: '#ffe09e',
-          left: '#ffe09e',
-          right: '#f5c76e'
+        Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.85, 5.5, 0.55, 0.06, 7, {
+          base: P.baseLight,
+          emissive: true
         });
         // Rooftop HVAC unit
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.25, 17, 0.32, 0.32, 4, {
-          top: '#8fa0b0',
-          left: '#6e7e8d',
-          right: '#556370'
+          base: '#8fa0b0'
         });
         break;
       }
@@ -654,21 +607,16 @@ ZS.Renderer = (function () {
       case 'gas_heater': {
         // Stainless Outdoor Patio Gas Heater (No Electricity!)
         Iso.drawVoxelBox(ctx, tx + 0.32, ty + 0.32, 1, 0.36, 0.36, 9, {
-          top: '#7d8a96',
-          left: '#5d6873',
-          right: '#465059'
+          base: '#7d8a96'
         });
         // Glowing amber flame cylinder
         Iso.drawVoxelBox(ctx, tx + 0.38, ty + 0.38, 10, 0.24, 0.24, 9, {
-          top: '#ffb347',
-          left: '#ff9636',
-          right: '#e6781e'
+          base: '#ffb347',
+          emissive: true
         });
         // Reflector canopy
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.20, 19, 0.60, 0.60, 2.5, {
-          top: '#cfd9e3',
-          left: '#9aa8b5',
-          right: '#7b8894'
+          base: '#cfd9e3'
         });
         break;
       }
@@ -676,59 +624,46 @@ ZS.Renderer = (function () {
       case 'led_floodlight': {
         // Tactical Tripod Mast + Twin LED Floodlights
         Iso.drawVoxelBox(ctx, tx + 0.34, ty + 0.34, 1, 0.32, 0.32, 4, {
-          top: '#525f6e',
-          left: '#3b4552',
-          right: '#2c343e'
+          base: '#525f6e'
         });
         Iso.drawVoxelBox(ctx, tx + 0.44, ty + 0.44, 5, 0.12, 0.12, 20, {
-          top: '#8a99a8',
-          left: '#657382',
-          right: '#4b5763'
+          base: '#8a99a8'
         });
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.32, 25, 0.56, 0.36, 5, {
-          top: isUnpowered ? P.powerDim : '#e6fcff',
-          left: isUnpowered ? '#226873' : P.power,
-          right: isUnpowered ? '#1b535c' : '#2dbbd1'
+          base: isUnpowered ? P.powerDim : P.power,
+          emissive: !isUnpowered
         });
         break;
       }
 
       case 'urban_planter': {
-        // Architectural Concrete Planter + Miniature Lush Tree
-        Iso.drawVoxelBox(ctx, tx + 0.16, ty + 0.16, 1, 0.68, 0.68, 7, {
-          top: '#5e493a',
-          left: '#b8c0c7',
-          right: '#929ba3'
+        // Architectural Concrete Planter + Soil Bed + Miniature Lush Tree
+        Iso.drawVoxelBox(ctx, tx + 0.16, ty + 0.16, 1, 0.68, 0.68, 6.2, {
+          base: '#cbd3db'
         });
-        Iso.drawVoxelBox(ctx, tx + 0.42, ty + 0.42, 8, 0.16, 0.16, 8, {
-          top: '#78583f',
-          left: '#694b34',
-          right: '#523926'
+        Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.22, 7.2, 0.56, 0.56, 1.0, {
+          base: '#5e493a'
+        });
+        Iso.drawVoxelBox(ctx, tx + 0.42, ty + 0.42, 8.2, 0.16, 0.16, 7.8, {
+          base: '#78583f'
         });
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.20, 15, 0.60, 0.60, 10, {
-          top: '#64c466',
-          left: '#4aa84d',
-          right: '#38873a'
+          base: '#64c466'
         });
         Iso.drawVoxelBox(ctx, tx + 0.28, ty + 0.28, 25, 0.44, 0.44, 6, {
-          top: '#7ede78',
-          left: '#5ec25a',
-          right: '#469c43'
+          base: '#7ede78'
         });
         break;
       }
 
       case 'vending_machine': {
-        // Glowing Smart Drink Vending Machine (warm internal display, not electric cyan)
+        // Glowing Smart Drink Vending Machine (warm internal display)
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.22, 1, 0.56, 0.56, 21, {
-          top: '#475569',
-          left: '#334155',
-          right: '#1e293b'
+          base: '#475569'
         });
         Iso.drawVoxelBox(ctx, tx + 0.28, ty + 0.75, 7, 0.42, 0.06, 11, {
-          top: '#ffe8c2',
-          left: '#ffe8c2',
-          right: '#f5cfa0'
+          base: P.baseLight,
+          emissive: true
         });
         break;
       }
@@ -736,59 +671,47 @@ ZS.Renderer = (function () {
       case 'repair_bay': {
         // Robotic Maintenance Bay
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 5, {
-          top: '#475361',
-          left: '#353e4a',
-          right: '#262d36'
+          base: '#475361'
         });
         Iso.drawVoxelBox(ctx, tx + 0.25, ty + 0.20, 6, 0.50, 0.35, 12, {
-          top: P.health,
-          left: '#3bb570',
-          right: '#2b8f56'
+          base: P.health
         });
         break;
       }
 
       case 'lounge_set': {
-        // Modern Parasol & Lounge Table
+        // Modern Parasol & Lounge Table (unified top-left shading)
         Iso.drawVoxelBox(ctx, tx + 0.32, ty + 0.32, 1, 0.36, 0.36, 7, {
-          top: '#e8eef5',
-          left: '#b8c4d1',
-          right: '#929fab'
+          base: '#e8eef5'
         });
         Iso.drawVoxelBox(ctx, tx + 0.46, ty + 0.46, 8, 0.08, 0.08, 13, {
-          top: '#cbd5e0',
-          left: '#a0aec0',
-          right: '#718096'
+          base: '#cbd5e0'
         });
-        Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 21, 0.76, 0.76, 4, {
-          top: '#e07a5f',
-          left: '#c4664d',
-          right: '#9e4f3b'
+        Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 21, 0.76, 0.76, 3.2, {
+          base: '#e07a5f'
+        });
+        Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.22, 24.2, 0.56, 0.56, 1.4, {
+          base: '#f1f5f9'
         });
         break;
       }
 
       case 'arcade_neon': {
-        // Neon Sign + Arcade Station
+        // Neon Sign + Arcade Station (emissive marquee)
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.22, 1, 0.56, 0.56, 18, {
-          top: '#3a2c54',
-          left: '#2b2040',
-          right: '#1e162e',
+          base: '#3a2c54',
           stroke: isUnpowered ? '#555' : '#eb64ff'
         });
         Iso.drawVoxelBox(ctx, tx + 0.26, ty + 0.26, 19, 0.48, 0.48, 6, {
-          top: isUnpowered ? '#52495c' : '#ff66e5',
-          left: isUnpowered ? '#403947' : '#df52ff',
-          right: isUnpowered ? '#302b36' : '#b83be0'
+          base: isUnpowered ? '#52495c' : '#ff66e5',
+          emissive: !isUnpowered
         });
         break;
       }
 
       case 'boss_trophy': {
         Iso.drawVoxelBox(ctx, tx + 0.18, ty + 0.18, 1, 0.64, 0.64, 10, {
-          top: '#2e3744',
-          left: '#232a34',
-          right: '#191f26'
+          base: '#2e3744'
         });
         const holo = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22 + Math.sin(timeSec * 3.5) * 3);
         ctx.fillStyle = P.gold;
@@ -802,20 +725,21 @@ ZS.Renderer = (function () {
         break;
       }
     }
+
+    Iso.setEntityFlash(0);
   }
 
   function drawOperatorFigure(ctx, gx, gy, zBase, vestColor, helmetAccent, aimAngle, zScale, hasLaser) {
     const Iso = ZS.Iso;
-    // Voxel torso & helmeted head
+    // Voxel torso + face + helmet cap (each single-material with unified top-left shading)
     Iso.drawVoxelBox(ctx, gx - 0.11, gy - 0.11, zBase, 0.22, 0.22, 8, {
-      top: vestColor,
-      left: vestColor,
-      right: '#252e27'
+      base: vestColor
     });
-    Iso.drawVoxelBox(ctx, gx - 0.09, gy - 0.09, zBase + 8, 0.18, 0.18, 6, {
-      top: helmetAccent,
-      left: '#d8b898',
-      right: '#bd9d7e'
+    Iso.drawVoxelBox(ctx, gx - 0.08, gy - 0.08, zBase + 8, 0.16, 0.16, 3.4, {
+      base: '#debda0'
+    });
+    Iso.drawVoxelBox(ctx, gx - 0.095, gy - 0.095, zBase + 11.4, 0.19, 0.19, 2.8, {
+      base: helmetAccent
     });
     drawTurretBarrel(ctx, gx, gy, zBase + 6, aimAngle, hasLaser ? 16 : 12, '#1f242b', zScale);
     if (hasLaser) {
@@ -859,20 +783,20 @@ ZS.Renderer = (function () {
     ctx.ellipse(basePos.x, basePos.y, 8 * sc * zScale, 4.2 * sc * zScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    Iso.setEntityFlash(z.hitFlash || 0);
+
     const w = 0.24 * sc;
     // Legs + Torso
     Iso.drawVoxelBox(ctx, z.x - w * 0.5, z.y - w * 0.5, 1 + bob, w, w, 10 * sc, {
-      top: zDef.coatColor,
-      left: zDef.coatColor,
-      right: '#232830'
+      base: zDef.coatColor
     });
     // Infected Voxel Head
     const hw = 0.19 * sc;
     Iso.drawVoxelBox(ctx, z.x - hw * 0.5, z.y - hw * 0.5, 1 + bob + 10 * sc, hw, hw, 6.5 * sc, {
-      top: zDef.skinColor,
-      left: zDef.skinColor,
-      right: '#4f7354'
+      base: zDef.skinColor
     });
+
+    Iso.setEntityFlash(0);
 
     // Slowed EMP cyan tint ring
     if (z.slowTimer > 0) {
