@@ -8,6 +8,8 @@
 
 - **[issue-spec-guide.md](./issue-spec-guide.md)**: 개발 에이전트가 즉시 구현 가능한 수준의 기획 이슈 작성 템플릿, 수치·예외 정의 기준, `gh issue create` 운영 규칙
 - **[roadmap-and-balance.md](./roadmap-and-balance.md)**: 게임 코어 재미 기둥(Design Pillars), `v0.1.0` 밸런스 진단 내역, 페이즈별 기획 로드맵 및 발행된 GitHub 이슈 현황
+- *(공통 파이프라인)* **[../README.md](../README.md)**: 3개 에이전트 협업 흐름 및 개발 에이전트 단일 코드 작성(`Single Code Writer`) 원칙
+- *(로컬 협업 허브 관리)* **[../../share/README.md](../../share/README.md)** · **[../../share/STATUS.md](../../share/STATUS.md)**: 에이전트 간 작업물·계획서·시안 실시간 공유 공간 (PM 총괄 관리, `.gitignore` 대상)
 - *(공통 참조)* **[../developer/github-gitflow.md](../developer/github-gitflow.md)**: 저장소 브랜치 전략, 시맨틱 버저닝(`vX.Y.Z`), 이슈·PR 협업 흐름
 
 ---
@@ -35,18 +37,21 @@
 
 ---
 
-## 3. 멀티 에이전트 협업 사이클
+## 3. 멀티 에이전트 협업 사이클 (`Single Code Writer` 파이프라인)
 
 ```text
-[1. PM Agent] 코드/밸런스 분석 및 개선안 도출
-      ↓ (사용자 피드백 & 스펙 확정)
-[2. PM / Designer Agent] GitHub Issue 등록 (수치 테이블 + UI/연출 요구사항 + 인수 조건)
+[1. PM Agent] 코드/밸런스 분석 → 기획서(share/plans/) 및 GitHub 이슈(#N) 등록
       ↓
-[3. Developer Agent] 이슈(#N) 조회 → feature/#N-slug 분기 → 구현·검증 → develop 타겟 PR 생성
+[2. Designer Agent] 디자인 이슈([Art]/[UI]) 등록 또는 기획 이슈 아트 명세 수립
+                    → 시안·SVG·토큰표를 share/design/에 납품 (직접 코드 수정·PR 생성 금지)
+      ↓ (중요 기획·시안 사용자 컨펌)
+[3. Developer Agent] 유일한 코드 작성 및 PR 주체 (Single Code Writer)
+                     → 이슈(#N) + share/plans/ + share/design/ 통합 이식 구현
+                     → share/dev/에 전후 비교 캡처 저장 → develop 타겟 PR 생성 ("Closes #N")
       ↓
-[4. User (Owner)] PR 코드 리뷰 & develop 병합 → 플레이테스트 피드백
+[4. Designer / User] Designer 시각 검수 피드백 → User(Owner) 최종 코드 리뷰 & PR 병합
       ↓
-[5. PM Agent] 밸런스 사후 검증, 수치 미세 조정 이슈 또는 다음 페이즈 기획 진행
+[5. PM Agent] 밸런스 사후 검증, STATUS.md 갱신 및 다음 페이즈 기획 진행
 ```
 
 ---

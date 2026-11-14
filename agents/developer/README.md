@@ -7,19 +7,21 @@
 ## 1. 문서 구성
 
 - **[github-gitflow.md](./github-gitflow.md)**: GitHub CLI(`gh`) 사용법, 정통 GitFlow 5대 브랜치 규칙, 이슈 기반 작업 및 PR 권한, 커밋 메시지 포맷, 릴리즈·태그 규칙 상세 정의
+- *(공통 파이프라인)* **[../README.md](../README.md)** · **[../../share/README.md](../../share/README.md)**: `share/` 기반 시안·기획 수령 및 개발 에이전트 단일 코드 작성(`Single Code Writer`) 협업 흐름
 
 ---
 
-## 2. 에이전트 간 역할 경계 (Role Boundaries)
+## 2. 에이전트 간 역할 경계 및 단일 코드 작성자(`Single Code Writer`) 원칙
 
-| 에이전트 역할 | 담당 업무 | GitHub 내 주요 액션 |
+| 에이전트 역할 | 담당 업무 | `share/` 및 GitHub 내 주요 액션 |
 | :--- | :--- | :--- |
-| **기획 (Planner) Agent** | 게임 시스템·밸런스·신규 콘텐츠 기획 및 요구사항 정의 | `gh issue create`로 기능/밸런스 이슈 등록 및 명세 작성 |
-| **디자인 (Designer) Agent** | UI/UX 레이아웃, 복셀 오브젝트 외형·이펙트·아트 명세 정의 | `gh issue create` / `gh issue comment`로 디자인 이슈·가이드 등록 |
-| **개발 (Developer) Agent** | **등록된 GitHub 이슈(`#{issueNumber}`)를 기반으로 코드 구현 및 검증** | 이슈 조회(`gh issue view`) → **`git worktree` 독립 작업 공간 생성(`feature/*`)** → 구현·커밋 → `develop` 대상 **PR 생성(`gh pr create`)까지만 수행** |
+| **기획 (Planner) Agent** | 게임 시스템·밸런스·신규 콘텐츠 기획 및 요구사항 정의 | `share/plans/` 계획서 작성 + `gh issue create`로 기능/밸런스 이슈 등록 *(코드 수정·PR 생성 금지)* |
+| **디자인 (Designer) Agent** | UI/UX 레이아웃, 복셀 외형·팔레트·SVG 시안 제작 및 비주얼 검수 | `share/design/`에 시안·SVG·토큰표 납품 + `gh issue create`/`comment` 등록 *(코드 수정·PR 생성 금지)* |
+| **개발 (Developer) Agent** | **기획 이슈 및 디자인 이슈(`[Art]`/`[UI]`) 전체에 대한 유일한 인게임 코드 구현·이식 주체** | 이슈(`#{issueNumber}`) 및 **`share/plans/`, `share/design/` 산출물 확인** → `git worktree`(`feature/*`) 구현·최적화 → `share/dev/` 전후 캡처 저장 → `develop` 대상 **PR 생성(`Closes #{issueNumber}`)까지만 수행** |
 
-- **주의**: 개발 에이전트는 별도 지시가 없는 한 임의로 기획/디자인 이슈를 생성하지 않으며, 등록된 이슈의 요구사항을 정확히 구현하는 데 집중합니다.
-- **리뷰 및 머지(Merge)**: 생성된 PR의 코드 리뷰와 병합(`merge`)은 **사용자(프로젝트 오너)가 직접 수행**합니다.
+- **디자인 산출물 통합 책임**: 디자인 에이전트가 `share/design/`에 납품한 시안 HTML, SVG 아이콘 세트, 팔레트 토큰표, 아트 명세는 개발 에이전트가 읽어 런타임 아키텍처(깊이 정렬, 야간 정보 레이어, `file://` 무오류 인라인 스프라이트화, 프레임 최적화)에 맞게 정제·이식하여 해당 디자인 이슈를 해결합니다.
+- **주의**: 개발 에이전트는 별도 지시가 없는 한 임의로 기획/디자인 이슈를 생성하지 않으며, 등록된 이슈와 `share/` 산출물의 요구사항을 정확히 구현하는 데 집중합니다.
+- **시각 검수 및 머지(Merge)**: PR 생성 후 디자인 에이전트가 `share/dev/` 캡처를 바탕으로 시각 검수를 수행할 수 있으며, 최종 코드 리뷰와 병합(`merge`)은 **사용자(프로젝트 오너)가 직접 수행**합니다.
 
 ---
 
