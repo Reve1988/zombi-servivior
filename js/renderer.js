@@ -3,12 +3,31 @@ window.ZS = window.ZS || {};
 ZS.Renderer = (function () {
   const lightCanvas = document.createElement('canvas');
   const lightCtx = lightCanvas.getContext('2d');
+  const eyeHaloCache = new Map();
 
   function ensureLightCanvas(w, h) {
     if (lightCanvas.width !== w || lightCanvas.height !== h) {
       lightCanvas.width = w;
       lightCanvas.height = h;
     }
+  }
+
+  function getEyeHaloStamp(glowColor) {
+    let stamp = eyeHaloCache.get(glowColor);
+    if (stamp) return stamp;
+    const sz = 48;
+    stamp = document.createElement('canvas');
+    stamp.width = sz;
+    stamp.height = sz;
+    const sctx = stamp.getContext('2d');
+    const half = sz * 0.5;
+    const grad = sctx.createRadialGradient(half, half, 1.5, half, half, half);
+    grad.addColorStop(0, glowColor);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, sz, sz);
+    eyeHaloCache.set(glowColor, stamp);
+    return stamp;
   }
 
   function render(ctx, w, h, state, uiState, timeSec) {
@@ -771,39 +790,158 @@ ZS.Renderer = (function () {
     ctx.stroke();
   }
 
+  function getZombieEyePositions(z, zDef, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const sc = zDef.scale || 1.0;
+    const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
+    const headCenter = Iso.gridToScreen(z.x, z.y, 1 + bob + 13.6 * sc);
+
+    const ang = typeof z.facingAngle === 'number' ? z.facingAngle : Math.PI * 0.75;
+    const fx = Math.cos(ang);
+    const fy = Math.sin(ang);
+
+    let sx = fx - fy;
+    let sy = (fx + fy) * 0.5;
+    const len = Math.hypot(sx, sy) || 1;
+    sx /= len;
+    sy = Math.max(-0.18, sy / len);
+
+    const fwdX = sx * 2.4 * sc * zScale;
+    const fwdY = sy * 1.9 * sc * zScale;
+    const sep = 2.3 * sc * zScale;
+
+    return {
+      cx: headCenter.x + fwdX,
+      cy: headCenter.y + fwdY,
+      lx: headCenter.x + fwdX - sep,
+      ly: headCenter.y + fwdY,
+      rx: headCenter.x + fwdX + sep,
+      ry: headCenter.y + fwdY,
+      sc
+    };
+  }
+
+  function drawZombieEyePinpoints(ctx, eyes, zDef, zScale, P) {
+    const eyeSz = Math.max(1.8, 2.0 * eyes.sc * zScale);
+    ctx.fillStyle = P.outlineDark || '#1B2430';
+    ctx.fillRect(eyes.lx - eyeSz * 0.5 - 0.7, eyes.ly - eyeSz * 0.5 - 0.7, eyeSz + 1.4, eyeSz + 1.4);
+    ctx.fillRect(eyes.rx - eyeSz * 0.5 - 0.7, eyes.ry - eyeSz * 0.5 - 0.7, eyeSz + 1.4, eyeSz + 1.4);
+
+    ctx.fillStyle = zDef.eyeColor || P.danger;
+    ctx.fillRect(eyes.lx - eyeSz * 0.5, eyes.ly - eyeSz * 0.5, eyeSz, eyeSz);
+    ctx.fillRect(eyes.rx - eyeSz * 0.5, eyes.ry - eyeSz * 0.5, eyeSz, eyeSz);
+  }
+
+  function isZombieEyesOccluded(state, z, eyes, zScale) {
+    const DATA = ZS.DATA;
+    const Iso = ZS.Iso;
+    const N = DATA.GRID_SIZE;
+    const tx = Math.floor(z.x);
+    const ty = Math.floor(z.y);
+    const offsets = [
+      [1, 0],
+      [0, 1],
+      [1, 1]
+    ];
+    for (let k = 0; k < offsets.length; k++) {
+      const sx = tx + offsets[k][0];
+      const sy = ty + offsets[k][1];
+      if (sx < 0 || sy < 0 || sx >= N || sy >= N) continue;
+      const st = state.structGrid[sy] && state.structGrid[sy][sx];
+      if (!st) continue;
+      const def = st.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[st.id];
+      if (def && def.passable) continue;
+      if (sx + sy + 1.0 <= z.x + z.y + 0.05) continue;
+
+      const structH = st.id === 'command_hq' ? 32 : st.id === 'sniper_tower' ? 30 : 22;
+      const topPos = Iso.gridToScreen(sx + 0.5, sy + 0.5, structH);
+      const botPos = Iso.gridToScreen(sx + 1, sy + 1, 0);
+      const halfW = 26 * zScale;
+      if (
+        eyes.cx >= topPos.x - halfW &&
+        eyes.cx <= topPos.x + halfW &&
+        eyes.cy >= topPos.y &&
+        eyes.cy <= botPos.y
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function drawZombie(ctx, z, timeSec, zScale) {
     const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
     const zDef = ZS.DATA.ZOMBIES[z.type] || ZS.DATA.ZOMBIES.walker;
     const sc = zDef.scale || 1.0;
     const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
 
     const basePos = Iso.gridToScreen(z.x, z.y, 1);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+
+    // Boss pulsing danger threat ring on ground
+    if (zDef.isBoss) {
+      const pulse = 0.92 + 0.10 * Math.sin(timeSec * 5);
+      ctx.fillStyle = P.dangerFill;
+      ctx.strokeStyle = P.danger;
+      ctx.lineWidth = 1.8 * zScale;
+      ctx.beginPath();
+      ctx.ellipse(basePos.x, basePos.y, 14 * sc * zScale * pulse, 7.2 * sc * zScale * pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Crisp ground contact shadow for strong luminance separation against grass
+    ctx.fillStyle = 'rgba(8, 10, 16, 0.48)';
     ctx.beginPath();
-    ctx.ellipse(basePos.x, basePos.y, 8 * sc * zScale, 4.2 * sc * zScale, 0, 0, Math.PI * 2);
+    ctx.ellipse(basePos.x, basePos.y, 8.8 * sc * zScale, 4.6 * sc * zScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
     Iso.setEntityFlash(z.hitFlash || 0);
 
-    const w = 0.24 * sc;
-    // Legs + Torso
+    const w = 0.25 * sc;
+    // Legs + Torso (complementary coat per issue-03-palette-tokens.md §4)
     Iso.drawVoxelBox(ctx, z.x - w * 0.5, z.y - w * 0.5, 1 + bob, w, w, 10 * sc, {
       base: zDef.coatColor
     });
-    // Infected Voxel Head
-    const hw = 0.19 * sc;
-    Iso.drawVoxelBox(ctx, z.x - hw * 0.5, z.y - hw * 0.5, 1 + bob + 10 * sc, hw, hw, 6.5 * sc, {
-      base: zDef.skinColor
+
+    // Runner harness (#FF9466) / Brute armor (#C97A9E) / Boss glowing fissure (#E040FB)
+    if (z.type === 'runner' && zDef.accentColor) {
+      const rw = 0.27 * sc;
+      Iso.drawVoxelBox(ctx, z.x - rw * 0.5, z.y - rw * 0.5, 1 + bob + 6.2 * sc, rw, rw, 2.8 * sc, {
+        base: zDef.accentColor
+      });
+    } else if (z.type === 'brute' && zDef.armorColor) {
+      const aw = 0.30 * sc;
+      Iso.drawVoxelBox(ctx, z.x - aw * 0.5, z.y - aw * 0.5, 1 + bob + 4.5 * sc, aw, aw, 4.8 * sc, {
+        base: zDef.armorColor
+      });
+    } else if (zDef.isBoss && zDef.accentColor) {
+      const bw = 0.29 * sc;
+      Iso.drawVoxelBox(ctx, z.x - bw * 0.5, z.y - bw * 0.5, 1 + bob + 4.8 * sc, bw, bw, 3.8 * sc, {
+        base: zDef.accentColor,
+        emissive: true
+      });
+    }
+
+    // Infected Voxel Head (pale rose/bone/mauve/lavender per issue-03-palette-tokens.md §4)
+    const hw = 0.20 * sc;
+    Iso.drawVoxelBox(ctx, z.x - hw * 0.5, z.y - hw * 0.5, 1 + bob + 10 * sc, hw, hw, 6.8 * sc, {
+      base: zDef.skinColor,
+      stroke: 'rgba(27, 36, 48, 0.38)'
     });
 
     Iso.setEntityFlash(0);
 
+    // Depth-sorted daytime/lit eyes (naturally occluded by foreground 3D structures)
+    const eyes = getZombieEyePositions(z, zDef, timeSec, zScale);
+    drawZombieEyePinpoints(ctx, eyes, zDef, zScale, P);
+
     // Slowed EMP cyan tint ring
     if (z.slowTimer > 0) {
-      ctx.strokeStyle = ZS.DATA.PALETTE.power;
+      ctx.strokeStyle = P.power;
       ctx.lineWidth = 1.4 * zScale;
       ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, 9 * sc * zScale, 5 * sc * zScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(basePos.x, basePos.y, 9.2 * sc * zScale, 5 * sc * zScale, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -987,6 +1125,7 @@ ZS.Renderer = (function () {
     }
 
     // 2. Depth-sorted Structure HP Bars, ⚡OFF Warnings, and Zombie HP Bars
+    const nightEyes = [];
     for (let i = 0; i < renderList.length; i++) {
       const item = renderList[i];
       if (item.kind === 'struct') {
@@ -1034,6 +1173,14 @@ ZS.Renderer = (function () {
       } else {
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
+
+        if (state.nightAlpha > 0.05) {
+          const eyes = getZombieEyePositions(z, zDef, timeSec, zScale);
+          if (!isZombieEyesOccluded(state, z, eyes, zScale)) {
+            nightEyes.push({ eyes, zDef });
+          }
+        }
+
         if (z.hp < z.maxHp || zDef.isBoss) {
           const sc = zDef.scale || 1.0;
           const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
@@ -1046,6 +1193,28 @@ ZS.Renderer = (function () {
           ctx.fillRect(hpTop.x - bw * 0.5, hpTop.y, bw * Math.max(0, z.hp / z.maxHp), bh);
         }
       }
+    }
+
+    // 3. Batched Nighttime Emissive Eye Halos (single composite switch + cached stamp) & Pinpoints
+    if (nightEyes.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(1, state.nightAlpha * 0.85);
+      for (let i = 0; i < nightEyes.length; i++) {
+        const { eyes, zDef } = nightEyes[i];
+        const haloR = (zDef.isBoss ? 12 : 7.5) * eyes.sc * zScale;
+        const stamp = getEyeHaloStamp(zDef.eyeGlow || 'rgba(255, 77, 109, 0.56)');
+        ctx.drawImage(stamp, eyes.cx - haloR, eyes.cy - haloR, haloR * 2, haloR * 2);
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, state.nightAlpha * 1.15);
+      for (let i = 0; i < nightEyes.length; i++) {
+        const { eyes, zDef } = nightEyes[i];
+        drawZombieEyePinpoints(ctx, eyes, zDef, zScale, P);
+      }
+      ctx.restore();
     }
 
     ctx.restore();
