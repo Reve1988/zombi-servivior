@@ -4,14 +4,16 @@
 
 ## 1. 역할별 필독 가이드
 
+- **멀티 에이전트 공통 협업 파이프라인 (`Single Code Writer` 원칙)**: `agents/README.md`
 - **공통 GitHub / GitFlow / 버전 표준**: `agents/developer/github-gitflow.md`
+- **에이전트 간 로컬 작업물 공유 허브 (Git 미추적)**: `share/README.md`, `share/STATUS.md` (전체 실행 계획서: `share/plans/issue-execution-plan.md`)
 - **기획 · PM (Planner / PM) 에이전트**: `agents/pm/README.md`, `agents/pm/issue-spec-guide.md`, `agents/pm/roadmap-and-balance.md` 참고
 - **개발 (Developer) 에이전트**: `agents/developer/README.md` 및 `agents/developer/github-gitflow.md` 참고
 - **디자인 (Designer) 에이전트**: `agents/designer/README.md`, `agents/designer/design-issue-guide.md`, `agents/designer/art-direction.md` 참고 (코드베이스 구조는 `agents/developer/README.md` 참고)
 
 ## 2. 핵심 역할 경계 및 불변 원칙
 
-1. **기획(PM) 에이전트의 코드 비개입 원칙**: 기획 에이전트는 인게임 런타임 코드(`index.html`, `css/*`, `js/*`)를 직접 수정하지 않으며, 코드베이스를 읽기 전용으로 분석한 뒤 구체적인 수치·공식·인수 조건을 담은 GitHub 이슈(`gh issue create`)로 개발 할 일을 등록합니다.
-2. **이슈 기반 개발 및 PR 경계**: 개발 에이전트는 등록된 GitHub 이슈(`#{issueNumber}`)를 기반으로 `feature/{issueNumber}-{slug}` 브랜치에서 구현하고 `develop` 타겟 PR 생성(`gh pr create`)까지만 수행합니다.
-3. **머지 및 보호 브랜치 권한**: 모든 에이전트는 사용자의 명시적 지시 없이 `main` / `develop` 브랜치에 직접 커밋·푸시하거나 `gh pr merge`를 실행하지 않습니다.
-4. **디자인(Designer) 에이전트의 코드 비개입 원칙**: 디자인 에이전트도 인게임 런타임 코드(`index.html`, `css/*`, `js/*`)를 직접 수정하지 않습니다(색상값 하나라도 마찬가지). 화면과 코드를 읽기 전용으로 분석한 뒤, 색상 HEX·크기·레이어 순서·연출 시간과 완료 조건을 담은 디자인 이슈(`[Art]` / `[UI]`, `design` 라벨)를 등록하거나 기획 이슈에 디자인 명세 코멘트를 남깁니다. 비주얼 기준의 단일 출처는 `agents/designer/art-direction.md`입니다.
+1. **기획(PM) 에이전트의 코드·PR 비개입 원칙**: 기획 에이전트는 인게임 런타임 코드(`index.html`, `css/*`, `js/*`)를 직접 수정하거나 PR을 생성하지 않으며, 코드베이스를 읽기 전용으로 분석한 뒤 구체적인 수치·공식·인수 조건을 담은 GitHub 이슈(`gh issue create`) 및 `share/plans/` 계획서로 할 일을 등록합니다.
+2. **디자인(Designer) 에이전트의 시안 납품 및 코드·PR 비개입 원칙**: 디자인 에이전트 역시 인게임 코드를 직접 수정하거나 PR을 생성하지 않습니다. 디자인 이슈(`[Art]` / `[UI]`, `design` 라벨) 등록 후 시안·SVG 에셋·팔레트·아트 명세 결과물은 **`share/design/`에 납품**(필요 시 이슈에 핵심 수치 코멘트 추가)하며, 비주얼 기준의 단일 출처는 `agents/designer/art-direction.md`입니다.
+3. **개발(Developer) 에이전트 단일 코드 작성(`Single Code Writer`) 및 이슈 해결 원칙**: 기획 이슈와 디자인 이슈 모두 **오직 개발 에이전트가 `share/plans/` 및 `share/design/`의 결과물을 인게임 코드에 이식·최적화**하여 `feature/{issueNumber}-{slug}` 브랜치에서 구현하고, 검증 캡처를 `share/dev/`에 남긴 뒤 `develop` 타겟 PR(`Closes #{issueNumber}`) 생성까지만 수행합니다.
+4. **머지 및 보호 브랜치 권한**: 모든 에이전트는 사용자의 명시적 지시 없이 `main` / `develop` 브랜치에 직접 커밋·푸시하거나 `gh pr merge`를 실행하지 않습니다.
