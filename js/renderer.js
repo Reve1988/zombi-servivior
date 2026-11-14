@@ -14,6 +14,7 @@ ZS.Renderer = (function () {
   function render(ctx, w, h, state, uiState, timeSec) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
+    const P = DATA.PALETTE;
     const N = DATA.GRID_SIZE;
     const zScale = Iso.cam.zoom;
 
@@ -31,9 +32,9 @@ ZS.Renderer = (function () {
 
     // 2. 3D Miniature Diorama Island Base Slab
     Iso.drawVoxelBox(ctx, 0, 0, -14, N, N, 14, {
-      top: '#3e5944',
-      left: '#2b3640',
-      right: '#1f2830',
+      top: P.terrainB,
+      left: P.slabSideLeft,
+      right: P.slabSideRight,
       stroke: 'rgba(255,255,255,0.08)'
     });
 
@@ -42,16 +43,16 @@ ZS.Renderer = (function () {
       for (let x = 0; x < N; x++) {
         const isEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
         const checker = (x + y) % 2 === 0;
-        let baseFill = checker ? '#4b6b52' : '#44634b';
+        let baseFill = checker ? P.terrainA : P.terrainB;
         if (isEdge) {
-          baseFill = checker ? '#44544a' : '#3d4c43';
+          baseFill = checker ? P.terrainEdgeA : P.terrainEdgeB;
         }
         Iso.drawTilePoly(ctx, x, y, 0, baseFill, 'rgba(18, 28, 22, 0.24)', 1);
 
         // Subtle perimeter spawn marker ticks
         if (isEdge && (x + y) % 3 === 0) {
           const c = Iso.gridToScreen(x + 0.5, y + 0.5, 0.5);
-          ctx.fillStyle = 'rgba(255, 110, 90, 0.20)';
+          ctx.fillStyle = P.dangerFill;
           ctx.beginPath();
           ctx.arc(c.x, c.y, 2.2 * zScale, 0, Math.PI * 2);
           ctx.fill();
@@ -81,10 +82,10 @@ ZS.Renderer = (function () {
         if (def) {
           const eff = ZS.Game.getStructureEffectiveStats(st, tx, ty);
           if (eff.range > 0) {
-            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, eff.range, 'rgba(90, 215, 255, 0.55)', 'rgba(90, 215, 255, 0.08)');
+            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, eff.range, P.rangeStroke, P.rangeFill);
           }
           if (def.aura && def.aura.radius) {
-            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius, 'rgba(255, 210, 90, 0.65)', 'rgba(255, 210, 90, 0.09)');
+            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius, P.goldStroke, P.goldFill);
           }
         }
       }
@@ -159,10 +160,10 @@ ZS.Renderer = (function () {
         left: '#232830',
         right: '#1c2026'
       });
-      // Tactical yellow lane dash
+      // Neutral white-gray lane dash (separated from Gold #FFC94A)
       const p1 = Iso.gridToScreen(x + 0.35, y + 0.5, 1.8);
       const p2 = Iso.gridToScreen(x + 0.65, y + 0.5, 1.8);
-      ctx.strokeStyle = '#e6b839';
+      ctx.strokeStyle = '#cbd5e1';
       ctx.lineWidth = Math.max(1, 1.8 * zScale);
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
@@ -189,9 +190,9 @@ ZS.Renderer = (function () {
     } else if (floorId === 'hazard_mat') {
       Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2, {
         top: '#3b424c',
-        left: '#cfa029',
-        right: '#9e781c',
-        stroke: '#f0be37'
+        left: '#b87d4b',
+        right: '#8f5e36',
+        stroke: '#c98e5b'
       });
       Iso.drawVoxelBox(ctx, x + 0.16, y + 0.16, 2, 0.68, 0.68, 0.5, {
         top: '#2a3038'
@@ -228,19 +229,20 @@ ZS.Renderer = (function () {
   function drawHoverOverlay(ctx, state, uiState, tx, ty, zScale) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
+    const P = DATA.PALETTE;
 
     if (uiState.activeSkill === 'airstrike') {
-      drawIsoCircle(ctx, tx + 0.5, ty + 0.5, 2.5, 'rgba(255, 95, 75, 0.9)', 'rgba(255, 95, 75, 0.18)');
+      drawIsoCircle(ctx, tx + 0.5, ty + 0.5, 2.5, P.danger, P.dangerFill);
       return;
     }
 
     if (state.phase !== 'day') {
-      Iso.drawTilePoly(ctx, tx, ty, 2, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.35)', 1.5);
+      Iso.drawTilePoly(ctx, tx, ty, 2, P.hoverFill, P.hoverStroke, 1.5);
       return;
     }
 
     if (uiState.mode === 'remove') {
-      Iso.drawTilePoly(ctx, tx, ty, 2, 'rgba(255, 75, 75, 0.26)', '#ff5c5c', 2);
+      Iso.drawTilePoly(ctx, tx, ty, 2, P.dangerFill, P.danger, 2);
       return;
     }
 
@@ -252,12 +254,12 @@ ZS.Renderer = (function () {
           tx,
           ty,
           2,
-          canDrop ? 'rgba(80, 230, 150, 0.25)' : 'rgba(255, 80, 80, 0.25)',
-          canDrop ? '#50e696' : '#ff5555',
+          canDrop ? P.healthFill : P.dangerFill,
+          canDrop ? P.health : P.danger,
           2
         );
       } else {
-        Iso.drawTilePoly(ctx, tx, ty, 2, 'rgba(90, 195, 255, 0.22)', '#5ac3ff', 2);
+        Iso.drawTilePoly(ctx, tx, ty, 2, P.selectFill, P.selectStroke, 2);
       }
       return;
     }
@@ -271,18 +273,18 @@ ZS.Renderer = (function () {
         tx,
         ty,
         2,
-        check.ok ? 'rgba(80, 235, 155, 0.25)' : 'rgba(255, 85, 85, 0.25)',
-        check.ok ? '#52eb9b' : '#ff5555',
+        check.ok ? P.healthFill : P.dangerFill,
+        check.ok ? P.health : P.danger,
         2 * Math.min(1.2, zScale)
       );
       if (def.range) {
-        drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.range, 'rgba(90, 215, 255, 0.6)', 'rgba(90, 215, 255, 0.07)');
+        drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.range, P.rangeStroke, P.rangeFill);
       }
       if (def.aura && def.aura.radius) {
-        drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius, 'rgba(255, 210, 90, 0.7)', 'rgba(255, 210, 90, 0.08)');
+        drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius, P.goldStroke, P.goldFill);
       }
     } else {
-      Iso.drawTilePoly(ctx, tx, ty, 2, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.35)', 1.2);
+      Iso.drawTilePoly(ctx, tx, ty, 2, P.hoverFill, P.hoverStroke, 1.2);
     }
   }
 
@@ -308,6 +310,7 @@ ZS.Renderer = (function () {
 
   function drawStructure(ctx, st, tx, ty, state, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
     const id = st.id;
     const def = id === 'command_hq' ? ZS.DATA.HQ_STATS : ZS.DATA.ITEMS[id];
     const isUnpowered = state.isNight && def && def.requiresPower && !powered;
@@ -323,18 +326,17 @@ ZS.Renderer = (function () {
 
     switch (id) {
       case 'command_hq': {
-        // Armored Modern Command HQ
+        // Armored Modern Command HQ (warm command visor instead of power-cyan)
         Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.05, 1, 0.90, 0.90, 18, {
           top: '#4e6073',
           left: '#364452',
           right: '#293440',
-          stroke: 'rgba(200,230,255,0.25)'
+          stroke: 'rgba(255,255,255,0.22)'
         });
-        // Glowing cyan command visor band
         Iso.drawVoxelBox(ctx, tx + 0.04, ty + 0.04, 13, 0.92, 0.92, 3, {
-          top: '#5ad8ff',
-          left: '#3bc2f0',
-          right: '#249bc7'
+          top: P.baseLight,
+          left: '#ddb464',
+          right: '#b8944d'
         });
         // Upper tactical bridge
         Iso.drawVoxelBox(ctx, tx + 0.18, ty + 0.18, 19, 0.64, 0.64, 11, {
@@ -359,7 +361,7 @@ ZS.Renderer = (function () {
         ctx.ellipse(Math.cos(rot) * 2 * zScale, 0, 7 * zScale, 4 * zScale, Math.sin(rot) * 0.35, 0, Math.PI * 2);
         ctx.fill();
         // Blinking comms beacon
-        ctx.fillStyle = Math.sin(timeSec * 5) > 0 ? '#ff5252' : '#5ad8ff';
+        ctx.fillStyle = Math.sin(timeSec * 5) > 0 ? P.danger : '#ffe2a8';
         ctx.beginPath();
         ctx.arc(0, -4 * zScale, 2.2 * zScale, 0, Math.PI * 2);
         ctx.fill();
@@ -385,18 +387,17 @@ ZS.Renderer = (function () {
       }
 
       case 'blast_wall': {
-        // Heavy Armored Alloy Blast Barrier
+        // Heavy Armored Alloy Blast Barrier (copper-bronze stripe instead of coin gold)
         Iso.drawVoxelBox(ctx, tx + 0.06, ty + 0.06, 1, 0.88, 0.88, 20, {
           top: '#5f6f82',
           left: '#414d5c',
           right: '#2e3844',
           stroke: '#8396ad'
         });
-        // Tactical hazard stripe
         Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.05, 5, 0.90, 0.90, 3, {
-          top: '#f0bd35',
-          left: '#dfa922',
-          right: '#b58818'
+          top: '#c4834b',
+          left: '#a36b3b',
+          right: '#82542d'
         });
         break;
       }
@@ -436,9 +437,9 @@ ZS.Renderer = (function () {
           top: '#4d5968',
           left: '#38424f',
           right: '#2a323d',
-          stroke: '#eba834'
+          stroke: '#8fa1b3'
         });
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 12, '#3a4654', '#eba834', st.aimAngle || 0, zScale, false);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 12, '#3a4654', '#b87d4b', st.aimAngle || 0, zScale, false);
         break;
       }
 
@@ -463,7 +464,7 @@ ZS.Renderer = (function () {
           right: '#37414d',
           stroke: '#94a6b8'
         });
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25, '#3d4d42', '#52e3a4', st.aimAngle || 0, zScale, true);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25, '#3d4d42', '#6f8072', st.aimAngle || 0, zScale, true);
         break;
       }
 
@@ -494,10 +495,10 @@ ZS.Renderer = (function () {
           top: isUnpowered ? '#596159' : '#6c7d65',
           left: '#4e5c48',
           right: '#3b4737',
-          stroke: '#f0b938'
+          stroke: '#94a3b8'
         });
         const podTop = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22);
-        ctx.fillStyle = isUnpowered ? '#444' : '#ff6b4a';
+        ctx.fillStyle = isUnpowered ? '#444' : P.danger;
         ctx.beginPath();
         ctx.arc(podTop.x - 3 * zScale, podTop.y, 2 * zScale, 0, Math.PI * 2);
         ctx.arc(podTop.x + 3 * zScale, podTop.y, 2 * zScale, 0, Math.PI * 2);
@@ -518,8 +519,8 @@ ZS.Renderer = (function () {
           right: '#323f4d'
         });
         const orb = Iso.gridToScreen(tx + 0.5, ty + 0.5, 29);
-        const pulse = isUnpowered ? 0.4 : 0.85 + 0.2 * Math.sin(timeSec * 7);
-        ctx.fillStyle = isUnpowered ? '#4a606b' : '#5ef2ff';
+        const pulse = isUnpowered ? 0.55 : 0.85 + 0.2 * Math.sin(timeSec * 7);
+        ctx.fillStyle = isUnpowered ? P.powerDim : P.power;
         ctx.beginPath();
         ctx.arc(orb.x, orb.y, 5.8 * zScale * pulse, 0, Math.PI * 2);
         ctx.fill();
@@ -574,7 +575,7 @@ ZS.Renderer = (function () {
           ctx.lineTo(hub.x + Math.cos(a) * 16 * zScale, hub.y + Math.sin(a) * 14 * zScale);
           ctx.stroke();
         }
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = P.power;
         ctx.beginPath();
         ctx.arc(hub.x, hub.y, 3 * zScale, 0, Math.PI * 2);
         ctx.fill();
@@ -587,10 +588,10 @@ ZS.Renderer = (function () {
           top: '#e2ebf2',
           left: '#b8c7d4',
           right: '#8fa1b3',
-          stroke: '#38bdf8'
+          stroke: P.power
         });
         const ratio = Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0));
-        const ledColor = ratio > 0.35 ? '#34ebb4' : ratio > 0.05 ? '#f5b841' : '#ff5252';
+        const ledColor = ratio > 0.35 ? P.power : ratio > 0.05 ? P.healthMid : P.danger;
         Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.25, 6, 0.78, 0.50, Math.max(2, 10 * ratio), {
           top: ledColor,
           left: ledColor,
@@ -668,9 +669,9 @@ ZS.Renderer = (function () {
       case 'led_floodlight': {
         // Tactical Tripod Mast + Twin LED Floodlights
         Iso.drawVoxelBox(ctx, tx + 0.34, ty + 0.34, 1, 0.32, 0.32, 4, {
-          top: '#eba834',
-          left: '#c78b22',
-          right: '#9c6b17'
+          top: '#525f6e',
+          left: '#3b4552',
+          right: '#2c343e'
         });
         Iso.drawVoxelBox(ctx, tx + 0.44, ty + 0.44, 5, 0.12, 0.12, 20, {
           top: '#8a99a8',
@@ -678,9 +679,9 @@ ZS.Renderer = (function () {
           right: '#4b5763'
         });
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.32, 25, 0.56, 0.36, 5, {
-          top: isUnpowered ? '#4a545e' : '#dcf7ff',
-          left: isUnpowered ? '#3a424a' : '#9ee8ff',
-          right: isUnpowered ? '#2c333a' : '#6ed4f7'
+          top: isUnpowered ? P.powerDim : '#e6fcff',
+          left: isUnpowered ? '#226873' : P.power,
+          right: isUnpowered ? '#1b535c' : '#2dbbd1'
         });
         break;
       }
@@ -711,16 +712,16 @@ ZS.Renderer = (function () {
       }
 
       case 'vending_machine': {
-        // Glowing Smart Drink Vending Machine
+        // Glowing Smart Drink Vending Machine (warm internal display, not electric cyan)
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.22, 1, 0.56, 0.56, 21, {
-          top: '#2e86de',
-          left: '#256bb5',
-          right: '#1c528c'
+          top: '#475569',
+          left: '#334155',
+          right: '#1e293b'
         });
         Iso.drawVoxelBox(ctx, tx + 0.28, ty + 0.75, 7, 0.42, 0.06, 11, {
-          top: '#9ef0ff',
-          left: '#9ef0ff',
-          right: '#6bd8f0'
+          top: '#ffe8c2',
+          left: '#ffe8c2',
+          right: '#f5cfa0'
         });
         break;
       }
@@ -729,11 +730,11 @@ ZS.Renderer = (function () {
         // Robotic Maintenance Bay
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 5, {
           top: '#475361',
-          left: '#d99b26',
-          right: '#b07b19'
+          left: '#353e4a',
+          right: '#262d36'
         });
         Iso.drawVoxelBox(ctx, tx + 0.25, ty + 0.20, 6, 0.50, 0.35, 12, {
-          top: '#52d68a',
+          top: P.health,
           left: '#3bb570',
           right: '#2b8f56'
         });
@@ -753,9 +754,9 @@ ZS.Renderer = (function () {
           right: '#718096'
         });
         Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 21, 0.76, 0.76, 4, {
-          top: '#38b2ac',
-          left: '#f7fafc',
-          right: '#2c7a7b'
+          top: '#e07a5f',
+          left: '#c4664d',
+          right: '#9e4f3b'
         });
         break;
       }
@@ -769,9 +770,9 @@ ZS.Renderer = (function () {
           stroke: isUnpowered ? '#555' : '#eb64ff'
         });
         Iso.drawVoxelBox(ctx, tx + 0.26, ty + 0.26, 19, 0.48, 0.48, 6, {
-          top: isUnpowered ? '#52495c' : '#ff5ce1',
-          left: isUnpowered ? '#403947' : '#52e8ff',
-          right: isUnpowered ? '#302b36' : '#c742e8'
+          top: isUnpowered ? '#52495c' : '#ff66e5',
+          left: isUnpowered ? '#403947' : '#df52ff',
+          right: isUnpowered ? '#302b36' : '#b83be0'
         });
         break;
       }
@@ -779,11 +780,11 @@ ZS.Renderer = (function () {
       case 'boss_trophy': {
         Iso.drawVoxelBox(ctx, tx + 0.18, ty + 0.18, 1, 0.64, 0.64, 10, {
           top: '#2e3744',
-          left: '#d4af37',
-          right: '#aa8a24'
+          left: '#232a34',
+          right: '#191f26'
         });
         const holo = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22 + Math.sin(timeSec * 3.5) * 3);
-        ctx.fillStyle = '#ffe066';
+        ctx.fillStyle = P.gold;
         ctx.beginPath();
         ctx.moveTo(holo.x, holo.y - 9 * zScale);
         ctx.lineTo(holo.x + 7 * zScale, holo.y);
@@ -800,7 +801,7 @@ ZS.Renderer = (function () {
       const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, 29);
       ctx.font = `bold ${Math.round(11 * zScale)}px sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#ff5c5c';
+      ctx.fillStyle = P.danger;
       ctx.fillText('⚡OFF', warnPos.x, warnPos.y);
     }
 
@@ -812,7 +813,7 @@ ZS.Renderer = (function () {
       const ratio = Math.max(0, st.hp / st.maxHp);
       ctx.fillStyle = 'rgba(0,0,0,0.72)';
       ctx.fillRect(barPos.x - bw * 0.5 - 1, barPos.y - 1, bw + 2, bh + 2);
-      ctx.fillStyle = ratio > 0.5 ? '#4ade80' : ratio > 0.25 ? '#facc15' : '#f87171';
+      ctx.fillStyle = ratio > 0.5 ? P.health : ratio > 0.25 ? P.healthMid : P.danger;
       ctx.fillRect(barPos.x - bw * 0.5, barPos.y, bw * ratio, bh);
     }
   }
@@ -889,7 +890,7 @@ ZS.Renderer = (function () {
 
     // Slowed EMP cyan tint ring
     if (z.slowTimer > 0) {
-      ctx.strokeStyle = '#5ef2ff';
+      ctx.strokeStyle = ZS.DATA.PALETTE.power;
       ctx.lineWidth = 1.4 * zScale;
       ctx.beginPath();
       ctx.ellipse(basePos.x, basePos.y, 9 * sc * zScale, 5 * sc * zScale, 0, 0, Math.PI * 2);
@@ -903,7 +904,7 @@ ZS.Renderer = (function () {
       const bh = (zDef.isBoss ? 5 : 3.2) * zScale;
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(hpTop.x - bw * 0.5 - 1, hpTop.y - 1, bw + 2, bh + 2);
-      ctx.fillStyle = zDef.isBoss ? '#e879f9' : '#fb7185';
+      ctx.fillStyle = ZS.DATA.PALETTE.danger;
       ctx.fillRect(hpTop.x - bw * 0.5, hpTop.y, bw * Math.max(0, z.hp / z.maxHp), bh);
     }
   }
@@ -913,7 +914,7 @@ ZS.Renderer = (function () {
     for (let i = 0; i < projectiles.length; i++) {
       const p = projectiles[i];
       if (p.kind === 'chain') {
-        ctx.strokeStyle = '#67f3ff';
+        ctx.strokeStyle = ZS.DATA.PALETTE.power;
         ctx.lineWidth = 2.2 * zScale;
         ctx.beginPath();
         for (let k = 0; k < p.points.length; k++) {
@@ -982,14 +983,14 @@ ZS.Renderer = (function () {
 
     const colorGlows = [];
 
-    // HQ always maintains emergency command light
+    // HQ always maintains warm emergency command light
     punchHole(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 14, 3.8, 0.92);
     colorGlows.push({
       gx: DATA.HQ_POS.x + 0.5,
       gy: DATA.HQ_POS.y + 0.5,
       z: 14,
       r: 3.0,
-      color: 'rgba(90, 215, 255, 0.16)'
+      color: DATA.PALETTE.warmGlow
     });
 
     for (let y = 0; y < N; y++) {
@@ -1054,6 +1055,7 @@ ZS.Renderer = (function () {
 
   function drawFloatingTexts(ctx, list, zScale) {
     const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
     ctx.save();
     ctx.textAlign = 'center';
     for (let i = 0; i < list.length; i++) {
@@ -1062,8 +1064,15 @@ ZS.Renderer = (function () {
       const alpha = Math.min(1, (ft.life / ft.maxLife) * 1.4);
       ctx.globalAlpha = Math.max(0, alpha);
       ctx.font = `bold ${Math.round((ft.size || 12) * Math.min(1.25, Math.max(0.85, zScale)))}px 'Pretendard', 'Segoe UI', sans-serif`;
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillText(ft.text, p.x + 1, p.y + 1);
+      if (ft.strokeColor) {
+        ctx.strokeStyle = ft.strokeColor;
+        ctx.lineWidth = 2.2 * Math.min(1.2, zScale);
+        ctx.lineJoin = 'round';
+        ctx.strokeText(ft.text, p.x, p.y);
+      } else {
+        ctx.fillStyle = P.outlineDark || 'rgba(0,0,0,0.75)';
+        ctx.fillText(ft.text, p.x + 1, p.y + 1);
+      }
       ctx.fillStyle = ft.color || '#ffffff';
       ctx.fillText(ft.text, p.x, p.y);
     }
