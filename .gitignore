@@ -9,3 +9,7 @@ desktop.ini
 # Isolated agent git worktrees
 .worktrees/
 
+# Local inter-agent shared workspace (not pushed to GitHub)
+share/
+
+
