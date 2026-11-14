@@ -181,13 +181,14 @@ window.ZS = window.ZS || {};
     document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
     const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
     const pwrBar = document.getElementById('res-power-bar');
+    const P = ZS.DATA.PALETTE;
     pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
     pwrBar.style.background =
       pwrPct > 35
-        ? 'linear-gradient(90deg, #0ea5e9, #5ef2ff)'
+        ? P.power
         : pwrPct > 5
-        ? '#f59e0b'
-        : '#ef4444';
+        ? P.healthMid
+        : P.danger;
 
     document.querySelector('.power-pill').classList.toggle('blackout', st.isNight && st.power <= 0.01);
     document.getElementById('res-power-sub').textContent = `낮 충전 +${st.dayCharge}⚡ · 대기 -${st.nightIdleDrain.toFixed(1)}/s`;
@@ -200,17 +201,17 @@ window.ZS = window.ZS || {};
     document.getElementById('res-cozy').textContent = `Lv.${tier.level} (${st.cozyScore})`;
     const nextTier = ZS.DATA.COZY_TIERS.find((t) => t.level === tier.level + 1);
     document.getElementById('cozy-tooltip').innerHTML = `
-      <div style="font-weight:800;color:#fde68a;margin-bottom:4px;">💛 ${tier.title} (Lv.${tier.level})</div>
-      <div>총 안락함 점수: <b>${st.cozyScore}점</b> <span style="color:#93c5fd">(다양성 시너지 +${st.cozyDiversityBonus})</span></div>
+      <div style="font-weight:800;color:${P.gold};margin-bottom:4px;">💛 ${tier.title} (Lv.${tier.level})</div>
+      <div>총 안락함 점수: <b>${st.cozyScore}점</b> <span style="color:${P.gold}">(다양성 시너지 +${st.cozyDiversityBonus})</span></div>
       <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12);margin:6px 0;" />
-      <div>• 무전력 전투원 공격력: <b style="color:#86efac">+${Math.round(tier.agentDmg * 100)}%</b></div>
-      <div>• 전체 화기 연사속도: <b style="color:#86efac">+${Math.round(tier.fireRate * 100)}%</b></div>
-      <div>• 웨이브 코인 배당금: <b style="color:#fde047">+${Math.round(tier.coinBonus * 100)}%</b></div>
-      <div>• 아침 무료 자동수리: <b style="color:#7dd3fc">${Math.round(tier.freeRepair * 100)}%</b></div>
+      <div>• 무전력 전투원 공격력: <b style="color:${P.health}">+${Math.round(tier.agentDmg * 100)}%</b></div>
+      <div>• 전체 화기 연사속도: <b style="color:${P.health}">+${Math.round(tier.fireRate * 100)}%</b></div>
+      <div>• 웨이브 코인 배당금: <b style="color:${P.gold}">+${Math.round(tier.coinBonus * 100)}%</b></div>
+      <div>• 아침 무료 자동수리: <b style="color:${P.health}">+${Math.round(tier.freeRepair * 100)}%</b></div>
       ${
         nextTier
           ? `<div style="margin-top:6px;color:#94a3b8;font-size:11px;">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
-          : `<div style="margin-top:6px;color:#fde047;font-size:11px;">최고 안락함 등급 달성!</div>`
+          : `<div style="margin-top:6px;color:${P.gold};font-size:11px;">최고 안락함 등급 달성!</div>`
       }
     `;
 
@@ -577,10 +578,13 @@ window.ZS = window.ZS || {};
 
   function updateLiveNightNumbers() {
     const st = ZS.Game.state;
+    const P = ZS.DATA.PALETTE;
     const pwrVal = Math.round(st.power);
     document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
     const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
-    document.getElementById('res-power-bar').style.width = `${Math.max(0, pwrPct)}%`;
+    const pwrBar = document.getElementById('res-power-bar');
+    pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
+    pwrBar.style.background = pwrPct > 35 ? P.power : pwrPct > 5 ? P.healthMid : P.danger;
     document.querySelector('.power-pill').classList.toggle('blackout', st.isNight && st.power <= 0.01);
 
     const left = st.spawnQueue.length + st.zombies.length;
@@ -599,7 +603,74 @@ window.ZS = window.ZS || {};
   }
 
   // ================= BOOTSTRAP =================
+  function hexWithAlpha(color, alpha) {
+    if (!color || typeof color !== 'string') return `rgba(0, 0, 0, ${alpha})`;
+    const s = color.trim();
+    if (s[0] === '#') {
+      if (s.length === 4 || s.length === 5) {
+        const r = parseInt(s[1] + s[1], 16);
+        const g = parseInt(s[2] + s[2], 16);
+        const b = parseInt(s[3] + s[3], 16);
+        if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+      } else if (s.length === 7 || s.length === 9) {
+        const r = parseInt(s.slice(1, 3), 16);
+        const g = parseInt(s.slice(3, 5), 16);
+        const b = parseInt(s.slice(5, 7), 16);
+        if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+      }
+    }
+    const rgbMatch = s.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+    if (rgbMatch) {
+      return `rgba(${Math.round(+rgbMatch[1])}, ${Math.round(+rgbMatch[2])}, ${Math.round(+rgbMatch[3])}, ${alpha})`;
+    }
+    return `color-mix(in srgb, ${s} ${Math.round(alpha * 100)}%, transparent)`;
+  }
+
+  function syncCssPalette() {
+    const P = ZS.DATA.PALETTE;
+    if (!P) return;
+    const root = document.documentElement.style;
+    root.setProperty('--power', P.power);
+    root.setProperty('--power-dim', P.powerDim);
+    root.setProperty('--coin', P.coin);
+    root.setProperty('--danger', P.danger);
+    root.setProperty('--heal', P.heal);
+    root.setProperty('--caution', P.caution);
+    root.setProperty('--select', P.selectStroke);
+    root.setProperty('--outline-dark', P.outlineDark);
+    root.setProperty('--res-wood', P.resWood);
+    root.setProperty('--res-scrap', P.resScrap);
+
+    root.setProperty('--col-power', P.power);
+    root.setProperty('--col-power-dim', P.powerDim);
+    root.setProperty('--col-power-soft', hexWithAlpha(P.power, 0.24));
+    root.setProperty('--col-power-bg', hexWithAlpha(P.power, 0.14));
+
+    root.setProperty('--col-gold', P.coin);
+    root.setProperty('--col-gold-soft', hexWithAlpha(P.coin, 0.42));
+    root.setProperty('--col-gold-bg', hexWithAlpha(P.coin, 0.16));
+
+    root.setProperty('--col-danger', P.danger);
+    root.setProperty('--col-danger-soft', hexWithAlpha(P.danger, 0.45));
+    root.setProperty('--col-danger-bg', hexWithAlpha(P.danger, 0.20));
+
+    root.setProperty('--col-health', P.heal);
+    root.setProperty('--col-health-soft', hexWithAlpha(P.heal, 0.45));
+    root.setProperty('--col-health-bg', hexWithAlpha(P.heal, 0.18));
+
+    root.setProperty('--col-caution', P.caution);
+
+    root.setProperty('--col-select', P.selectStroke);
+    root.setProperty('--col-select-soft', P.hoverStroke);
+    root.setProperty('--col-select-bg', P.selectFill);
+  }
+
   function init() {
+    syncCssPalette();
     resizeCanvas();
     ZS.Iso.resetCamera();
 

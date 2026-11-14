@@ -327,7 +327,7 @@ ZS.Game = (function () {
     const check = canPlaceItem(itemId, tx, ty);
     if (!check.ok) {
       ZS.Audio.playError();
-      addFloatingText(tx + 0.5, ty + 0.5, 18, check.reason, '#ff8080', 11);
+      addFloatingText(tx + 0.5, ty + 0.5, 18, check.reason, DATA.PALETTE.danger, 11);
       return false;
     }
 
@@ -366,7 +366,7 @@ ZS.Game = (function () {
 
     recomputeFlow();
     ZS.Audio.playBuild();
-    spawnBurstParticles(tx + 0.5, ty + 0.5, 8, '#7ef5b5', 7);
+    spawnBurstParticles(tx + 0.5, ty + 0.5, 8, DATA.PALETTE.health, 7);
     saveGame();
     notifyUi();
     return true;
@@ -378,7 +378,7 @@ ZS.Game = (function () {
     if (!src || src.id === 'command_hq') return false;
     if (toX <= 0 || toY <= 0 || toX >= N - 1 || toY >= N - 1) {
       ZS.Audio.playError();
-      addFloatingText(toX + 0.5, toY + 0.5, 18, '외곽 진입 구역으로는 이동할 수 없습니다.', '#ff8080', 11);
+      addFloatingText(toX + 0.5, toY + 0.5, 18, '외곽 진입 구역으로는 이동할 수 없습니다.', DATA.PALETTE.danger, 11);
       return false;
     }
     if (state.structGrid[toY][toX]) {
@@ -391,7 +391,7 @@ ZS.Game = (function () {
     recalculateBaseStats();
     recomputeFlow();
     ZS.Audio.playBuild();
-    addFloatingText(toX + 0.5, toY + 0.5, 18, '위치 재배치 완료', '#7ef5ff', 11);
+    addFloatingText(toX + 0.5, toY + 0.5, 18, '위치 재배치 완료', DATA.PALETTE.neutralText, 11);
     saveGame();
     notifyUi();
     return true;
@@ -405,7 +405,7 @@ ZS.Game = (function () {
     if (st) {
       if (st.id === 'command_hq') {
         ZS.Audio.playError();
-        addFloatingText(tx + 0.5, ty + 0.5, 22, '지휘 본부는 철거할 수 없습니다!', '#ff8080', 12);
+        addFloatingText(tx + 0.5, ty + 0.5, 22, '지휘 본부는 철거할 수 없습니다!', DATA.PALETTE.danger, 12);
         return false;
       }
       const def = DATA.ITEMS[st.id];
@@ -454,7 +454,7 @@ ZS.Game = (function () {
       parts.push(`+${rc}🪙`);
     }
     if (parts.length > 0) {
-      addFloatingText(tx + 0.5, ty + 0.5, 16, `환급 ${parts.join(' ')}`, '#ffd97d', 11);
+      addFloatingText(tx + 0.5, ty + 0.5, 16, `환급 ${parts.join(' ')}`, DATA.PALETTE.gold, 11);
     }
   }
 
@@ -652,13 +652,13 @@ ZS.Game = (function () {
         const st = state.structGrid[y][x];
         if (st && st.hp < st.maxHp) {
           st.hp = Math.min(st.maxHp, st.hp + 95);
-          spawnBurstParticles(x + 0.5, y + 0.5, 10, '#4ade80', 6);
+          spawnBurstParticles(x + 0.5, y + 0.5, 10, DATA.PALETTE.health, 6);
           count++;
         }
       }
     }
     ZS.Audio.playBuild();
-    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `🛠️ 나노 수리 드론 가동! (${count}개 시설 회복)`, '#4ade80', 13);
+    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `🛠️ 나노 수리 드론 가동! (${count}개 시설 회복)`, DATA.PALETTE.health, 13);
     notifyUi();
     return true;
   }
@@ -669,7 +669,7 @@ ZS.Game = (function () {
 
     state.flares.push({ x: gx, y: gy, radius: 4.5, life: 4.5 });
     spawnBurstParticles(gx, gy, 10, '#ffae42', 22);
-    spawnBurstParticles(gx, gy, 14, '#ff5c5c', 16);
+    spawnBurstParticles(gx, gy, 14, DATA.PALETTE.danger, 16);
     ZS.Audio.playExplosion();
 
     const strikeDmg = 120 + state.wave * 18;
@@ -878,7 +878,7 @@ ZS.Game = (function () {
         const idx = sorted[k];
         if (state.zombies[idx]) {
           state.zombies[idx].slowTimer = Math.max(state.zombies[idx].slowTimer, def.slowDuration || 1.5);
-          damageZombie(idx, finalDmg, '#67f3ff', isCrit);
+          damageZombie(idx, finalDmg, DATA.PALETTE.power, isCrit);
         }
       }
       return;
@@ -899,7 +899,7 @@ ZS.Game = (function () {
           damage: finalDmg,
           isCrit,
           splash: 0,
-          color: '#ffd166',
+          color: '#ffd6a5',
           width: 2.0,
           life: 0.32
         });
@@ -910,12 +910,12 @@ ZS.Game = (function () {
     const spd = def.projType === 'sniper' ? 24 : def.projType === 'missile' ? 11 : 18;
     const color =
       def.projType === 'sniper'
-        ? '#7ef5ff'
+        ? '#f8fafc'
         : def.projType === 'missile'
         ? '#ff7b54'
         : def.projType === 'vulcan'
-        ? '#ffea75'
-        : '#ffe082';
+        ? '#ffe8b6'
+        : '#ffe0a8';
 
     state.projectiles.push({
       kind: 'bullet',
@@ -969,7 +969,7 @@ ZS.Game = (function () {
             }
           }
         } else {
-          damageZombie(hitIdx, p.damage, p.isCrit ? '#7ef5ff' : '#ffffff', p.isCrit);
+          damageZombie(hitIdx, p.damage, p.isCrit ? DATA.PALETTE.critText : '#ffffff', p.isCrit);
         }
         state.projectiles.splice(i, 1);
       }
@@ -981,7 +981,7 @@ ZS.Game = (function () {
     if (!z) return;
     const dmg = Math.max(1, Math.round(amount));
     z.hp -= dmg;
-    spawnBurstParticles(z.x, z.y, 10, '#8ee89e', 3);
+    spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, 3);
 
     if (dmg >= 15 || isCrit) {
       addFloatingText(
@@ -989,8 +989,9 @@ ZS.Game = (function () {
         z.y,
         18,
         isCrit ? `${dmg}!` : `${dmg}`,
-        isCrit ? '#67f3ff' : textColor || '#fff',
-        isCrit ? 13 : 11
+        isCrit ? DATA.PALETTE.critText : textColor || '#fff',
+        isCrit ? 13 : 11,
+        isCrit ? DATA.PALETTE.critStroke : null
       );
     }
 
@@ -1002,10 +1003,10 @@ ZS.Game = (function () {
       state.coin += coinGain;
       state.waveKilledZombies += 1;
 
-      spawnBurstParticles(z.x, z.y, 10, '#5ad67d', 9);
+      spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, 9);
       if (def.isBoss) {
         state.bossDefeated = true;
-        addFloatingText(z.x, z.y, 26, `🏆 알파 보스 격파! +${scrapGain}🔩 +${coinGain}🪙 (기념비 해금!)`, '#ffe066', 14);
+        addFloatingText(z.x, z.y, 26, `🏆 알파 보스 격파! +${scrapGain}🔩 +${coinGain}🪙 (기념비 해금!)`, DATA.PALETTE.gold, 14);
       } else if (Math.random() < 0.35 || z.type === 'brute') {
         addFloatingText(z.x, z.y, 16, `+${scrapGain}🔩`, '#cbd5e1', 10);
       }
@@ -1056,8 +1057,8 @@ ZS.Game = (function () {
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
           hqStruct.hp -= z.damage;
-          spawnBurstParticles(hqCx, hqCy, 14, '#ff6b6b', 5);
-          addFloatingText(hqCx, hqCy, 28, `-${z.damage}`, '#ff6b6b', 12);
+          spawnBurstParticles(hqCx, hqCy, 14, DATA.PALETTE.danger, 5);
+          addFloatingText(hqCx, hqCy, 28, `-${z.damage}`, DATA.PALETTE.danger, 12);
           notifyUi();
           if (hqStruct.hp <= 0) {
             hqStruct.hp = 0;
@@ -1110,10 +1111,10 @@ ZS.Game = (function () {
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
           blockingTarget.hp -= z.damage;
-          spawnBurstParticles(btx + 0.5, bty + 0.5, 10, '#facc15', 4);
+          spawnBurstParticles(btx + 0.5, bty + 0.5, 10, '#cbd5e1', 4);
           if (blockingTarget.hp <= 0) {
             state.structGrid[bty][btx] = null;
-            spawnBurstParticles(btx + 0.5, bty + 0.5, 10, '#ff7675', 10);
+            spawnBurstParticles(btx + 0.5, bty + 0.5, 10, DATA.PALETTE.danger, 10);
             structureDestroyed = true;
           }
         }
@@ -1231,13 +1232,14 @@ ZS.Game = (function () {
     }
   }
 
-  function addFloatingText(gx, gy, zPx, text, color, size) {
+  function addFloatingText(gx, gy, zPx, text, color, size, strokeColor) {
     state.floatingTexts.push({
       x: gx,
       y: gy,
       z: zPx,
       text,
       color,
+      strokeColor: strokeColor || null,
       size: size || 12,
       life: 1.15,
       maxLife: 1.15

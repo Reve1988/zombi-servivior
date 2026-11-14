@@ -5,6 +5,71 @@ ZS.DATA = {
   GRID_SIZE: 18,
   HQ_POS: { x: 8, y: 8 },
 
+  // Single-source-of-truth Semantic Palette (share/design/issue-03-palette-tokens.md)
+  PALETTE: {
+    // 1. Semantic Tokens (1 Color = 1 Meaning)
+    power: '#5EF2FF',
+    powerDim: '#2A7F8C',
+    powerSoft: 'rgba(94, 242, 255, 0.24)',
+    powerGlow: 'rgba(94, 242, 255, 0.44)',
+
+    coin: '#FFC94A',
+    gold: '#FFC94A',
+    goldStroke: 'rgba(255, 201, 74, 0.78)',
+    goldFill: 'rgba(255, 201, 74, 0.10)',
+
+    danger: '#FF4D6D',
+    dangerFill: 'rgba(255, 77, 109, 0.24)',
+
+    heal: '#4ADE80',
+    health: '#4ADE80',
+    healthFill: 'rgba(74, 222, 128, 0.24)',
+
+    caution: '#FACC15',
+    healthMid: '#FACC15',
+
+    select: 'rgba(255, 255, 255, 0.85)',
+    selectStroke: 'rgba(255, 255, 255, 0.85)',
+    selectFill: 'rgba(255, 255, 255, 0.10)',
+    rangeStroke: 'rgba(255, 255, 255, 0.85)',
+    rangeFill: 'rgba(255, 255, 255, 0.10)',
+    hoverStroke: 'rgba(255, 255, 255, 0.45)',
+    hoverFill: 'rgba(255, 255, 255, 0.10)',
+
+    critText: '#FFFFFF',
+    critStroke: '#FF4D6D',
+    neutralText: '#F1F5F9',
+
+    // 2. Growth / Rank Metal Tokens (#12, #13)
+    rankBronze: '#D08A4E',
+    rankBronzeStroke: '#5A3317',
+    rankSilver: '#E3E8EE',
+    rankSilverStroke: '#4A5563',
+    rankGold: '#FFD34D',
+    rankGoldStroke: '#6B4A00',
+    levelPip: '#F2F4F7',
+    levelPipStroke: '#1B2430',
+    levelMax: '#FF9F43',
+    levelMaxStroke: '#5C2E00',
+
+    // 3. World Base Tokens (issue-03-palette-tokens.md §3: keep terrain #485E4D/#415646 until #5)
+    groundA: '#485E4D',
+    groundB: '#415646',
+    groundEdge: '#4A4F48',
+    terrainA: '#485E4D',
+    terrainB: '#415646',
+    terrainEdgeA: '#3C4B42',
+    terrainEdgeB: '#36443B',
+    slabSideLeft: '#3A3027',
+    slabSideRight: '#2C241D',
+    baseLight: '#FFD27A',
+    nightOverlay: 'rgb(7, 13, 25)',
+    outlineDark: '#1B2430',
+    resWood: '#D49A5A',
+    resScrap: '#AEB8C4',
+    warmGlow: 'rgba(255, 210, 122, 0.42)'
+  },
+
   INITIAL_RESOURCES: {
     wood: 150,
     scrap: 130,
@@ -47,7 +112,7 @@ ZS.DATA = {
       cost: { wood: 4 },
       cozy: 1,
       cozyGroup: 'floor_road',
-      desc: '노란 전술 차선이 마킹된 깔끔한 아스팔트 도로 타일입니다.'
+      desc: '전술 유도 차선이 마킹된 깔끔한 아스팔트 도로 타일입니다.'
     },
     steel_deck: {
       id: 'steel_deck',
@@ -344,7 +409,7 @@ ZS.DATA = {
       cozy: 7,
       cozyGroup: 'decor_flood',
       lightRadius: 4.8,
-      lightColor: 'rgba(150, 225, 255, 0.52)',
+      lightColor: 'rgba(94, 242, 255, 0.42)',
       aura: { radius: 3.4, rangeMult: 0.15, critChance: 0.18 },
       desc: '[⚡야간 소모] 고광량 서치라이트. 반경 3.4칸 내 초소·포탑의 사거리 +15%, 치명타율 +18%!'
     },
@@ -375,7 +440,7 @@ ZS.DATA = {
       cozy: 13,
       cozyGroup: 'decor_vending',
       lightRadius: 2.3,
-      lightColor: 'rgba(105, 210, 255, 0.42)',
+      lightColor: 'rgba(255, 208, 148, 0.36)',
       aura: { radius: 2.7, fireRate: 0.15 },
       desc: '[내장 배터리 발광] 시원한 에너지 드링크 보급! 반경 2.7칸 내 연사속도를 +15% 높입니다.'
     },
@@ -436,7 +501,7 @@ ZS.DATA = {
       cozy: 30,
       cozyGroup: 'decor_trophy',
       lightRadius: 3.4,
-      lightColor: 'rgba(255, 220, 95, 0.5)',
+      lightColor: 'rgba(255, 201, 74, 0.48)',
       aura: { radius: 3.6, mannedDmg: 0.12, fireRate: 0.10 },
       desc: '[보스 격파 해금] 황금빛 전술 홀로그램 트로피. 안락함 +30 및 광역 전투 버프를 부여합니다.'
     }
