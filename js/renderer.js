@@ -4,6 +4,126 @@ ZS.Renderer = (function () {
   const lightCanvas = document.createElement('canvas');
   const lightCtx = lightCanvas.getContext('2d');
   const eyeHaloCache = new Map();
+  let cachedTerrainN = 0;
+  let terrainMeta = null;
+
+  function tileHash01(x, y, salt) {
+    let h = ((x * 374761393) ^ (y * 668265263) ^ ((salt || 0) * 1442695041)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+
+  function ensureTerrainMeta(N) {
+    if (terrainMeta && cachedTerrainN === N) return terrainMeta;
+    cachedTerrainN = N;
+    const grid = Array.from({ length: N }, () => Array(N).fill(null));
+    const edgeProps = [];
+
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const isEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
+        // Deterministic ±3% brightness variation per tile
+        const jitter = (tileHash01(x, y, 11) * 2 - 1) * 0.03;
+        const shadeFactor = +(1 + jitter).toFixed(3);
+
+        let decal = null;
+        if (!isEdge) {
+          const r = tileHash01(x, y, 29);
+          const ox = 0.24 + tileHash01(x, y, 41) * 0.52;
+          const oy = 0.24 + tileHash01(x, y, 53) * 0.52;
+          if (r < 0.16) {
+            decal = { kind: 'tuft', ox, oy, v: tileHash01(x, y, 67) };
+          } else if (r < 0.26) {
+            decal = { kind: 'pebble', ox, oy, v: tileHash01(x, y, 71) };
+          } else if (r < 0.35) {
+            decal = { kind: 'soil', ox, oy, v: tileHash01(x, y, 83) };
+          } else if (r < 0.41) {
+            decal = { kind: 'clover', ox, oy, v: tileHash01(x, y, 97) };
+          }
+        } else {
+          // Outer quarantine perimeter rubble / cracked earth details
+          const er = tileHash01(x, y, 109);
+          const ox = 0.26 + tileHash01(x, y, 113) * 0.48;
+          const oy = 0.26 + tileHash01(x, y, 127) * 0.48;
+          if (er < 0.44) {
+            decal = { kind: 'crack', ox, oy, v: tileHash01(x, y, 131) };
+          } else if (er < 0.72) {
+            decal = { kind: 'scorch', ox, oy, v: tileHash01(x, y, 137) };
+          }
+        }
+
+        grid[y][x] = { isEdge, shadeFactor, decal };
+      }
+    }
+
+    // Build deterministic breached quarantine fence posts & concrete rubble along the 4 outer edges
+    // Leave wide natural breach openings on each side where zombies pour in
+    for (let i = 1; i < N - 1; i++) {
+      // Top-right edge (y = 0)
+      if (tileHash01(i, 0, 211) > 0.36) {
+        edgeProps.push({
+          kind: tileHash01(i, 0, 223) > 0.34 ? 'fence_x' : 'rubble',
+          gx: i + 0.18,
+          gy: 0.11,
+          h: 5.2 + tileHash01(i, 0, 227) * 2.4,
+          brokenRail: tileHash01(i, 0, 229) > 0.32,
+          tilt: (tileHash01(i, 0, 233) - 0.5) * 0.06
+        });
+      }
+      // Bottom-left edge (y = N - 1)
+      if (tileHash01(i, N - 1, 239) > 0.36) {
+        edgeProps.push({
+          kind: tileHash01(i, N - 1, 241) > 0.34 ? 'fence_x' : 'rubble',
+          gx: i + 0.18,
+          gy: N - 0.13,
+          h: 5.2 + tileHash01(i, N - 1, 251) * 2.4,
+          brokenRail: tileHash01(i, N - 1, 257) > 0.32,
+          tilt: (tileHash01(i, N - 1, 263) - 0.5) * 0.06
+        });
+      }
+      // Top-left edge (x = 0)
+      if (tileHash01(0, i, 269) > 0.36) {
+        edgeProps.push({
+          kind: tileHash01(0, i, 271) > 0.34 ? 'fence_y' : 'rubble',
+          gx: 0.11,
+          gy: i + 0.18,
+          h: 5.2 + tileHash01(0, i, 277) * 2.4,
+          brokenRail: tileHash01(0, i, 281) > 0.32,
+          tilt: (tileHash01(0, i, 283) - 0.5) * 0.06
+        });
+      }
+      // Bottom-right edge (x = N - 1)
+      if (tileHash01(N - 1, i, 293) > 0.36) {
+        edgeProps.push({
+          kind: tileHash01(N - 1, i, 307) > 0.34 ? 'fence_y' : 'rubble',
+          gx: N - 0.13,
+          gy: i + 0.18,
+          h: 5.2 + tileHash01(N - 1, i, 311) * 2.4,
+          brokenRail: tileHash01(N - 1, i, 313) > 0.32,
+          tilt: (tileHash01(N - 1, i, 317) - 0.5) * 0.06
+        });
+      }
+    }
+
+    // 4 Corner breached concrete barrier blocks
+    const corners = [
+      { gx: 0.22, gy: 0.22 },
+      { gx: N - 0.36, gy: 0.22 },
+      { gx: 0.22, gy: N - 0.36 },
+      { gx: N - 0.36, gy: N - 0.36 }
+    ];
+    for (let c = 0; c < corners.length; c++) {
+      edgeProps.push({
+        kind: 'barrier',
+        gx: corners[c].gx,
+        gy: corners[c].gy,
+        h: 5.8
+      });
+    }
+
+    terrainMeta = { grid, edgeProps };
+    return terrainMeta;
+  }
 
   function ensureLightCanvas(w, h) {
     if (lightCanvas.width !== w || lightCanvas.height !== h) {
@@ -38,57 +158,94 @@ ZS.Renderer = (function () {
     const zScale = Iso.cam.zoom;
 
     // 1. Background Sky / Tactical Tabletop Backdrop
-    const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.75);
+    const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
     if (state.nightAlpha > 0.4) {
-      bgGrad.addColorStop(0, '#142030');
-      bgGrad.addColorStop(1, '#090e17');
+      bgGrad.addColorStop(0, '#101B2D');
+      bgGrad.addColorStop(1, '#060A13');
     } else {
-      bgGrad.addColorStop(0, '#273646');
-      bgGrad.addColorStop(1, '#141d26');
+      bgGrad.addColorStop(0, '#2C3B49');
+      bgGrad.addColorStop(1, '#151E27');
     }
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Apply subtle day/night ambient tint to matte voxel surfaces (emissive faces stay untouched)
+    // Apply day warm-afternoon vs night cool-moonlight ambient tint to matte voxel surfaces
     if (state.nightAlpha > 0.02) {
-      Iso.setSceneTint('#7aa6e8', 0.07 * state.nightAlpha);
+      Iso.setSceneTint('#6F9CE8', 0.085 * state.nightAlpha);
     } else {
-      Iso.setSceneTint('#fff3db', 0.03);
+      Iso.setSceneTint('#FFE8BA', 0.055);
     }
 
-    // 2. 3D Miniature Diorama Island Base Slab (grass top seam-guard + pre-shaded soil strata sides)
-    Iso.drawVoxelBox(ctx, 0, 0, -14, N, N, 14, {
-      top: P.terrainB,
-      left: P.slabSideLeft || '#3A3027',
-      right: P.slabSideRight || '#2C241D',
-      stroke: 'rgba(255,255,255,0.08)'
-    });
+    const meta = ensureTerrainMeta(N);
+    const showEditGrid =
+      (state.phase === 'day' &&
+        (uiState.mode === 'build' || uiState.mode === 'move' || uiState.mode === 'remove')) ||
+      uiState.activeSkill === 'airstrike';
 
-    // 3. Terrain & Floor Tiles
+    // 2. 3D Miniature Diorama Island Base Slab (3-layer turf / soil / bedrock geological strata)
+    drawIslandSlab(ctx, N, P, zScale);
+
+    // 3. Terrain, Natural Decals, Quarantine Border & Floor Tiles
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
-        const isEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
+        const cell = meta.grid[y][x];
+        const isEdge = cell.isEdge;
         const checker = (x + y) % 2 === 0;
-        let baseFill = checker ? P.terrainA : P.terrainB;
-        if (isEdge) {
-          baseFill = checker ? P.terrainEdgeA : P.terrainEdgeB;
-        }
-        Iso.drawTilePoly(ctx, x, y, 0, baseFill, 'rgba(18, 28, 22, 0.24)', 1);
+        const rawBase = isEdge
+          ? checker
+            ? P.terrainEdgeA
+            : P.terrainEdgeB
+          : checker
+          ? P.terrainA
+          : P.terrainB;
+        const tileFill = Iso.shadeHex(rawBase, cell.shadeFactor);
 
-        // Subtle perimeter spawn marker ticks
-        if (isEdge && (x + y) % 3 === 0) {
-          const c = Iso.gridToScreen(x + 0.5, y + 0.5, 0.5);
-          ctx.fillStyle = P.dangerFill;
-          ctx.beginPath();
-          ctx.arc(c.x, c.y, 2.2 * zScale, 0, Math.PI * 2);
-          ctx.fill();
+        if (showEditGrid) {
+          const gridStroke = isEdge ? 'rgba(255, 77, 109, 0.28)' : 'rgba(255, 255, 255, 0.14)';
+          Iso.drawTilePoly(ctx, x, y, 0, tileFill, gridStroke, 1);
+          if (isEdge && uiState.mode === 'build') {
+            const c = Iso.gridToScreen(x + 0.5, y + 0.5, 0.4);
+            ctx.strokeStyle = 'rgba(255, 77, 109, 0.22)';
+            ctx.lineWidth = Math.max(1, 1.1 * zScale);
+            ctx.beginPath();
+            ctx.moveTo(c.x - 4 * zScale, c.y - 2 * zScale);
+            ctx.lineTo(c.x + 4 * zScale, c.y + 2 * zScale);
+            ctx.moveTo(c.x + 4 * zScale, c.y - 2 * zScale);
+            ctx.lineTo(c.x - 4 * zScale, c.y + 2 * zScale);
+            ctx.stroke();
+          }
+        } else {
+          // Seam-guard stroke in matching tile color eliminates graph-paper grid lines & Canvas AA seams
+          Iso.drawTilePoly(ctx, x, y, 0, tileFill, tileFill, 0.65);
         }
 
         const floorId = state.floorGrid[y][x];
         if (floorId) {
           drawFloorTile(ctx, x, y, floorId, zScale);
+        } else if (cell.decal && !(state.structGrid[y] && state.structGrid[y][x])) {
+          drawTerrainDecal(ctx, x, y, cell.decal, zScale);
         }
       }
+    }
+
+    // Crisp inner quarantine boundary & directional danger chevrons separating 1-tile outer spawn zone
+    drawQuarantineBorder(ctx, N, P, showEditGrid, zScale);
+
+    // Subtle warm afternoon sunlight wash over the inner base during daytime
+    if (state.nightAlpha < 0.95) {
+      const sunCenter = Iso.gridToScreen(DATA.HQ_POS.x + 0.2, DATA.HQ_POS.y + 0.2, 4);
+      const sunRad = N * 22 * zScale;
+      const dayFactor = Math.max(0, 1 - state.nightAlpha * 1.15);
+      ctx.save();
+      const sunGrad = ctx.createRadialGradient(sunCenter.x, sunCenter.y, sunRad * 0.08, sunCenter.x, sunCenter.y, sunRad);
+      sunGrad.addColorStop(0, `rgba(255, 224, 166, ${(0.085 * dayFactor).toFixed(3)})`);
+      sunGrad.addColorStop(0.65, `rgba(255, 214, 150, ${(0.035 * dayFactor).toFixed(3)})`);
+      sunGrad.addColorStop(1, 'rgba(255, 214, 150, 0)');
+      ctx.fillStyle = sunGrad;
+      ctx.beginPath();
+      ctx.arc(sunCenter.x, sunCenter.y, sunRad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     // 4. Hover / Placement Range & Aura Rings (Under structures)
@@ -127,7 +284,7 @@ ZS.Renderer = (function () {
       }
     }
 
-    // 5. Collect & Depth-Sort All Structures + Zombies
+    // 5. Collect & Depth-Sort All Structures + Perimeter Props + Zombies
     const renderList = [];
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
@@ -143,6 +300,15 @@ ZS.Renderer = (function () {
           st
         });
       }
+    }
+
+    for (let i = 0; i < meta.edgeProps.length; i++) {
+      const ep = meta.edgeProps[i];
+      renderList.push({
+        kind: 'edge_prop',
+        depth: ep.gx + ep.gy + 0.08,
+        ep
+      });
     }
 
     for (let i = 0; i < state.zombies.length; i++) {
@@ -162,10 +328,15 @@ ZS.Renderer = (function () {
       const item = renderList[i];
       if (item.kind === 'struct') {
         drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
-      } else {
+      } else if (item.kind === 'edge_prop') {
+        drawPerimeterProp(ctx, item.ep, zScale);
+      } else if (item.kind === 'zombie') {
         drawZombie(ctx, item.z, timeSec, zScale);
       }
     }
+
+    // Creeping perimeter mist / fog band along the 4 outer edges ("outside = danger")
+    drawPerimeterFog(ctx, N, state.nightAlpha, timeSec, zScale);
 
     // 6. Ghost Preview of Structure Being Built or Moved
     if (uiState.hoverTile && state.phase === 'day') {
@@ -211,6 +382,279 @@ ZS.Renderer = (function () {
 
     // 10. Floating Texts (Damage, Loot, Buff Callouts)
     drawFloatingTexts(ctx, state.floatingTexts, zScale);
+  }
+
+  function drawIslandSlab(ctx, N, P, zScale) {
+    const Iso = ZS.Iso;
+    // Floating diorama drop shadow underneath island
+    const sTop = Iso.gridToScreen(0.4, 0.4, -27);
+    const sRight = Iso.gridToScreen(N + 0.4, 0.4, -27);
+    const sFront = Iso.gridToScreen(N + 0.4, N + 0.4, -27);
+    const sLeft = Iso.gridToScreen(0.4, N + 0.4, -27);
+    ctx.save();
+    ctx.fillStyle = 'rgba(4, 7, 13, 0.46)';
+    ctx.beginPath();
+    ctx.moveTo(sTop.x, sTop.y);
+    ctx.lineTo(sRight.x, sRight.y);
+    ctx.lineTo(sFront.x, sFront.y);
+    ctx.lineTo(sLeft.x, sLeft.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Stratum 1: Deep Bedrock (-22 .. -12)
+    Iso.drawVoxelBox(ctx, 0, 0, -22, N, N, 10, {
+      top: P.slabRockLeft || '#2B3038',
+      left: P.slabRockLeft || '#2B3038',
+      right: P.slabRockRight || '#1E2229'
+    });
+
+    // Protruding bedrock cliff blocks along visible front-left (y = N) and front-right (x = N) faces
+    const rockOffsets = [2.2, 6.4, 11.1, 14.8];
+    for (let i = 0; i < rockOffsets.length; i++) {
+      const k = rockOffsets[i];
+      Iso.drawVoxelBox(ctx, k, N - 0.16, -20.5 + (i % 2) * 1.5, 1.5, 0.24, 6.5, {
+        base: '#363D47'
+      });
+      Iso.drawVoxelBox(ctx, N - 0.16, k + 0.5, -20 + (i % 2) * 1.5, 0.24, 1.4, 6.2, {
+        base: '#2D333C'
+      });
+    }
+
+    // Stratum 2: Subsoil & Clay (-12 .. -3.5)
+    Iso.drawVoxelBox(ctx, 0, 0, -12, N, N, 8.5, {
+      top: P.slabSideLeft || '#3A3027',
+      left: P.slabSideLeft || '#3A3027',
+      right: P.slabSideRight || '#2C241D'
+    });
+
+    // Embedded cliff stones in soil layer
+    const stoneOffsets = [1.4, 4.7, 8.3, 12.6, 15.9];
+    for (let i = 0; i < stoneOffsets.length; i++) {
+      const k = stoneOffsets[i];
+      Iso.drawVoxelBox(ctx, k, N - 0.06, -9.2 + (i % 2) * 1.8, 0.55, 0.11, 2.6, {
+        base: '#6C737B'
+      });
+      Iso.drawVoxelBox(ctx, N - 0.06, k, -8.8 + ((i + 1) % 2) * 1.8, 0.11, 0.55, 2.6, {
+        base: '#5E656D'
+      });
+    }
+
+    // Stratum 3: Topsoil & Overgrown Turf Lip (-3.5 .. 0)
+    Iso.drawVoxelBox(ctx, 0, 0, -3.5, N, N, 3.5, {
+      top: P.terrainEdgeB || P.terrainB,
+      left: P.slabTurfLeft || '#3E4C3B',
+      right: P.slabTurfRight || '#2F3A2D',
+      stroke: 'rgba(255, 255, 255, 0.06)'
+    });
+  }
+
+  function drawTerrainDecal(ctx, x, y, decal, zScale) {
+    const Iso = ZS.Iso;
+    const gx = x + decal.ox;
+    const gy = y + decal.oy;
+
+    if (decal.kind === 'tuft') {
+      const p = Iso.gridToScreen(gx, gy, 0.4);
+      ctx.strokeStyle = decal.v > 0.5 ? '#5E7C63' : '#3B4F3F';
+      ctx.lineWidth = Math.max(1, 1.25 * zScale);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.x - 2.2 * zScale, p.y + 1 * zScale);
+      ctx.lineTo(p.x - 3.8 * zScale, p.y - 3.4 * zScale);
+      ctx.moveTo(p.x, p.y + 1.2 * zScale);
+      ctx.lineTo(p.x + 0.4 * zScale, p.y - 4.2 * zScale);
+      ctx.moveTo(p.x + 2.0 * zScale, p.y + 0.8 * zScale);
+      ctx.lineTo(p.x + 3.8 * zScale, p.y - 2.8 * zScale);
+      ctx.stroke();
+    } else if (decal.kind === 'pebble') {
+      Iso.drawVoxelBox(ctx, gx - 0.05, gy - 0.04, 0, 0.10, 0.09, 1.5, {
+        base: decal.v > 0.5 ? '#7A838C' : '#677079'
+      });
+      if (decal.v > 0.35) {
+        Iso.drawVoxelBox(ctx, gx + 0.07, gy + 0.03, 0, 0.06, 0.06, 1.0, {
+          base: '#5D666E'
+        });
+      }
+    } else if (decal.kind === 'soil') {
+      const p = Iso.gridToScreen(gx, gy, 0.2);
+      ctx.fillStyle = 'rgba(78, 66, 50, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 6.2 * zScale, 3.1 * zScale, decal.v * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (decal.kind === 'clover') {
+      const p = Iso.gridToScreen(gx, gy, 0.3);
+      ctx.fillStyle = '#5B7A60';
+      ctx.beginPath();
+      ctx.arc(p.x - 1.8 * zScale, p.y, 1.5 * zScale, 0, Math.PI * 2);
+      ctx.arc(p.x + 1.8 * zScale, p.y, 1.5 * zScale, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y - 1.4 * zScale, 1.5 * zScale, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (decal.kind === 'crack') {
+      const p = Iso.gridToScreen(gx, gy, 0.2);
+      ctx.strokeStyle = 'rgba(24, 26, 28, 0.42)';
+      ctx.lineWidth = Math.max(0.9, 1.1 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(p.x - 5 * zScale, p.y - 1.5 * zScale);
+      ctx.lineTo(p.x - 0.5 * zScale, p.y + 0.8 * zScale);
+      ctx.lineTo(p.x + 4.5 * zScale, p.y - 1.2 * zScale);
+      ctx.moveTo(p.x - 0.5 * zScale, p.y + 0.8 * zScale);
+      ctx.lineTo(p.x + 1.5 * zScale, p.y + 3.2 * zScale);
+      ctx.stroke();
+    } else if (decal.kind === 'scorch') {
+      const p = Iso.gridToScreen(gx, gy, 0.2);
+      ctx.fillStyle = 'rgba(28, 30, 32, 0.34)';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 5.5 * zScale, 2.8 * zScale, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawQuarantineBorder(ctx, N, P, showEditGrid, zScale) {
+    const Iso = ZS.Iso;
+    const p0 = Iso.gridToScreen(1, 1, 0.5);
+    const p1 = Iso.gridToScreen(N - 1, 1, 0.5);
+    const p2 = Iso.gridToScreen(N - 1, N - 1, 0.5);
+    const p3 = Iso.gridToScreen(1, N - 1, 0.5);
+
+    ctx.save();
+    // Subtle dark curb shadow along inner safe-zone edge
+    ctx.strokeStyle = 'rgba(18, 22, 26, 0.48)';
+    ctx.lineWidth = Math.max(1.2, 2.0 * zScale);
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Dashed tactical quarantine danger line
+    ctx.strokeStyle = showEditGrid ? 'rgba(255, 77, 109, 0.68)' : 'rgba(255, 77, 109, 0.36)';
+    ctx.lineWidth = Math.max(1.0, 1.35 * zScale);
+    ctx.setLineDash([6 * zScale, 5 * zScale]);
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Inward-pointing danger approach chevrons at the 4 cardinal breach lanes
+    const midIdx = N * 0.5;
+    const lanes = [
+      { gx: midIdx, gy: 0.52, ix: 0, iy: 0.24 },
+      { gx: N - 0.52, gy: midIdx, ix: -0.24, iy: 0 },
+      { gx: midIdx, gy: N - 0.52, ix: 0, iy: -0.24 },
+      { gx: 0.52, gy: midIdx, ix: 0.24, iy: 0 }
+    ];
+    ctx.strokeStyle = 'rgba(255, 77, 109, 0.46)';
+    ctx.lineWidth = Math.max(1.1, 1.5 * zScale);
+    for (let i = 0; i < lanes.length; i++) {
+      const ln = lanes[i];
+      const px = -ln.iy * 0.9;
+      const py = ln.ix * 0.9;
+      const tip = Iso.gridToScreen(ln.gx + ln.ix * 0.55, ln.gy + ln.iy * 0.55, 0.6);
+      const wL = Iso.gridToScreen(ln.gx - ln.ix * 0.35 + px, ln.gy - ln.iy * 0.35 + py, 0.6);
+      const wR = Iso.gridToScreen(ln.gx - ln.ix * 0.35 - px, ln.gy - ln.iy * 0.35 - py, 0.6);
+      ctx.beginPath();
+      ctx.moveTo(wL.x, wL.y);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(wR.x, wR.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawPerimeterProp(ctx, ep, zScale) {
+    const Iso = ZS.Iso;
+    if (ep.kind === 'rubble') {
+      Iso.drawVoxelBox(ctx, ep.gx, ep.gy, 0, 0.18, 0.14, 2.4, {
+        base: '#5C6168'
+      });
+      Iso.drawVoxelBox(ctx, ep.gx + 0.14, ep.gy + 0.08, 0, 0.11, 0.10, 1.5, {
+        base: '#4C5057'
+      });
+      return;
+    }
+
+    if (ep.kind === 'barrier') {
+      Iso.drawVoxelBox(ctx, ep.gx, ep.gy, 0, 0.24, 0.16, ep.h, {
+        base: '#646A73'
+      });
+      Iso.drawVoxelBox(ctx, ep.gx - 0.005, ep.gy - 0.005, ep.h * 0.52, 0.25, 0.17, 1.3, {
+        base: '#A84252'
+      });
+      return;
+    }
+
+    // Broken perimeter fence post + snapped cross-rail
+    Iso.drawVoxelBox(ctx, ep.gx, ep.gy, 0, 0.08, 0.08, ep.h, {
+      base: '#5E6772'
+    });
+    if (ep.brokenRail) {
+      const p1 = Iso.gridToScreen(ep.gx + 0.04, ep.gy + 0.04, ep.h * 0.72);
+      const rx = ep.kind === 'fence_x' ? ep.gx + 0.46 : ep.gx + 0.04 + ep.tilt;
+      const ry = ep.kind === 'fence_y' ? ep.gy + 0.46 : ep.gy + 0.04 + ep.tilt;
+      const p2 = Iso.gridToScreen(rx, ry, ep.h * 0.48);
+      const p3 = Iso.gridToScreen(ep.gx + 0.04, ep.gy + 0.04, ep.h * 0.38);
+      const p4 = Iso.gridToScreen(rx, ry, ep.h * 0.20);
+      ctx.strokeStyle = '#737D8A';
+      ctx.lineWidth = Math.max(1, 1.3 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.moveTo(p3.x, p3.y);
+      ctx.lineTo(p4.x, p4.y);
+      ctx.stroke();
+    }
+  }
+
+  function drawPerimeterFog(ctx, N, nightAlpha, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    // Subtle drifting mist wisps along the 4 outer island edges to reinforce "outside = danger"
+    ctx.save();
+    const mistColor =
+      nightAlpha > 0.35
+        ? `rgba(26, 44, 78, ${(0.20 + nightAlpha * 0.14).toFixed(3)})`
+        : 'rgba(176, 192, 204, 0.13)';
+    const dangerMist =
+      nightAlpha > 0.35
+        ? `rgba(255, 77, 109, ${(0.045 * nightAlpha).toFixed(3)})`
+        : 'rgba(120, 96, 104, 0.05)';
+
+    for (let i = 0; i < 16; i++) {
+      const side = i % 4;
+      const t = ((i * 0.23 + timeSec * 0.018) % 1) * (N - 1) + 0.5;
+      let gx = 0.35;
+      let gy = 0.35;
+      if (side === 0) {
+        gx = t;
+        gy = 0.32;
+      } else if (side === 1) {
+        gx = N - 0.32;
+        gy = t;
+      } else if (side === 2) {
+        gx = t;
+        gy = N - 0.32;
+      } else {
+        gx = 0.32;
+        gy = t;
+      }
+      const p = Iso.gridToScreen(gx, gy, 2.5);
+      const rx = (28 + (i % 3) * 8) * zScale;
+      const ry = (13 + (i % 3) * 4) * zScale;
+      const grad = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, rx);
+      grad.addColorStop(0, i % 3 === 0 ? dangerMist : mistColor);
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawFloorTile(ctx, x, y, floorId, zScale) {
@@ -1496,8 +1940,28 @@ ZS.Renderer = (function () {
               color: def.lightColor
             });
           }
+        } else if (def.subType === 'housing' || st.id === 'vending_machine') {
+          // Warm interior window glow for cozy shelters & vending machine (#5 warm base vs cold outside)
+          const rad = st.id === 'shelter_pod' ? 2.2 : st.id === 'field_tent' ? 1.85 : 1.35;
+          punchHole(x + 0.5, y + 0.5, 10, rad, 0.78);
+          colorGlows.push({
+            gx: x + 0.5,
+            gy: y + 0.5,
+            z: 10,
+            r: rad * 0.85,
+            color: 'rgba(255, 206, 112, 0.34)'
+          });
         } else if (def.subType === 'manned' || def.subType === 'turret') {
           punchHole(x + 0.5, y + 0.5, 10, 1.65, 0.55);
+          if (def.subType === 'manned') {
+            colorGlows.push({
+              gx: x + 0.5,
+              gy: y + 0.5,
+              z: 10,
+              r: 1.25,
+              color: 'rgba(255, 198, 108, 0.18)'
+            });
+          }
         }
       }
     }
@@ -1517,6 +1981,21 @@ ZS.Renderer = (function () {
 
     ctx.drawImage(lightCanvas, 0, 0);
 
+    // Cold deep-navy exterior rim vignette around outer perimeter to heighten temperature contrast
+    const islandCenter = Iso.gridToScreen(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 6);
+    const innerR = N * 11 * zScale;
+    const outerR = Math.max(w, h) * 0.68;
+    if (outerR > innerR + 10) {
+      ctx.save();
+      const coldRim = ctx.createRadialGradient(islandCenter.x, islandCenter.y, innerR, islandCenter.x, islandCenter.y, outerR);
+      coldRim.addColorStop(0, 'rgba(10, 22, 48, 0)');
+      coldRim.addColorStop(0.6, `rgba(12, 26, 56, ${(0.22 * state.nightAlpha).toFixed(3)})`);
+      coldRim.addColorStop(1, `rgba(5, 11, 26, ${(0.42 * state.nightAlpha).toFixed(3)})`);
+      ctx.fillStyle = coldRim;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+
     // Subtle colored atmospheric bloom
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -1528,7 +2007,7 @@ ZS.Renderer = (function () {
       grad.addColorStop(0, g.color);
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad;
-      ctx.globalAlpha = state.nightAlpha * 0.55;
+      ctx.globalAlpha = state.nightAlpha * 0.60;
       ctx.beginPath();
       ctx.arc(p.x, p.y, rPx, 0, Math.PI * 2);
       ctx.fill();
@@ -1665,7 +2144,7 @@ ZS.Renderer = (function () {
           ctx.fillStyle = P.danger;
           ctx.fillText('OFF', warnPos.x + 5.5 * badgeScale, textY);
         }
-      } else {
+      } else if (item.kind === 'zombie') {
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
 
