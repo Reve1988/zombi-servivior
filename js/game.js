@@ -1276,24 +1276,33 @@ ZS.Game = (function () {
 
   function refundCost(cost, tx, ty) {
     if (!cost) return;
-    const parts = [];
+    const entries = [];
     if (cost.wood) {
       const rw = Math.max(1, Math.round(cost.wood * 0.8));
       state.wood += rw;
-      parts.push(`목재 +${rw}`);
+      entries.push({ val: `+${rw}`, col: DATA.PALETTE.resWood || '#D49A5A' });
     }
     if (cost.scrap) {
       const rs = Math.max(1, Math.round(cost.scrap * 0.8));
       state.scrap += rs;
-      parts.push(`고철 +${rs}`);
+      entries.push({ val: `+${rs}`, col: DATA.PALETTE.resScrap || '#AEB8C4' });
     }
     if (cost.coin) {
       const rc = Math.max(1, Math.round(cost.coin * 0.8));
       state.coin += rc;
-      parts.push(`코인 +${rc}`);
+      entries.push({ val: `+${rc}`, col: DATA.PALETTE.coin || '#FFC94A' });
     }
-    if (parts.length > 0) {
-      addFloatingText(tx + 0.5, ty + 0.5, 16, `환급 ${parts.join(' ')}`, DATA.PALETTE.gold, 12);
+    for (let i = 0; i < entries.length; i++) {
+      const offsetX = (i - (entries.length - 1) * 0.5) * 0.22;
+      addFloatingText(
+        tx + 0.5 + offsetX,
+        ty + 0.5,
+        16 + i * 4,
+        entries[i].val,
+        entries[i].col,
+        12,
+        DATA.PALETTE.outlineDark
+      );
     }
   }
 
@@ -1508,7 +1517,12 @@ ZS.Game = (function () {
       }
     }
     ZS.Audio.playBuild();
-    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `나노 수리 드론 가동! (${count}개 시설 회복)`, DATA.PALETTE.health, 13);
+    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, '+95 HP', DATA.PALETTE.heal || DATA.PALETTE.health, 14, DATA.PALETTE.outlineDark);
+    banner(
+      '긴급 나노 수리 드론 가동',
+      count > 0 ? `${count}개 시설의 내구도를 +95 회복했습니다.` : '모든 시설 내구도가 이미 최대입니다.',
+      'good'
+    );
     notifyUi();
     return true;
   }
@@ -1532,7 +1546,7 @@ ZS.Game = (function () {
         damageZombie(i, strikeDmg * (1 - d * 0.18), '#ff9f43');
       }
     }
-    addFloatingText(gx, gy, 24, '전술 조명탄 & 폭격!', '#ffb142', 13);
+    banner('전술 조명탄 & 폭격 투하', '지정 구역 광역 타격 및 야간 조명이 전개되었습니다.', 'info');
     notifyUi();
     return true;
   }
