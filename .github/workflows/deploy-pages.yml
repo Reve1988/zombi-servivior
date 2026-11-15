@@ -1,0 +1,122 @@
+name: Deploy GitHub Pages (Conditional /dev Staging)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch latest main and develop refs
+        run: |
+          git fetch origin main:refs/remotes/origin/main develop:refs/remotes/origin/develop
+
+      - name: Assemble clean Pages artifact (Root = main, /dev = develop when ahead)
+        run: |
+          set -euo pipefail
+
+          rm -rf _site _prod _dev
+          mkdir -p _site _prod
+
+          # 1. Extract ONLY runtime static files from origin/main into _prod
+          git archive origin/main | tar -x -C _prod
+          cp _prod/index.html _site/index.html
+          cp -r _prod/css _site/css
+          cp -r _prod/js _site/js
+          if [ -d "_prod/assets" ]; then
+            cp -r _prod/assets _site/assets
+          fi
+
+          # Always publish robots.txt disallowing /dev/ indexing & add .nojekyll
+          cat << 'EOF' > _site/robots.txt
+          User-agent: *
+          Disallow: /dev/
+          EOF
+          touch _site/.nojekyll
+
+          # 2. Decide whether to open /dev/ staging or physically omit it (404)
+          AHEAD_COUNT=$(git rev-list --count origin/main..origin/develop)
+          echo "Push ref: ${{ github.ref }} | commits ahead (origin/main..origin/develop): ${AHEAD_COUNT}"
+
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "[PROD RELEASE] Push to main detected -> /dev/ staging physically omitted (404)."
+          elif [ "${AHEAD_COUNT}" -gt 0 ]; then
+            DEV_SHA=$(git rev-parse --short=7 origin/develop)
+            echo "[DEV STAGING] origin/develop is ${AHEAD_COUNT} commit(s) ahead (${DEV_SHA}) -> assembling _site/dev/"
+
+            mkdir -p _dev _site/dev
+            git archive origin/develop | tar -x -C _dev
+            cp _dev/index.html _site/dev/index.html
+            cp -r _dev/css _site/dev/css
+            cp -r _dev/js _site/dev/js
+            if [ -d "_dev/assets" ]; then
+              cp -r _dev/assets _site/dev/assets
+            fi
+
+            # Inject noindex meta + ZS_DEV_BUILD / ZS_COMMIT_SHA markers ONLY into _site/dev/index.html
+            DEV_SHA="${DEV_SHA}" node -e '
+              const fs = require("fs");
+              const p = "_site/dev/index.html";
+              let html = fs.readFileSync(p, "utf8");
+              const sha = process.env.DEV_SHA || "dev";
+              const injection = [
+                "  <meta name=\"robots\" content=\"noindex, nofollow\" />",
+                `  <script>window.ZS_DEV_BUILD = true; window.ZS_COMMIT_SHA = ${JSON.stringify(sha)};</script>`
+              ].join("\n");
+              if (!html.includes("window.ZS_DEV_BUILD")) {
+                html = html.replace("<head>", "<head>\n" + injection);
+              }
+              fs.writeFileSync(p, html, "utf8");
+            '
+          else
+            echo "[SYNCED] origin/develop has 0 commits ahead of origin/main -> /dev/ staging omitted (404)."
+          fi
+
+          # 3. Safety verification: ensure internal docs never leak and root index.html never contains ZS_DEV_BUILD
+          if grep -q "ZS_DEV_BUILD" _site/index.html; then
+            echo "ERROR: Root _site/index.html must never contain ZS_DEV_BUILD!"
+            exit 1
+          fi
+          for forbidden in agents share .worktrees AGENTS.md README.md; do
+            if [ -e "_site/${forbidden}" ] || [ -e "_site/dev/${forbidden}" ]; then
+              echo "ERROR: Forbidden internal path leaked into artifact: ${forbidden}"
+              exit 1
+            fi
+          done
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
