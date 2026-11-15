@@ -227,6 +227,21 @@ ZS.DATA = (function () {
     shelter_pod: '프리미엄 모듈러 생활관 (수용 +4👥 · 안락함 +26)'
   },
 
+  VETERANCY_RANKS: [
+    { rank: 0, minXp: 0,  name: '신병',   dmgBonus: 0.00, rateBonus: 0.00, critAdd: 0.00, rangeAdd: 0.0, color: '#94A3B8', stroke: '#1B2430' },
+    { rank: 1, minXp: 12, name: '숙련',   dmgBonus: 0.08, rateBonus: 0.05, critAdd: 0.00, rangeAdd: 0.0, color: PALETTE.rankBronze, stroke: PALETTE.rankBronzeStroke },
+    { rank: 2, minXp: 32, name: '베테랑', dmgBonus: 0.18, rateBonus: 0.12, critAdd: 0.06, rangeAdd: 0.0, color: PALETTE.rankSilver, stroke: PALETTE.rankSilverStroke },
+    { rank: 3, minXp: 70, name: '에이스', dmgBonus: 0.30, rateBonus: 0.20, critAdd: 0.12, rangeAdd: 0.4, color: PALETTE.rankGold,   stroke: PALETTE.rankGoldStroke }
+  ],
+
+  ZOMBIE_KILL_XP: {
+    walker: 1.0,
+    runner: 1.5,
+    brute: 4.0,
+    boss: 12.0,
+    bossGlobalBonus: 4.0
+  },
+
   ITEMS: {
     // ================= FLOORS (layer: 'floor') =================
     asphalt: {

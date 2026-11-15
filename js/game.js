@@ -5,6 +5,8 @@ ZS.Game = (function () {
   const DATA = ZS.DATA;
   const N = DATA.GRID_SIZE;
   let nextZombieUid = 1;
+  let nextStructUid = 1;
+  let pendingVeteranDemolish = null;
 
   const state = {
     wave: 1,
@@ -109,6 +111,7 @@ ZS.Game = (function () {
 
   function initNewGame() {
     createEmptyGrids();
+    pendingVeteranDemolish = null;
 
     state.wave = 1;
     state.hqLevel = 1;
@@ -166,6 +169,138 @@ ZS.Game = (function () {
 
   function recomputeFlow() {
     state.flow = ZS.Pathfinding.computeFlowField(N, DATA.HQ_POS, state.structGrid);
+  }
+
+  function isCombatVeterancyDef(def) {
+    if (!def || def.layer !== 'struct') return false;
+    return def.subType === 'manned' || def.subType === 'turret';
+  }
+
+  function getVeterancyRankInfo(rank) {
+    const list = DATA.VETERANCY_RANKS || [];
+    const r = Math.max(0, Math.min(3, rank || 0));
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].rank === r) return list[i];
+    }
+    return list[0] || { rank: 0, minXp: 0, name: '신병', dmgBonus: 0, rateBonus: 0, critAdd: 0, rangeAdd: 0, color: '#94A3B8', stroke: '#1B2430' };
+  }
+
+  function computeRankFromXp(xp) {
+    const list = DATA.VETERANCY_RANKS || [];
+    let best = 0;
+    for (let i = 0; i < list.length; i++) {
+      if ((xp || 0) >= list[i].minXp) best = list[i].rank;
+    }
+    return best;
+  }
+
+  function findStructureByUid(uid) {
+    if (!uid) return null;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const s = state.structGrid[y] && state.structGrid[y][x];
+        if (s && s.uid === uid && s.hp > 0) {
+          return { st: s, tx: x, ty: y };
+        }
+      }
+    }
+    return null;
+  }
+
+  function awardStructureXp(st, tx, ty, rawXp) {
+    if (!st || st.id === 'command_hq' || st.hp <= 0 || rawXp <= 0) return;
+    const def = DATA.ITEMS[st.id];
+    if (!isCombatVeterancyDef(def)) return;
+
+    const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
+    const gained = rawXp * cozyXpMult;
+    const prevRank = st.rank || computeRankFromXp(st.xp || 0);
+    st.xp = +((st.xp || 0) + gained).toFixed(3);
+    st.kills = (st.kills || 0) + 1;
+    const newRank = computeRankFromXp(st.xp);
+    st.rank = newRank;
+
+    if (newRank > prevRank) {
+      const rInfo = getVeterancyRankInfo(newRank);
+      st.promoAnimTimer = 0.8;
+      if (ZS.Audio.playPromote) ZS.Audio.playPromote();
+      else if (ZS.Audio.playUpgrade) ZS.Audio.playUpgrade();
+
+      state.projectiles.push({
+        kind: 'promo_ring',
+        x: tx + 0.5,
+        y: ty + 0.5,
+        z: 18,
+        color: rInfo.color,
+        life: 0.8,
+        maxLife: 0.8
+      });
+      addFloatingText(tx + 0.5, ty + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
+      banner(`🎖️ [${def.name}] ${rInfo.name} 진급!`, `전투 숙련도 Rank ${newRank} 달성 — 공격력 +${Math.round(rInfo.dmgBonus * 100)}% · 연사 +${Math.round(rInfo.rateBonus * 100)}%`, 'good');
+    }
+  }
+
+  function awardKillXpBySourceUid(sourceUid, zombieType, isBoss) {
+    const xpTable = DATA.ZOMBIE_KILL_XP || { walker: 1.0, runner: 1.5, brute: 4.0, boss: 12.0, bossGlobalBonus: 4.0 };
+    if (sourceUid) {
+      const found = findStructureByUid(sourceUid);
+      if (found) {
+        const raw = xpTable[zombieType] || 1.0;
+        awardStructureXp(found.st, found.tx, found.ty, raw);
+      }
+    }
+    // On Boss kill, all surviving manned/turret structures receive +4.0 bonus XP
+    if (isBoss) {
+      const bonus = xpTable.bossGlobalBonus || 4.0;
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const s = state.structGrid[y] && state.structGrid[y][x];
+          if (!s || s.id === 'command_hq' || s.hp <= 0) continue;
+          const d = DATA.ITEMS[s.id];
+          if (isCombatVeterancyDef(d)) {
+            const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
+            const prevRank = s.rank || computeRankFromXp(s.xp || 0);
+            s.xp = +((s.xp || 0) + bonus * cozyXpMult).toFixed(3);
+            const newRank = computeRankFromXp(s.xp);
+            s.rank = newRank;
+            if (newRank > prevRank) {
+              const rInfo = getVeterancyRankInfo(newRank);
+              s.promoAnimTimer = 0.8;
+              state.projectiles.push({
+                kind: 'promo_ring',
+                x: x + 0.5,
+                y: y + 0.5,
+                z: 18,
+                color: rInfo.color,
+                life: 0.8,
+                maxLife: 0.8
+              });
+              addFloatingText(x + 0.5, y + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function spawnBadgeShatterVfx(gx, gy, rank) {
+    if (!rank || rank < 1) return;
+    for (let i = 0; i < 3; i++) {
+      const a = -Math.PI * 0.5 + (i - 1) * 0.85;
+      const spd = 0.9 + Math.random() * 0.7;
+      state.particles.push({
+        x: gx,
+        y: gy,
+        z: 24,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        vz: 14 + Math.random() * 10,
+        color: '#8C96A3',
+        size: 2.8,
+        life: 0.40,
+        maxLife: 0.40
+      });
+    }
   }
 
   function isUpgradeableDef(def) {
@@ -434,11 +569,13 @@ ZS.Game = (function () {
 
     const lv = overrideLevel !== undefined ? overrideLevel : (st.level || 1);
     const prof = getStructLevelProfile(def, lv);
+    const rank = isCombatVeterancyDef(def) ? (st.rank || computeRankFromXp(st.xp || 0)) : 0;
+    const rankInfo = getVeterancyRankInfo(rank);
 
-    let dmgMult = 1.0;
-    let rateMult = 1.0 + state.cozyTier.fireRate;
+    let dmgMult = 1.0 + rankInfo.dmgBonus;
+    let rateMult = 1.0 + state.cozyTier.fireRate + rankInfo.rateBonus;
     let rangeMult = 1.0;
-    let critChance = 0.04 + prof.critAdd;
+    let critChance = 0.04 + prof.critAdd + rankInfo.critAdd;
 
     if (def.subType === 'manned') {
       dmgMult += state.cozyTier.agentDmg;
@@ -481,14 +618,16 @@ ZS.Game = (function () {
 
     const baseDmg = (def.damage || 0) * prof.dmgScale;
     const baseRate = (def.fireRate || 0) * prof.rateScale;
-    const baseRange = (def.range || 0) + prof.rangeAdd;
+    const baseRange = (def.range || 0) + prof.rangeAdd + rankInfo.rangeAdd;
 
     return {
       level: lv,
+      rank,
+      rankInfo,
       damage: baseDmg * dmgMult,
       fireRate: baseRate * rateMult,
       range: baseRange * rangeMult,
-      critChance: Math.min(0.75, critChance),
+      critChance: Math.min(0.85, critChance),
       powerIdle: prof.powerIdle,
       powerShot: prof.powerShot,
       pellets: prof.pellets,
@@ -823,8 +962,12 @@ ZS.Game = (function () {
       const maxHp = Math.round(def.maxHp * hpMult);
       const baseCost = usedVoucher ? {} : (def.cost || {});
       state.structGrid[ty][tx] = {
+        uid: nextStructUid++,
         id: itemId,
         level: 1,
+        xp: 0,
+        rank: 0,
+        kills: 0,
         usedVoucher,
         invested: {
           wood: baseCost.wood || 0,
@@ -835,7 +978,8 @@ ZS.Game = (function () {
         maxHp,
         cooldown: 0,
         aimAngle: 0,
-        upgradeAnimTimer: 0
+        upgradeAnimTimer: 0,
+        promoAnimTimer: 0
       };
     }
 
@@ -882,7 +1026,7 @@ ZS.Game = (function () {
     return true;
   }
 
-  function removeAt(tx, ty) {
+  function removeAt(tx, ty, forceConfirm) {
     if (state.phase !== 'day') return false;
     if (tx < 0 || ty < 0 || tx >= N || ty >= N) return false;
 
@@ -894,8 +1038,36 @@ ZS.Game = (function () {
         return false;
       }
       const def = DATA.ITEMS[st.id];
+      const rank = st.rank || computeRankFromXp(st.xp || 0);
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+      // Veteran/Ace Rank 1+ daytime demolish confirmation guard (art spec §4)
+      if (!forceConfirm && rank >= 1) {
+        const isConfirmedRepeat =
+          pendingVeteranDemolish &&
+          pendingVeteranDemolish.tx === tx &&
+          pendingVeteranDemolish.ty === ty &&
+          nowMs - pendingVeteranDemolish.atMs < 4000;
+
+        if (!isConfirmedRepeat) {
+          pendingVeteranDemolish = { tx, ty, atMs: nowMs };
+          const rInfo = getVeterancyRankInfo(rank);
+          ZS.Audio.playError();
+          banner(
+            `⚠️ [${rInfo.name}] ${def ? def.name : st.id} — 계급이 사라집니다`,
+            `철거하면 누적 숙련도(${Math.floor(st.xp || 0)} XP)와 계급 배지가 영구 소멸합니다. 4초 내 한 번 더 클릭하면 철거됩니다.`,
+            'warn'
+          );
+          return false;
+        }
+      }
+
+      pendingVeteranDemolish = null;
       const refundTotal = getCumulativeRefundCost(st, def);
       state.structGrid[ty][tx] = null;
+      if (rank >= 1) {
+        spawnBadgeShatterVfx(tx + 0.5, ty + 0.5, rank);
+      }
       refundCost(refundTotal, tx, ty);
       recalculateBaseStats();
       state.power = Math.min(state.power, Math.max(state.powerCap, state.power));
@@ -1212,6 +1384,9 @@ ZS.Game = (function () {
         if (s.id !== 'command_hq' && s.upgradeAnimTimer > 0) {
           s.upgradeAnimTimer = Math.max(0, s.upgradeAnimTimer - rawDt);
         }
+        if (s.promoAnimTimer > 0) {
+          s.promoAnimTimer = Math.max(0, s.promoAnimTimer - rawDt);
+        }
       }
     }
 
@@ -1407,6 +1582,7 @@ ZS.Game = (function () {
         ZS.Audio.playShoot('rifle');
         state.projectiles.push({
           kind: 'bullet',
+          sourceUid: b.sourceUid || null,
           x: b.cx,
           y: b.cy,
           z: 13,
@@ -1436,6 +1612,9 @@ ZS.Game = (function () {
   function fireWeapon(def, eff, cx, cy, targetIdx, st) {
     const target = state.zombies[targetIdx];
     if (!target) return;
+
+    if (st && !st.uid) st.uid = nextStructUid++;
+    const sourceUid = st && st.id !== 'command_hq' ? st.uid : null;
 
     const isCrit = Math.random() < eff.critChance;
     const finalDmg = eff.damage * (isCrit ? 1.65 : 1.0);
@@ -1486,7 +1665,7 @@ ZS.Game = (function () {
         if (zk) {
           zk.slowTimer = Math.max(zk.slowTimer, slowDur);
           const vuln = isZombieOnLv3RazorPad(zk) ? 1.15 : 1.0;
-          damageZombie(idx, finalDmg * vuln, DATA.PALETTE.power, isCrit);
+          damageZombie(idx, finalDmg * vuln, DATA.PALETTE.power, isCrit, sourceUid);
         }
       }
       return;
@@ -1500,6 +1679,7 @@ ZS.Game = (function () {
         const spd = 15;
         state.projectiles.push({
           kind: 'bullet',
+          sourceUid,
           x: cx,
           y: cy,
           z: 13,
@@ -1523,6 +1703,7 @@ ZS.Game = (function () {
     if (def.id === 'rifle_bunker' && eff.burstSecondMult > 0) {
       state.burstQueue.push({
         delay: 0.06,
+        sourceUid,
         cx,
         cy,
         angle,
@@ -1545,6 +1726,7 @@ ZS.Game = (function () {
 
     state.projectiles.push({
       kind: 'bullet',
+      sourceUid,
       x: cx,
       y: cy,
       startX: cx,
@@ -1573,7 +1755,7 @@ ZS.Game = (function () {
         state.projectiles.splice(i, 1);
         continue;
       }
-      if (p.kind === 'chain' || p.kind === 'ring' || p.kind === 'spark' || p.kind === 'sniper_trail') continue;
+      if (p.kind === 'chain' || p.kind === 'ring' || p.kind === 'spark' || p.kind === 'sniper_trail' || p.kind === 'promo_ring') continue;
 
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -1613,7 +1795,7 @@ ZS.Game = (function () {
             const dist = Math.hypot(zk.x - p.x, zk.y - p.y);
             if (dist <= p.splash) {
               const vuln = isZombieOnLv3RazorPad(zk) ? 1.15 : 1.0;
-              damageZombie(k, p.damage * vuln * (1 - dist / (p.splash * 1.5)), '#ff9f43', p.isCrit);
+              damageZombie(k, p.damage * vuln * (1 - dist / (p.splash * 1.5)), '#ff9f43', p.isCrit, p.sourceUid);
             }
           }
           state.projectiles.splice(i, 1);
@@ -1664,7 +1846,7 @@ ZS.Game = (function () {
             p.startY = p.y;
           }
 
-          damageZombie(hitIdx, p.damage * pierceMult * vuln, p.isCrit ? DATA.PALETTE.critText : '#ffffff', p.isCrit);
+          damageZombie(hitIdx, p.damage * pierceMult * vuln, p.isCrit ? DATA.PALETTE.critText : '#ffffff', p.isCrit, p.sourceUid);
 
           const rem = (p.pierceLeft || 1) - 1;
           p.pierceLeft = rem;
@@ -1676,7 +1858,7 @@ ZS.Game = (function () {
     }
   }
 
-  function damageZombie(index, amount, textColor, isCrit) {
+  function damageZombie(index, amount, textColor, isCrit, sourceUid) {
     const z = state.zombies[index];
     if (!z) return;
     const dmg = Math.max(1, Math.round(amount));
@@ -1703,10 +1885,13 @@ ZS.Game = (function () {
       state.coin += coinGain;
       state.waveKilledZombies += 1;
 
+      awardKillXpBySourceUid(sourceUid, z.type, !!def.isBoss);
+
       spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, 9);
       if (def.isBoss) {
         state.bossDefeated = true;
-        addFloatingText(z.x, z.y, 26, `🏆 알파 보스 격파! +${scrapGain}🔩 +${coinGain}🪙 (기념비 해금!)`, DATA.PALETTE.gold, 14);
+        addFloatingText(z.x, z.y, 24, `+${scrapGain}🔩 +${coinGain}🪙`, DATA.PALETTE.gold, 13);
+        banner('🏆 알파 보스 격파!', `+${scrapGain}🔩 +${coinGain}🪙 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
       } else if (Math.random() < 0.35 || z.type === 'brute') {
         addFloatingText(z.x, z.y, 16, `+${scrapGain}🔩`, '#cbd5e1', 10);
       }
@@ -1827,8 +2012,14 @@ ZS.Game = (function () {
           const bProf = bDef ? getStructLevelProfile(bDef, blockingTarget.level || 1) : null;
 
           if (blockingTarget.hp <= 0) {
+            const lostRank = blockingTarget.rank || computeRankFromXp(blockingTarget.xp || 0);
             state.structGrid[bty][btx] = null;
             spawnBurstParticles(btx + 0.5, bty + 0.5, 10, DATA.PALETTE.danger, 10);
+            if (lostRank >= 1) {
+              spawnBadgeShatterVfx(btx + 0.5, bty + 0.5, lostRank);
+              const rInfo = getVeterancyRankInfo(lostRank);
+              banner(`⚠️ [${rInfo.name}] ${bDef ? bDef.name : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
+            }
             structureDestroyed = true;
           }
 
@@ -2041,7 +2232,14 @@ ZS.Game = (function () {
           const s = state.structGrid[y] && state.structGrid[y][x];
           if (!s) continue;
           if (!s.level) s.level = s.id === 'command_hq' ? state.hqLevel : 1;
+          if (s.id !== 'command_hq') {
+            if (!s.uid) s.uid = nextStructUid++;
+            else if (s.uid >= nextStructUid) nextStructUid = s.uid + 1;
+            s.xp = s.xp || 0;
+            s.rank = computeRankFromXp(s.xp);
+          }
           s.upgradeAnimTimer = 0;
+          s.promoAnimTimer = 0;
         }
       }
 
@@ -2082,6 +2280,9 @@ ZS.Game = (function () {
     getStructLevelProfile,
     canUpgradeStructure,
     upgradeStructure,
+    isCombatVeterancyDef,
+    getVeterancyRankInfo,
+    computeRankFromXp,
     recalculateBaseStats,
     getStructureEffectiveStats,
     canPlaceItem,
