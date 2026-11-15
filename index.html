@@ -43,13 +43,15 @@
     <symbol id="oz-state-power-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>정전 · 전력 OFF</title><path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/><path d="M3.5 3.5l17 17"/></symbol>
     <symbol id="oz-state-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>경보</title><path d="M12 3.5l9 16H3z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></symbol>
     <symbol id="oz-state-voucher" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>보급권</title><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M9 6v12M13 10.5h4M13 13.5h4"/></symbol>
+    <symbol id="oz-ui-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>접기</title><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="oz-ui-chevron-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>펼치기</title><path d="M6 15l6-6 6 6"/></symbol>
   </svg>
 
   <canvas id="game-canvas"></canvas>
 
-  <!-- Top Tactical HUD -->
+  <!-- Top Tactical HUD (#10: 3 Core Combat Metrics [Wave · HQ HP · Power] + Compact Secondary Resources) -->
   <header id="top-hud">
-    <div class="hud-group hud-status">
+    <div class="hud-group hud-core">
       <div class="wave-badge">
         <span id="hud-phase-icon" class="icon-slot icon-coin">
           <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-phase-day"></use></svg>
@@ -59,6 +61,7 @@
           <div id="hud-phase-text" class="wave-sub">주간 정비 페이즈</div>
         </div>
       </div>
+
       <div class="hq-health-box" id="hud-hq-box" title="전술 지휘 본부 내구도 및 등급 (클릭하여 본부 조회)">
         <div class="hq-label">
           <span id="hud-hq-title" class="inline-icon-text">
@@ -68,38 +71,6 @@
           <span id="hud-hq-hp">800 / 800</span>
         </div>
         <div class="bar-track"><div id="hud-hq-bar" class="bar-fill hp-fill" style="width:100%"></div></div>
-      </div>
-    </div>
-
-    <div class="hud-group hud-resources">
-      <div class="res-pill" title="구조 목재: 방벽, 전술 막사, 전투원 초소, 모던 가구 제작">
-        <span class="res-icon icon-wood" aria-hidden="true">
-          <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-wood"></use></svg>
-        </span>
-        <div>
-          <div class="res-label">목재</div>
-          <div id="res-wood" class="res-val">150</div>
-        </div>
-      </div>
-
-      <div class="res-pill" title="합금 고철: 강화 장갑벽, 자동화 포탑, 발전·배터리 설비 제작">
-        <span class="res-icon icon-scrap" aria-hidden="true">
-          <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-scrap"></use></svg>
-        </span>
-        <div>
-          <div class="res-label">고철</div>
-          <div id="res-scrap" class="res-val">130</div>
-        </div>
-      </div>
-
-      <div class="res-pill coin-pill" id="btn-open-trader-pill" title="크레딧 코인: 외부 기지 보급 상인과 자재·특수 가구·요원 거래 (클릭하여 상인 열기)">
-        <span class="res-icon icon-coin" aria-hidden="true">
-          <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-coin"></use></svg>
-        </span>
-        <div>
-          <div class="res-label">코인</div>
-          <div id="res-coin" class="res-val">95</div>
-        </div>
       </div>
 
       <div class="res-pill power-pill" title="배터리 전력: 낮에 태양광·풍력 설비로 충전되며, 밤 동안 자동 포탑과 전기 조명이 실시간 소모합니다.">
@@ -115,24 +86,56 @@
           <div id="res-power-sub" class="res-micro">낮 충전 +42 · 대기 -0.0/s</div>
         </div>
       </div>
+    </div>
 
-      <div class="res-pill pop-pill" title="작전 요원(인구): 전기를 쓰지 않는 전투원 초소에 배치됩니다. 막사/숙소 빈자리에 매일 아침 합류하거나 상인에게서 스카우트 가능!">
+    <div id="hud-secondary" class="hud-group hud-resources">
+      <div class="res-pill res-secondary" title="구조 목재: 방벽, 전술 막사, 전투원 초소, 모던 가구 제작">
+        <span class="res-icon icon-wood" aria-hidden="true">
+          <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-wood"></use></svg>
+        </span>
+        <div class="res-meta">
+          <div class="res-label">목재</div>
+          <div id="res-wood" class="res-val">150</div>
+        </div>
+      </div>
+
+      <div class="res-pill res-secondary" title="합금 고철: 강화 장갑벽, 자동화 포탑, 발전·배터리 설비 제작">
+        <span class="res-icon icon-scrap" aria-hidden="true">
+          <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-scrap"></use></svg>
+        </span>
+        <div class="res-meta">
+          <div class="res-label">고철</div>
+          <div id="res-scrap" class="res-val">130</div>
+        </div>
+      </div>
+
+      <div class="res-pill res-secondary coin-pill" id="btn-open-trader-pill" title="크레딧 코인: 외부 기지 보급 상인과 자재·특수 가구·요원 거래 (클릭하여 상인 열기)">
+        <span class="res-icon icon-coin" aria-hidden="true">
+          <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-coin"></use></svg>
+        </span>
+        <div class="res-meta">
+          <div class="res-label">코인</div>
+          <div id="res-coin" class="res-val">95</div>
+        </div>
+      </div>
+
+      <div class="res-pill res-secondary pop-pill" title="작전 요원(인구): 전기를 쓰지 않는 전투원 초소에 배치됩니다. 막사/숙소 빈자리에 매일 아침 합류하거나 상인에게서 스카우트 가능!">
         <span class="res-icon" aria-hidden="true">
           <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#oz-res-agent"></use></svg>
         </span>
-        <div>
+        <div class="res-meta">
           <div class="res-label">요원 (배치/가용)</div>
           <div id="res-pop" class="res-val">0 / 2 <span class="pop-cap">(숙소 2)</span></div>
         </div>
       </div>
 
-      <div class="res-pill cozy-pill" id="cozy-pill">
+      <div class="res-pill res-secondary cozy-pill" id="cozy-pill">
         <span class="res-icon cozy-heart-icon icon-coin" id="res-cozy-icon" aria-hidden="true">
           <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path id="res-cozy-heart-path" d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" fill="#FFC94A" fill-opacity="0.28" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
-        <div>
+        <div class="res-meta">
           <div class="res-label">안락함·사기</div>
           <div class="cozy-val-row">
             <span id="res-cozy" class="res-val">Lv.1</span>
@@ -141,6 +144,10 @@
         </div>
         <div id="cozy-tooltip" class="cozy-popover"></div>
       </div>
+
+      <button id="btn-toggle-hud-res" class="sys-btn icon-only hud-compact-btn" title="보조 자원 표시 간소화/펼치기" aria-label="보조 자원 표시 전환">
+        <svg class="oz-icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-ui-chevron-up"></use></svg>
+      </button>
     </div>
 
     <div class="hud-group hud-sys">
@@ -252,6 +259,10 @@
           <svg class="oz-icon icon-danger" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-tool-remove"></use></svg>
           <span>철거·환급 (X)</span>
         </button>
+        <button id="btn-toggle-dock" class="tool-btn dock-toggle-btn" title="하단 건설 도크 접기/펼치기 (단축키 Tab)">
+          <svg class="oz-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-ui-chevron-down"></use></svg>
+          <span>도크 접기</span>
+        </button>
       </div>
     </div>
 
@@ -259,9 +270,18 @@
 
     <div id="detail-bar" class="dock-detail">
       <span id="detail-text">건설할 항목을 선택하거나 기지 시설을 클릭해 상세 능력치와 오라 시너지를 확인하세요. (우클릭 드래그 / WASD: 화면 이동, 휠: 확대·축소)</span>
-      <div id="detail-actions" class="detail-actions"></div>
+      <div class="detail-right">
+        <div id="detail-actions" class="detail-actions"></div>
+        <button id="btn-expand-dock" class="tool-btn dock-expand-btn" title="하단 건설 도크 펼치기 (단축키 Tab)">
+          <svg class="oz-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-ui-chevron-up"></use></svg>
+          <span>도크 펼치기</span>
+        </button>
+      </div>
     </div>
   </section>
+
+  <!-- Cursor-Adjacent Placement Feedback Tooltip (#10: >=12px outside world space) -->
+  <div id="cursor-tooltip" class="cursor-tooltip hidden" role="status" aria-live="polite"></div>
 
   <!-- Armored Trader Modal -->
   <div id="trader-modal" class="modal-backdrop hidden">
@@ -344,6 +364,7 @@
           <span><b>우클릭 드래그 또는 WASD</b>: 카메라 이동</span>
           <span><b>마우스 휠</b>: 줌 인/아웃</span>
           <span><b>U / M / X / ESC</b>: 강화 / 이동 / 철거 / 취소</span>
+          <span><b>Tab</b>: 하단 건설 도크 접기/펼치기</span>
           <span><b>흔들림 ON/OFF</b>: 상단 우측 버튼으로 화면 흔들림 설정 가능</span>
         </div>
       </div>

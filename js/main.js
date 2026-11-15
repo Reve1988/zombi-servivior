@@ -11,7 +11,11 @@ window.ZS = window.ZS || {};
     hoverTile: null,
     inspectedTile: null,
     movingSource: null,
-    activeSkill: null // null | 'airstrike'
+    activeSkill: null, // null | 'airstrike'
+    dockCollapsed: false,
+    hudResCompact: false,
+    lastPhase: null,
+    pointerClient: { x: 0, y: 0, inside: false }
   };
 
   const keys = {};
@@ -246,6 +250,80 @@ window.ZS = window.ZS || {};
     document.getElementById('tool-move').classList.toggle('active', mode === 'move');
     document.getElementById('tool-remove').classList.toggle('active', mode === 'remove');
     renderItemCards();
+    updateCursorTooltip();
+  }
+
+  function syncDockAndHudState() {
+    const dockEl = document.getElementById('build-dock');
+    if (dockEl) {
+      dockEl.classList.toggle('collapsed', !!uiState.dockCollapsed);
+    }
+    const topHudEl = document.getElementById('top-hud');
+    if (topHudEl) {
+      topHudEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
+    }
+    const hudResBtn = document.getElementById('btn-toggle-hud-res');
+    if (hudResBtn) {
+      hudResBtn.innerHTML = ozIcon(uiState.hudResCompact ? 'ui-chevron-down' : 'ui-chevron-up', 15);
+      hudResBtn.title = uiState.hudResCompact ? '보조 자원 라벨 펼치기' : '보조 자원 간소화';
+    }
+  }
+
+  function setDockCollapsed(flag) {
+    uiState.dockCollapsed = !!flag;
+    syncDockAndHudState();
+  }
+
+  function updateCursorTooltip() {
+    const tipEl = document.getElementById('cursor-tooltip');
+    if (!tipEl) return;
+    const st = ZS.Game.state;
+    if (!uiState.pointerClient.inside || !uiState.hoverTile || st.phase !== 'day') {
+      tipEl.classList.add('hidden');
+      return;
+    }
+
+    const { tx, ty } = uiState.hoverTile;
+    const N = ZS.DATA.GRID_SIZE;
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) {
+      tipEl.classList.add('hidden');
+      return;
+    }
+
+    let errReason = null;
+    if (uiState.mode === 'build' && uiState.selectedItemId && ZS.Game.canPlaceItem) {
+      const check = ZS.Game.canPlaceItem(uiState.selectedItemId, tx, ty);
+      if (check && !check.ok && check.reason) {
+        errReason = check.reason;
+      }
+    } else if (uiState.mode === 'move' && uiState.movingSource) {
+      if (tx <= 0 || ty <= 0 || tx >= N - 1 || ty >= N - 1) {
+        errReason = '외곽 진입 구역으로는 시설을 옮길 수 없습니다.';
+      } else if (
+        !(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) &&
+        st.structGrid[ty] &&
+        st.structGrid[ty][tx]
+      ) {
+        errReason = '이미 다른 시설이 설치된 타일입니다.';
+      }
+    }
+
+    if (!errReason) {
+      tipEl.classList.add('hidden');
+      return;
+    }
+
+    tipEl.innerHTML = `${ozIcon('state-alert', 14, 'icon-danger')}<span>${escapeHtml(errReason)}</span>`;
+    tipEl.classList.remove('hidden');
+
+    const vw = window.innerWidth || 1600;
+    const vh = window.innerHeight || 900;
+    const tipW = tipEl.offsetWidth || 240;
+    const tipH = tipEl.offsetHeight || 32;
+    const x = Math.max(12, Math.min(vw - tipW - 14, uiState.pointerClient.x + 16));
+    const y = Math.max(70, Math.min(vh - tipH - 14, uiState.pointerClient.y + 16));
+    tipEl.style.left = `${x}px`;
+    tipEl.style.top = `${y}px`;
   }
 
   function setDetailHtml(html, actionsHtml) {
@@ -407,11 +485,24 @@ window.ZS = window.ZS || {};
       }
     `;
 
+    // Auto-collapse build dock & compact secondary HUD at Night start; auto-expand at Dawn (#10)
+    if (st.phase !== uiState.lastPhase) {
+      if (st.phase === 'night') {
+        uiState.dockCollapsed = true;
+        uiState.hudResCompact = true;
+      } else if (st.phase === 'day') {
+        uiState.dockCollapsed = false;
+        uiState.hudResCompact = false;
+      }
+      uiState.lastPhase = st.phase;
+    }
+    syncDockAndHudState();
+
     // Toggle Day vs Night right-side action stacks
     const isDay = st.phase === 'day';
     document.getElementById('day-actions').classList.toggle('hidden', !isDay);
     document.getElementById('night-actions').classList.toggle('hidden', st.phase !== 'night');
-    document.getElementById('build-dock').style.opacity = isDay ? '1' : '0.75';
+    document.getElementById('build-dock').style.opacity = isDay ? '1' : uiState.dockCollapsed ? '0.94' : '0.88';
 
     if (isDay) {
       document.getElementById('cta-wave-sub').innerHTML =
@@ -453,6 +544,7 @@ window.ZS = window.ZS || {};
     if (!document.getElementById('trader-modal').classList.contains('hidden')) {
       renderTraderModal();
     }
+    updateCursorTooltip();
   }
 
   function showWaveBanner(title, sub, tone) {
@@ -755,12 +847,22 @@ window.ZS = window.ZS || {};
       }
 
       if (e.button === 0) {
+        if (uiState.dockCollapsed && uiState.mode === 'build') {
+          setDockCollapsed(false);
+        }
         const g = ZS.Iso.screenToGrid(e.clientX, e.clientY);
+        uiState.pointerClient = { x: e.clientX, y: e.clientY, inside: true };
         uiState.hoverTile = { tx: g.tx, ty: g.ty };
         isLeftPainting = true;
         lastPaintKey = `${g.tx},${g.ty}`;
         handlePrimaryTileAction(g.tx, g.ty, g.gx, g.gy, false);
+        updateCursorTooltip();
       }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      uiState.pointerClient.inside = false;
+      updateCursorTooltip();
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -773,8 +875,11 @@ window.ZS = window.ZS || {};
         return;
       }
 
+      const overCanvas = e.target === canvas;
+      uiState.pointerClient = { x: e.clientX, y: e.clientY, inside: overCanvas };
       const g = ZS.Iso.screenToGrid(e.clientX, e.clientY);
       uiState.hoverTile = { tx: g.tx, ty: g.ty };
+      updateCursorTooltip();
 
       if (isLeftPainting) {
         const key = `${g.tx},${g.ty}`;
@@ -813,7 +918,11 @@ window.ZS = window.ZS || {};
       } else if (e.code === 'KeyM') {
         setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
       } else if (e.code === 'KeyX') {
+        if (uiState.dockCollapsed) setDockCollapsed(false);
         setToolMode(uiState.mode === 'remove' ? 'inspect' : 'remove');
+      } else if (e.code === 'Tab') {
+        e.preventDefault();
+        setDockCollapsed(!uiState.dockCollapsed);
       } else if (e.code === 'Space' && document.activeElement === document.body) {
         ZS.Iso.resetCamera();
       }
@@ -827,6 +936,22 @@ window.ZS = window.ZS || {};
     document.getElementById('tool-inspect').addEventListener('click', () => setToolMode('inspect'));
     document.getElementById('tool-move').addEventListener('click', () => setToolMode('move'));
     document.getElementById('tool-remove').addEventListener('click', () => setToolMode('remove'));
+
+    const dockToggleBtn = document.getElementById('btn-toggle-dock');
+    if (dockToggleBtn) {
+      dockToggleBtn.addEventListener('click', () => setDockCollapsed(true));
+    }
+    const dockExpandBtn = document.getElementById('btn-expand-dock');
+    if (dockExpandBtn) {
+      dockExpandBtn.addEventListener('click', () => setDockCollapsed(false));
+    }
+    const hudResToggleBtn = document.getElementById('btn-toggle-hud-res');
+    if (hudResToggleBtn) {
+      hudResToggleBtn.addEventListener('click', () => {
+        uiState.hudResCompact = !uiState.hudResCompact;
+        syncDockAndHudState();
+      });
+    }
 
     document.getElementById('btn-start-wave').addEventListener('click', () => {
       setToolMode('inspect');
