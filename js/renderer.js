@@ -812,9 +812,9 @@ ZS.Renderer = (function () {
       case 'hesco_wall': return level >= 3 ? 21 : 17;
       case 'blast_wall': return level >= 3 ? 25 : 21;
       case 'razor_pad': return 6;
-      case 'rifle_bunker': return 22;
-      case 'shotgun_post': return 23;
-      case 'sniper_tower': return 36;
+      case 'rifle_bunker': return level >= 3 ? 35 : 33;
+      case 'shotgun_post': return 34;
+      case 'sniper_tower': return 47;
       case 'vulcan_turret': return level >= 2 ? 26 : 23;
       case 'missile_pod': return 23;
       case 'emp_coil': return 32;
@@ -1561,37 +1561,97 @@ ZS.Renderer = (function () {
     }
   }
 
+  function pushOrientedPart(parts, gx, gy, z, w, d, h, opts) {
+    parts.push({
+      x: gx - w * 0.5,
+      y: gy - d * 0.5,
+      z,
+      w,
+      d,
+      h,
+      opts,
+      sort: gx + gy + z * 0.004
+    });
+  }
+
+  function flushOrientedParts(ctx, parts) {
+    parts.sort((a, b) => a.sort - b.sort);
+    const Iso = ZS.Iso;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      Iso.drawVoxelBox(ctx, p.x, p.y, p.z, p.w, p.d, p.h, p.opts);
+    }
+  }
+
   function drawOperatorFigure(ctx, gx, gy, zBase, vestColor, helmetAccent, aimAngle, zScale, hasLaser, hasOrangeTip) {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
-    // Voxel torso + face + helmet cap (each single-material with unified top-left shading)
-    Iso.drawVoxelBox(ctx, gx - 0.11, gy - 0.11, zBase, 0.22, 0.22, 8, {
+    const ang = typeof aimAngle === 'number' ? aimAngle : 0;
+    const fx = Math.cos(ang);
+    const fy = Math.sin(ang);
+    const px = -fy;
+    const py = fx;
+
+    // 2.2-head miniature toy proportions (#7: height ~21.2z => >18px at default 0.78x zoom)
+    const parts = [];
+    // Backpack / radio pack behind torso
+    pushOrientedPart(parts, gx - fx * 0.11, gy - fy * 0.11, zBase + 1.4, 0.16, 0.16, 6.2, {
+      base: '#2b343d',
+      stroke: 'rgba(27, 36, 48, 0.42)'
+    });
+    // Compact tactical vest torso
+    pushOrientedPart(parts, gx, gy, zBase, 0.28, 0.28, 8.8, {
+      base: vestColor,
+      stroke: 'rgba(27, 36, 48, 0.42)'
+    });
+    // Forward aiming shoulder/arm block
+    pushOrientedPart(parts, gx + fx * 0.11 + px * 0.09, gy + fy * 0.11 + py * 0.09, zBase + 4.8, 0.13, 0.13, 3.6, {
       base: vestColor
     });
-    Iso.drawVoxelBox(ctx, gx - 0.08, gy - 0.08, zBase + 8, 0.16, 0.16, 3.4, {
-      base: '#debda0'
+    // Large 2.2-head toy face block
+    pushOrientedPart(parts, gx, gy, zBase + 8.8, 0.26, 0.26, 7.6, {
+      base: '#e4c3a5',
+      stroke: 'rgba(27, 36, 48, 0.36)'
     });
-    Iso.drawVoxelBox(ctx, gx - 0.095, gy - 0.095, zBase + 11.4, 0.19, 0.19, 2.8, {
-      base: helmetAccent
+    // Chunky tactical helmet dome + brim
+    pushOrientedPart(parts, gx - fx * 0.01, gy - fy * 0.01, zBase + 16.0, 0.31, 0.31, 5.2, {
+      base: helmetAccent,
+      stroke: 'rgba(27, 36, 48, 0.45)'
     });
-    const bLen = hasLaser ? 16 : 12;
-    drawTurretBarrel(ctx, gx, gy, zBase + 6, aimAngle, bLen, '#1f242b', zScale);
+    flushOrientedParts(ctx, parts);
+
+    // Crisp tactical visor / goggles facing aimAngle
+    const visorGx = gx + fx * 0.125;
+    const visorGy = gy + fy * 0.125;
+    const vL = Iso.gridToScreen(visorGx - px * 0.055, visorGy - py * 0.055, zBase + 12.8);
+    const vR = Iso.gridToScreen(visorGx + px * 0.055, visorGy + py * 0.055, zBase + 12.8);
+    ctx.strokeStyle = '#1B2430';
+    ctx.lineWidth = Math.max(1.8, 2.4 * zScale);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vL.x, vL.y);
+    ctx.lineTo(vR.x, vR.y);
+    ctx.stroke();
+
+    const barrelZ = zBase + 6.8;
+    const bLen = hasLaser ? 20 : 15;
+    drawTurretBarrel(ctx, gx + fx * 0.06, gy + fy * 0.06, barrelZ, ang, bLen, '#1f242b', zScale);
     if (hasOrangeTip) {
-      const tipGx = gx + Math.cos(aimAngle) * (bLen / 32);
-      const tipGy = gy + Math.sin(aimAngle) * (bLen / 32);
-      const tipP = Iso.gridToScreen(tipGx, tipGy, zBase + 6);
+      const tipGx = gx + fx * (0.06 + bLen / 32);
+      const tipGy = gy + fy * (0.06 + bLen / 32);
+      const tipP = Iso.gridToScreen(tipGx, tipGy, barrelZ);
       ctx.fillStyle = P.levelMax || '#FF9F43';
       ctx.beginPath();
-      ctx.arc(tipP.x, tipP.y, 1.8 * zScale, 0, Math.PI * 2);
+      ctx.arc(tipP.x, tipP.y, 2.1 * zScale, 0, Math.PI * 2);
       ctx.fill();
     }
     if (hasLaser) {
-      const p1 = Iso.gridToScreen(gx, gy, zBase + 6);
-      const tx = gx + Math.cos(aimAngle) * 1.4;
-      const ty = gy + Math.sin(aimAngle) * 1.4;
+      const p1 = Iso.gridToScreen(gx + fx * 0.25, gy + fy * 0.25, barrelZ);
+      const tx = gx + fx * 1.55;
+      const ty = gy + fy * 1.55;
       const p2 = Iso.gridToScreen(tx, ty, zBase + 4);
-      ctx.strokeStyle = 'rgba(255, 65, 65, 0.45)';
-      ctx.lineWidth = 1 * zScale;
+      ctx.strokeStyle = 'rgba(255, 65, 65, 0.50)';
+      ctx.lineWidth = 1.1 * zScale;
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
@@ -1605,51 +1665,95 @@ ZS.Renderer = (function () {
     const tipGx = gx + Math.cos(aimAngle) * (lenPx / 32);
     const tipGy = gy + Math.sin(aimAngle) * (lenPx / 32);
     const p2 = Iso.gridToScreen(tipGx, tipGy, zBase);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3.0 * zScale;
+    ctx.strokeStyle = '#11161d';
+    ctx.lineWidth = 4.2 * zScale;
     ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.8 * zScale;
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.stroke();
   }
 
-  function getZombieEyePositions(z, zDef, timeSec, zScale) {
-    const Iso = ZS.Iso;
+  function getZombiePoseMetrics(z, zDef, timeSec) {
     const sc = zDef.scale || 1.0;
-    const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
-    const headCenter = Iso.gridToScreen(z.x, z.y, 1 + bob + 13.6 * sc);
+    const type = z.type || 'walker';
+    const freq = type === 'runner' ? 12.5 : type === 'brute' ? 5.8 : zDef.isBoss ? 4.8 : 7.8;
+    const stride = Math.sin(timeSec * freq + (z.seed || 0));
+    const bobAmp = type === 'runner' ? 1.8 : type === 'brute' ? 1.6 : zDef.isBoss ? 2.2 : 2.2;
+    const bob = Math.abs(stride) * bobAmp;
 
     const ang = typeof z.facingAngle === 'number' ? z.facingAngle : Math.PI * 0.75;
     const fx = Math.cos(ang);
     const fy = Math.sin(ang);
+    const px = -fy;
+    const py = fx;
 
-    let sx = fx - fy;
-    let sy = (fx + fy) * 0.5;
-    const len = Math.hypot(sx, sy) || 1;
-    sx /= len;
-    sy = Math.max(-0.18, sy / len);
+    let headFwd = 0.05 * sc;
+    let headZ = 1 + bob + 13.0 * sc;
+    let headW = 0.31 * sc;
+    let headH = 10.6 * sc;
+    let topZ = 1 + bob + 26.8 * sc;
 
-    const fwdX = sx * 2.4 * sc * zScale;
-    const fwdY = sy * 1.9 * sc * zScale;
-    const sep = 2.3 * sc * zScale;
+    if (type === 'runner') {
+      // Hunched forward predator pose: head pitched far forward while keeping >=16px 2.2-head toy height at 0.78x zoom
+      headFwd = 0.25 * sc;
+      headZ = 1 + bob + 11.2 * sc;
+      headW = 0.32 * sc;
+      headH = 10.8 * sc;
+      topZ = 1 + bob + 25.4 * sc;
+    } else if (type === 'brute') {
+      // Broad armored juggernaut: thick head tucked into wide shoulder collar
+      headFwd = 0.06 * sc;
+      headZ = 1 + bob + 11.8 * sc;
+      headW = 0.28 * sc;
+      headH = 8.4 * sc;
+      topZ = 1 + bob + 23.2 * sc;
+    } else if (zDef.isBoss) {
+      // Towering horned mutant titan
+      headFwd = 0.05 * sc;
+      headZ = 1 + bob + 12.2 * sc;
+      headW = 0.28 * sc;
+      headH = 8.8 * sc;
+      topZ = 1 + bob + 28.5 * sc;
+    }
+
+    return { sc, type, stride, bob, ang, fx, fy, px, py, headFwd, headZ, headW, headH, topZ };
+  }
+
+  function getZombieEyePositions(z, zDef, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const m = getZombiePoseMetrics(z, zDef, timeSec);
+    const eyeWorldX = z.x + m.fx * (m.headFwd + m.headW * 0.44);
+    const eyeWorldY = z.y + m.fy * (m.headFwd + m.headW * 0.44);
+    const eyeWorldZ = m.headZ + m.headH * 0.46;
+
+    const sepWorld = m.headW * 0.24;
+    const cPos = Iso.gridToScreen(eyeWorldX, eyeWorldY, eyeWorldZ);
+    const lPos = Iso.gridToScreen(eyeWorldX - m.px * sepWorld, eyeWorldY - m.py * sepWorld, eyeWorldZ);
+    const rPos = Iso.gridToScreen(eyeWorldX + m.px * sepWorld, eyeWorldY + m.py * sepWorld, eyeWorldZ);
 
     return {
-      cx: headCenter.x + fwdX,
-      cy: headCenter.y + fwdY,
-      lx: headCenter.x + fwdX - sep,
-      ly: headCenter.y + fwdY,
-      rx: headCenter.x + fwdX + sep,
-      ry: headCenter.y + fwdY,
-      sc
+      cx: cPos.x,
+      cy: cPos.y,
+      lx: lPos.x,
+      ly: lPos.y,
+      rx: rPos.x,
+      ry: rPos.y,
+      sc: m.sc
     };
   }
 
   function drawZombieEyePinpoints(ctx, eyes, zDef, zScale, P) {
-    const eyeSz = Math.max(1.8, 2.0 * eyes.sc * zScale);
+    const eyeSz = Math.max(2.0, 2.3 * eyes.sc * zScale);
     ctx.fillStyle = P.outlineDark || '#1B2430';
-    ctx.fillRect(eyes.lx - eyeSz * 0.5 - 0.7, eyes.ly - eyeSz * 0.5 - 0.7, eyeSz + 1.4, eyeSz + 1.4);
-    ctx.fillRect(eyes.rx - eyeSz * 0.5 - 0.7, eyes.ry - eyeSz * 0.5 - 0.7, eyeSz + 1.4, eyeSz + 1.4);
+    ctx.fillRect(eyes.lx - eyeSz * 0.5 - 0.8, eyes.ly - eyeSz * 0.5 - 0.8, eyeSz + 1.6, eyeSz + 1.6);
+    ctx.fillRect(eyes.rx - eyeSz * 0.5 - 0.8, eyes.ry - eyeSz * 0.5 - 0.8, eyeSz + 1.6, eyeSz + 1.6);
 
     ctx.fillStyle = zDef.eyeColor || P.danger;
     ctx.fillRect(eyes.lx - eyeSz * 0.5, eyes.ly - eyeSz * 0.5, eyeSz, eyeSz);
@@ -1679,7 +1783,7 @@ ZS.Renderer = (function () {
 
       const hqLv = state.hqLevel || 1;
       const hqOccH = hqLv === 1 ? 18 : hqLv === 2 ? 26 : hqLv === 3 ? 36 : 46;
-      const structH = st.id === 'command_hq' ? hqOccH : st.id === 'sniper_tower' ? 30 : 22;
+      const structH = st.id === 'command_hq' ? hqOccH : st.id === 'sniper_tower' ? 38 : 26;
       const topPos = Iso.gridToScreen(sx + 0.5, sy + 0.5, structH);
       const botPos = Iso.gridToScreen(sx + 1, sy + 1, 0);
       const halfW = 26 * zScale;
@@ -1699,62 +1803,222 @@ ZS.Renderer = (function () {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
     const zDef = ZS.DATA.ZOMBIES[z.type] || ZS.DATA.ZOMBIES.walker;
-    const sc = zDef.scale || 1.0;
-    const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
+    const m = getZombiePoseMetrics(z, zDef, timeSec);
+    const { sc, type, stride, bob, fx, fy, px, py } = m;
 
     const basePos = Iso.gridToScreen(z.x, z.y, 1);
 
-    // Boss pulsing danger threat ring on ground
+    // Boss: dark abyssal ground shadow ring + pulsing danger threat ring (#7)
     if (zDef.isBoss) {
-      const pulse = 0.92 + 0.10 * Math.sin(timeSec * 5);
+      const pulse = 0.94 + 0.09 * Math.sin(timeSec * 5);
+      ctx.fillStyle = 'rgba(18, 6, 26, 0.52)';
+      ctx.strokeStyle = 'rgba(224, 64, 251, 0.45)';
+      ctx.lineWidth = 2.2 * zScale;
+      ctx.beginPath();
+      ctx.ellipse(basePos.x, basePos.y, 18.5 * sc * zScale * pulse, 9.5 * sc * zScale * pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.fillStyle = P.dangerFill;
       ctx.strokeStyle = P.danger;
-      ctx.lineWidth = 1.8 * zScale;
+      ctx.lineWidth = 1.9 * zScale;
       ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, 14 * sc * zScale * pulse, 7.2 * sc * zScale * pulse, 0, 0, Math.PI * 2);
+      ctx.ellipse(basePos.x, basePos.y, 14.5 * sc * zScale * pulse, 7.4 * sc * zScale * pulse, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
 
     // Crisp ground contact shadow for strong luminance separation against grass
-    ctx.fillStyle = 'rgba(8, 10, 16, 0.48)';
+    const shadowRx = (type === 'brute' ? 11.4 : type === 'runner' ? 10.2 : 9.6) * sc * zScale;
+    const shadowRy = (type === 'brute' ? 5.8 : 5.0) * sc * zScale;
+    ctx.fillStyle = 'rgba(8, 10, 16, 0.52)';
     ctx.beginPath();
-    ctx.ellipse(basePos.x, basePos.y, 8.8 * sc * zScale, 4.6 * sc * zScale, 0, 0, Math.PI * 2);
+    ctx.ellipse(basePos.x, basePos.y, shadowRx, shadowRy, 0, 0, Math.PI * 2);
     ctx.fill();
 
     Iso.setEntityFlash(z.hitFlash || 0);
 
-    const w = 0.25 * sc;
-    // Legs + Torso (complementary coat per issue-03-palette-tokens.md §4)
-    Iso.drawVoxelBox(ctx, z.x - w * 0.5, z.y - w * 0.5, 1 + bob, w, w, 10 * sc, {
-      base: zDef.coatColor
-    });
+    const parts = [];
+    const darkStroke = 'rgba(27, 36, 48, 0.42)';
+    const legStep = stride * 0.055 * sc;
 
-    // Runner harness (#FF9466) / Brute armor (#C97A9E) / Boss glowing fissure (#E040FB)
-    if (z.type === 'runner' && zDef.accentColor) {
-      const rw = 0.27 * sc;
-      Iso.drawVoxelBox(ctx, z.x - rw * 0.5, z.y - rw * 0.5, 1 + bob + 6.2 * sc, rw, rw, 2.8 * sc, {
-        base: zDef.accentColor
+    if (type === 'runner') {
+      // RUNNER: Low hunched forward-leaning sprint pose + swept-back limbs + jutting head
+      const legW = 0.12 * sc;
+      pushOrientedPart(parts, z.x - fx * (0.10 * sc - legStep) - px * 0.09 * sc, z.y - fy * (0.10 * sc - legStep) - py * 0.09 * sc, 1, legW, legW, 4.8 * sc, {
+        base: '#4a1220'
       });
-    } else if (z.type === 'brute' && zDef.armorColor) {
-      const aw = 0.30 * sc;
-      Iso.drawVoxelBox(ctx, z.x - aw * 0.5, z.y - aw * 0.5, 1 + bob + 4.5 * sc, aw, aw, 4.8 * sc, {
-        base: zDef.armorColor
+      pushOrientedPart(parts, z.x - fx * (0.10 * sc + legStep) + px * 0.09 * sc, z.y - fy * (0.10 * sc + legStep) + py * 0.09 * sc, 1, legW, legW, 4.8 * sc, {
+        base: '#4a1220'
       });
-    } else if (zDef.isBoss && zDef.accentColor) {
-      const bw = 0.29 * sc;
-      Iso.drawVoxelBox(ctx, z.x - bw * 0.5, z.y - bw * 0.5, 1 + bob + 4.8 * sc, bw, bw, 3.8 * sc, {
-        base: zDef.accentColor,
+      // Rear hunched pelvis/back
+      pushOrientedPart(parts, z.x - fx * 0.09 * sc, z.y - fy * 0.09 * sc, 1 + bob + 4.4 * sc, 0.28 * sc, 0.28 * sc, 6.8 * sc, {
+        base: zDef.coatColor,
+        stroke: darkStroke
+      });
+      // Forward-pitched chest + orange harness
+      pushOrientedPart(parts, z.x + fx * 0.10 * sc, z.y + fy * 0.10 * sc, 1 + bob + 6.4 * sc, 0.30 * sc, 0.30 * sc, 6.8 * sc, {
+        base: zDef.coatColor,
+        stroke: darkStroke
+      });
+      if (zDef.accentColor) {
+        pushOrientedPart(parts, z.x + fx * 0.09 * sc, z.y + fy * 0.09 * sc, 1 + bob + 8.4 * sc, 0.32 * sc, 0.32 * sc, 3.0 * sc, {
+          base: zDef.accentColor
+        });
+      }
+      // Swept-back predator sprint arms
+      const armW = 0.11 * sc;
+      pushOrientedPart(parts, z.x - fx * 0.16 * sc - px * 0.18 * sc, z.y - fy * 0.16 * sc - py * 0.18 * sc, 1 + bob + 5.8 * sc, armW, armW, 4.8 * sc, {
+        base: zDef.skinColor
+      });
+      pushOrientedPart(parts, z.x - fx * 0.16 * sc + px * 0.18 * sc, z.y - fy * 0.16 * sc + py * 0.18 * sc, 1 + bob + 5.8 * sc, armW, armW, 4.8 * sc, {
+        base: zDef.skinColor
+      });
+      // Forward-jutting large toy head
+      pushOrientedPart(parts, z.x + fx * m.headFwd, z.y + fy * m.headFwd, m.headZ, m.headW, m.headW, m.headH, {
+        base: zDef.skinColor,
+        stroke: darkStroke
+      });
+    } else if (type === 'brute') {
+      // BRUTE: Extra-wide T-silhouette shoulders + heavy front ballistic riot plate
+      const legW = 0.13 * sc;
+      pushOrientedPart(parts, z.x + fx * legStep - px * 0.10 * sc, z.y + fy * legStep - py * 0.10 * sc, 1, legW, legW, 4.5 * sc, {
+        base: '#240b19'
+      });
+      pushOrientedPart(parts, z.x - fx * legStep + px * 0.10 * sc, z.y - fy * legStep + py * 0.10 * sc, 1, legW, legW, 4.5 * sc, {
+        base: '#240b19'
+      });
+      // Massive core torso
+      pushOrientedPart(parts, z.x, z.y, 1 + bob + 3.6 * sc, 0.34 * sc, 0.34 * sc, 8.4 * sc, {
+        base: zDef.coatColor,
+        stroke: darkStroke
+      });
+      // Front thick ballistic armor shield plate (#C97A9E)
+      const armorCol = zDef.armorColor || '#C97A9E';
+      pushOrientedPart(parts, z.x + fx * 0.15 * sc, z.y + fy * 0.15 * sc, 1 + bob + 4.2 * sc, 0.24 * sc, 0.24 * sc, 7.4 * sc, {
+        base: armorCol,
+        stroke: darkStroke
+      });
+      // Oversized left & right shoulder pauldrons + heavy fists (unmistakable wide silhouette)
+      for (const side of [-1, 1]) {
+        pushOrientedPart(parts, z.x + px * side * 0.22 * sc, z.y + py * side * 0.22 * sc, 1 + bob + 7.2 * sc, 0.18 * sc, 0.18 * sc, 5.4 * sc, {
+          base: armorCol,
+          stroke: darkStroke
+        });
+        pushOrientedPart(parts, z.x + fx * 0.07 * sc + px * side * 0.23 * sc, z.y + fy * 0.07 * sc + py * side * 0.23 * sc, 1 + bob + 2.8 * sc, 0.14 * sc, 0.14 * sc, 4.8 * sc, {
+          base: zDef.skinColor,
+          stroke: darkStroke
+        });
+      }
+      // Heavy armored head tucked between pauldrons
+      pushOrientedPart(parts, z.x + fx * m.headFwd, z.y + fy * m.headFwd, m.headZ, m.headW, m.headW, m.headH, {
+        base: zDef.skinColor,
+        stroke: darkStroke
+      });
+      // Riot helmet brow strip
+      pushOrientedPart(parts, z.x + fx * (m.headFwd + 0.01 * sc), z.y + fy * (m.headFwd + 0.01 * sc), m.headZ + m.headH * 0.68, m.headW * 1.06, m.headW * 1.06, 2.2 * sc, {
+        base: armorCol,
+        stroke: darkStroke
+      });
+    } else if (zDef.isBoss) {
+      // BOSS (Alpha Titan): Towering mutant + glowing fissures + spiked shoulders + twin curved horns
+      const legW = 0.13 * sc;
+      pushOrientedPart(parts, z.x + fx * legStep - px * 0.10 * sc, z.y + fy * legStep - py * 0.10 * sc, 1, legW, legW, 4.8 * sc, {
+        base: '#330936'
+      });
+      pushOrientedPart(parts, z.x - fx * legStep + px * 0.10 * sc, z.y - fy * legStep + py * 0.10 * sc, 1, legW, legW, 4.8 * sc, {
+        base: '#330936'
+      });
+      // Mutant torso
+      pushOrientedPart(parts, z.x, z.y, 1 + bob + 3.8 * sc, 0.33 * sc, 0.33 * sc, 8.6 * sc, {
+        base: zDef.coatColor,
+        stroke: darkStroke
+      });
+      // Glowing magenta/violet fissure core + dorsal crystal裂 (emissive)
+      const crackCol = zDef.accentColor || '#E040FB';
+      pushOrientedPart(parts, z.x + fx * 0.09 * sc, z.y + fy * 0.09 * sc, 1 + bob + 5.4 * sc, 0.26 * sc, 0.26 * sc, 4.4 * sc, {
+        base: crackCol,
         emissive: true
+      });
+      pushOrientedPart(parts, z.x - fx * 0.12 * sc, z.y - fy * 0.12 * sc, 1 + bob + 7.6 * sc, 0.14 * sc, 0.14 * sc, 5.2 * sc, {
+        base: crackCol,
+        emissive: true
+      });
+      // Broad clawed arms + shoulder spikes
+      for (const side of [-1, 1]) {
+        pushOrientedPart(parts, z.x + px * side * 0.21 * sc, z.y + py * side * 0.21 * sc, 1 + bob + 8.0 * sc, 0.16 * sc, 0.16 * sc, 5.0 * sc, {
+          base: zDef.coatColor,
+          stroke: darkStroke
+        });
+        pushOrientedPart(parts, z.x + fx * 0.14 * sc + px * side * 0.21 * sc, z.y + fy * 0.14 * sc + py * side * 0.21 * sc, 1 + bob + 4.2 * sc, 0.14 * sc, 0.14 * sc, 5.0 * sc, {
+          base: zDef.skinColor,
+          stroke: darkStroke
+        });
+      }
+      // Large mutant skull
+      pushOrientedPart(parts, z.x + fx * m.headFwd, z.y + fy * m.headFwd, m.headZ, m.headW, m.headW, m.headH, {
+        base: zDef.skinColor,
+        stroke: darkStroke
+      });
+      // Twin 2-stage curved horns crowning silhouette
+      for (const side of [-1, 1]) {
+        pushOrientedPart(parts, z.x + fx * 0.04 * sc + px * side * 0.16 * sc, z.y + fy * 0.04 * sc + py * side * 0.16 * sc, m.headZ + m.headH * 0.72, 0.10 * sc, 0.10 * sc, 3.8 * sc, {
+          base: '#2b0938',
+          stroke: darkStroke
+        });
+        pushOrientedPart(parts, z.x + fx * 0.10 * sc + px * side * 0.21 * sc, z.y + fy * 0.10 * sc + py * side * 0.21 * sc, m.headZ + m.headH * 0.72 + 3.0 * sc, 0.085 * sc, 0.085 * sc, 4.4 * sc, {
+          base: crackCol,
+          emissive: true
+        });
+      }
+    } else {
+      // WALKER: Upright 2.2-head shambler with two iconic outstretched zombie arms in front
+      const legW = 0.11 * sc;
+      pushOrientedPart(parts, z.x + fx * legStep - px * 0.075 * sc, z.y + fy * legStep - py * 0.075 * sc, 1, legW, legW, 4.4 * sc, {
+        base: '#431226'
+      });
+      pushOrientedPart(parts, z.x - fx * legStep + px * 0.075 * sc, z.y - fy * legStep + py * 0.075 * sc, 1, legW, legW, 4.4 * sc, {
+        base: '#431226'
+      });
+      // Coat torso
+      pushOrientedPart(parts, z.x, z.y, 1 + bob + 4.2 * sc, 0.29 * sc, 0.29 * sc, 9.0 * sc, {
+        base: zDef.coatColor,
+        stroke: darkStroke
+      });
+      // Outstretched zombie arms reaching forward (signature Walker silhouette)
+      for (const side of [-1, 1]) {
+        // Upper arm sleeve
+        pushOrientedPart(parts, z.x + fx * 0.16 * sc + px * side * 0.16 * sc, z.y + fy * 0.16 * sc + py * side * 0.16 * sc, 1 + bob + 8.6 * sc, 0.115 * sc, 0.115 * sc, 3.4 * sc, {
+          base: zDef.coatColor
+        });
+        // Forearm + reaching hand
+        pushOrientedPart(parts, z.x + fx * 0.30 * sc + px * side * 0.16 * sc, z.y + fy * 0.30 * sc + py * side * 0.16 * sc, 1 + bob + 8.8 * sc, 0.115 * sc, 0.115 * sc, 3.2 * sc, {
+          base: zDef.skinColor,
+          stroke: darkStroke
+        });
+      }
+      // Large 2.2-head infected head
+      pushOrientedPart(parts, z.x + fx * m.headFwd, z.y + fy * m.headFwd, m.headZ, m.headW, m.headW, m.headH, {
+        base: zDef.skinColor,
+        stroke: darkStroke
       });
     }
 
-    // Infected Voxel Head (pale rose/bone/mauve/lavender per issue-03-palette-tokens.md §4)
-    const hw = 0.20 * sc;
-    Iso.drawVoxelBox(ctx, z.x - hw * 0.5, z.y - hw * 0.5, 1 + bob + 10 * sc, hw, hw, 6.8 * sc, {
-      base: zDef.skinColor,
-      stroke: 'rgba(27, 36, 48, 0.38)'
-    });
+    flushOrientedParts(ctx, parts);
+
+    // Boss glowing chest crack lines on screen space for unmistakable mutant fissure detail
+    if (zDef.isBoss && !(z.hitFlash > 0)) {
+      const c1 = Iso.gridToScreen(z.x + fx * 0.18 * sc - px * 0.06 * sc, z.y + fy * 0.18 * sc - py * 0.06 * sc, 1 + bob + 9.8 * sc);
+      const c2 = Iso.gridToScreen(z.x + fx * 0.20 * sc + px * 0.02 * sc, z.y + fy * 0.20 * sc + py * 0.02 * sc, 1 + bob + 7.2 * sc);
+      const c3 = Iso.gridToScreen(z.x + fx * 0.18 * sc - px * 0.04 * sc, z.y + fy * 0.18 * sc - py * 0.04 * sc, 1 + bob + 4.8 * sc);
+      ctx.strokeStyle = '#FF94FF';
+      ctx.lineWidth = Math.max(1.2, 1.6 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(c1.x, c1.y);
+      ctx.lineTo(c2.x, c2.y);
+      ctx.lineTo(c3.x, c3.y);
+      ctx.stroke();
+    }
 
     Iso.setEntityFlash(0);
 
@@ -1767,7 +2031,7 @@ ZS.Renderer = (function () {
       ctx.strokeStyle = P.power;
       ctx.lineWidth = 1.4 * zScale;
       ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, 9.2 * sc * zScale, 5 * sc * zScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(basePos.x, basePos.y, 10.2 * sc * zScale, 5.4 * sc * zScale, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -1777,7 +2041,7 @@ ZS.Renderer = (function () {
       ctx.strokeStyle = P.danger;
       ctx.lineWidth = 1.4 * zScale;
       ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, 10.6 * sc * zScale, 5.6 * sc * zScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(basePos.x, basePos.y, 11.6 * sc * zScale, 6.0 * sc * zScale, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
@@ -2156,11 +2420,10 @@ ZS.Renderer = (function () {
         }
 
         if (z.hp < z.maxHp || zDef.isBoss) {
-          const sc = zDef.scale || 1.0;
-          const bob = Math.abs(Math.sin(timeSec * 8 + z.seed)) * 2.4;
-          const hpTop = Iso.gridToScreen(z.x, z.y, 20 * sc + bob);
-          const bw = (zDef.isBoss ? 40 : 20) * zScale;
-          const bh = (zDef.isBoss ? 5 : 3.2) * zScale;
+          const m = getZombiePoseMetrics(z, zDef, timeSec);
+          const hpTop = Iso.gridToScreen(z.x, z.y, m.topZ);
+          const bw = (zDef.isBoss ? 42 : 22) * zScale;
+          const bh = (zDef.isBoss ? 5.2 : 3.4) * zScale;
           ctx.fillStyle = P.outlineDark || '#1B2430';
           ctx.fillRect(hpTop.x - bw * 0.5 - 1.2, hpTop.y - 1.2, bw + 2.4, bh + 2.4);
           ctx.fillStyle = P.danger;
