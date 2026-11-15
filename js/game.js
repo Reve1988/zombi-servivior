@@ -986,7 +986,7 @@ ZS.Game = (function () {
       if (!provider || provider.id === 'command_hq') return;
       const oDef = DATA.ITEMS[provider.id];
       if (!oDef || !oDef.aura) return;
-      if (oDef.requiresPower && !powered) return;
+      if (oDef.requiresPower && (!powered || (provider.empStunTimer || 0) > 0)) return;
 
       const auraRadius = oDef.aura.radius + (providerMounted && oDef.id === 'led_floodlight' ? 0.4 : 0);
       if (dist <= auraRadius + 0.05) {
@@ -1917,30 +1917,71 @@ ZS.Game = (function () {
     return out;
   }
 
+  function computeWaveHpScale(waveNum) {
+    const w = Math.max(1, waveNum || 1);
+    if (w <= 10) {
+      return 1 + (w - 1) * 0.16;
+    }
+    if (w <= 20) {
+      const d = w - 10;
+      return 2.44 + d * 0.24 + d * d * 0.008;
+    }
+    const d = w - 20;
+    return 5.64 + d * 0.38 + d * d * 0.015;
+  }
+
+  function computeBossHpScale(waveNum) {
+    const tier = Math.max(1, Math.floor((waveNum || 5) / 5));
+    const quad = Math.max(0, tier - 2);
+    return 1 + (tier - 1) * 0.65 + quad * quad * 0.28;
+  }
+
   function buildWaveQueue(waveNum, sideWeights, bossSide) {
     const q = [];
-    const hpScale = 1 + (waveNum - 1) * 0.16;
-    const countBase = 9 + waveNum * 4;
+    const hpScale = computeWaveHpScale(waveNum);
+    const countBase = Math.round(9 + waveNum * 3.8 + Math.max(0, waveNum - 12) * 1.4);
     const sidePool = allocateSidesByWeights(countBase, sideWeights);
+
+    const wSpitter = waveNum >= 4 ? Math.min(0.14, 0.05 + (waveNum - 4) * 0.012) : 0;
+    const wLeaper = waveNum >= 6 ? Math.min(0.15, 0.06 + (waveNum - 6) * 0.012) : 0;
+    const wShocker = waveNum >= 8 ? Math.min(0.12, 0.05 + (waveNum - 8) * 0.010) : 0;
+    const wBrute = waveNum >= 3 ? Math.min(0.22, (waveNum - 2) * 0.035) : 0;
+    const wRunner = waveNum >= 2 ? Math.min(0.25, 0.16 + waveNum * 0.012) : 0;
 
     for (let i = 0; i < countBase; i++) {
       const r = Math.random();
       const side = sidePool[i] != null ? sidePool[i] : Math.floor(Math.random() * 4);
-      if (waveNum >= 3 && r < Math.min(0.26, (waveNum - 2) * 0.055)) {
-        q.push({ type: 'brute', hpScale, side });
-      } else if (waveNum >= 2 && r < Math.min(0.55, 0.22 + waveNum * 0.04)) {
-        q.push({ type: 'runner', hpScale, side });
-      } else {
-        q.push({ type: 'walker', hpScale, side });
+      let type = 'walker';
+      if (r < wSpitter) {
+        type = 'spitter';
+      } else if (r < wSpitter + wLeaper) {
+        type = 'leaper';
+      } else if (r < wSpitter + wLeaper + wShocker) {
+        type = 'shocker';
+      } else if (r < wSpitter + wLeaper + wShocker + wBrute) {
+        type = 'brute';
+      } else if (r < wSpitter + wLeaper + wShocker + wBrute + wRunner) {
+        type = 'runner';
       }
+      q.push({ type, hpScale, side });
     }
 
     if (waveNum % 5 === 0) {
-      q.push({
-        type: 'boss',
-        hpScale: 1 + (waveNum / 5 - 1) * 0.45,
-        side: typeof bossSide === 'number' ? bossSide : Math.floor(Math.random() * 4)
-      });
+      const bSide = typeof bossSide === 'number' ? bossSide : Math.floor(Math.random() * 4);
+      const bScale = computeBossHpScale(waveNum);
+      if (waveNum === 20) {
+        const escortScale = +(hpScale * 1.6).toFixed(3);
+        q.push({ type: 'brute', hpScale: escortScale, side: bSide });
+        q.push({ type: 'brute', hpScale: escortScale, side: bSide });
+      }
+      const bossCount = waveNum >= 30 ? 2 : 1;
+      for (let b = 0; b < bossCount; b++) {
+        q.push({
+          type: 'boss',
+          hpScale: bScale,
+          side: bSide
+        });
+      }
     }
 
     return q;
@@ -2037,6 +2078,13 @@ ZS.Game = (function () {
       hitFlash: 0,
       hitFlashTimer: 0,
       vulnOnPad: false,
+      acidRange: def.attackRange || 0,
+      hasLeaped: false,
+      leapState: null,
+      frenzyTimer: 0,
+      warCryCd: def.isBoss ? 3.5 : 0,
+      chargeCd: def.isBoss ? 4.0 : 0,
+      chargeState: null,
       facingAngle: Math.atan2(hqCy - gy, hqCx - gx),
       seed: Math.random() * 10
     });
@@ -2217,7 +2265,17 @@ ZS.Game = (function () {
       }
     }
 
-    // 2. Field Repair Bay real-time aura regeneration
+    // 2. Field Repair Bay real-time aura regeneration + EMP stun countdown
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const st = state.structGrid[y][x];
+        if (!st) continue;
+        if (st.empStunTimer > 0) st.empStunTimer = Math.max(0, st.empStunTimer - dt);
+        if (st.mounted && st.mounted.empStunTimer > 0) {
+          st.mounted.empStunTimer = Math.max(0, st.mounted.empStunTimer - dt);
+        }
+      }
+    }
     updateRepairBays(dt);
 
     // 3. Spawn Zombies
@@ -2347,14 +2405,23 @@ ZS.Game = (function () {
 
       if (st.cooldown > 0) st.cooldown -= dt;
 
-      // Power check for automated turrets
-      if (def.requiresPower && state.power <= 0.01) return;
+      // Power & EMP stun check for automated electric facilities
+      if (def.requiresPower && (state.power <= 0.01 || (st.empStunTimer || 0) > 0)) return;
       if (st.cooldown > 0) return;
       if (state.zombies.length === 0) return;
 
       const eff = getStructureEffectiveStats(st, x, y, undefined, isMounted);
       const cx = x + 0.5;
       const cy = y + 0.5;
+      const SNIPER_PRIORITY = {
+        boss: 6,
+        spitter: 5,
+        shocker: 4,
+        brute: 3,
+        leaper: 2,
+        runner: 1,
+        walker: 0
+      };
 
       // Acquire target
       let bestIdx = -1;
@@ -2364,9 +2431,11 @@ ZS.Game = (function () {
         const d = Math.hypot(z.x - cx, z.y - cy);
         if (d > eff.range) continue;
 
-        // Prioritize highest HP for sniper, otherwise closest to HQ / turret
+        // Priority table for sniper (boss > spitter > shocker > brute > leaper > runner > walker), else closest to HQ / turret
         const hqDist = Math.hypot(z.x - (DATA.HQ_POS.x + 0.5), z.y - (DATA.HQ_POS.y + 0.5));
-        const score = def.targetMode === 'strongest' ? z.hp * 10 - hqDist : -hqDist * 2 - d;
+        const score = def.targetMode === 'strongest'
+          ? (SNIPER_PRIORITY[z.type] || 0) * 100000 + z.hp * 10 - hqDist
+          : -hqDist * 2 - d;
         if (score > bestScore) {
           bestScore = score;
           bestIdx = i;
@@ -2613,29 +2682,186 @@ ZS.Game = (function () {
     });
   }
 
+  function resolveAcidGlobHit(p) {
+    if (state.groundDecals.length >= 45) {
+      state.groundDecals.shift();
+    }
+    state.groundDecals.push({
+      kind: 'acid_puddle',
+      x: p.targetX,
+      y: p.targetY,
+      radius: 0.32,
+      color: DATA.PALETTE.mutantAcid || '#C8F542',
+      subColor: DATA.PALETTE.mutantAcidDim || '#6E8A1E',
+      seed: Math.random() * 10,
+      life: 2.5,
+      maxLife: 2.5
+    });
+    spawnBurstParticles(p.targetX, p.targetY, 10, DATA.PALETTE.mutantAcid || '#C8F542', 8);
+
+    const st = state.structGrid[p.targetTy] && state.structGrid[p.targetTy][p.targetTx];
+    if (!st) return;
+
+    const dmg = Math.max(1, Math.round(p.damage || 13));
+    st.hp -= dmg;
+    st.hitFlashTimer = 0.05;
+    st.hitFlash = 1.0;
+
+    let topologyChanged = false;
+    if (st.id === 'command_hq') {
+      triggerScreenShake(3.5, 0.2);
+      addFloatingText(p.targetX, p.targetY, 28, `-${dmg}`, DATA.PALETTE.danger, 12, DATA.PALETTE.outlineDark);
+      notifyUi();
+      if (st.hp <= 0) {
+        st.hp = 0;
+        spawnStructureDebris(p.targetX, p.targetY, 'command_hq', 18);
+        triggerScreenShake(8.0, 0.45);
+        triggerGameOver();
+      }
+      return;
+    }
+
+    const wallDef = DATA.ITEMS[st.id];
+    const wallProf = wallDef ? getStructLevelProfile(wallDef, st.level || 1) : null;
+    const baseZ = (wallProf && wallProf.mountBaseZ) || ((st.level || 1) >= 3 ? 25.4 : (st.level || 1) === 2 ? 15.2 : 10);
+    addFloatingText(p.targetTx + 0.5, p.targetTy + 0.5, Math.min(20, baseZ), `-${dmg}`, DATA.PALETTE.danger, 12, DATA.PALETTE.outlineDark);
+
+    // 50% splash acid damage onto wall-mounted unit
+    if (st.mounted) {
+      const m = st.mounted;
+      const mDmg = Math.max(1, Math.round(dmg * 0.5));
+      m.hp -= mDmg;
+      m.hitFlashTimer = 0.05;
+      m.hitFlash = 1.0;
+      state.projectiles.push({
+        kind: 'acid_mount_ring',
+        x: p.targetTx + 0.5,
+        y: p.targetTy + 0.5,
+        z: baseZ + 6,
+        radius: 0.18,
+        color: DATA.PALETTE.mutantAcid || '#C8F542',
+        life: 0.30,
+        maxLife: 0.30
+      });
+      addFloatingText(p.targetTx + 0.5, p.targetTy + 0.5, baseZ + 14, `-${mDmg}`, DATA.PALETTE.danger, 12, DATA.PALETTE.outlineDark);
+      if (m.hp <= 0) {
+        const mRank = m.rank || computeRankFromXp(m.xp || 0);
+        const mDef = DATA.ITEMS[m.id];
+        spawnStructureDebris(p.targetTx + 0.5, p.targetTy + 0.5, m.id, 9, m.level || 1, baseZ);
+        if (mRank >= 1) {
+          spawnBadgeShatterVfx(p.targetTx + 0.5, p.targetTy + 0.5, mRank);
+          const rInfo = getVeterancyRankInfo(mRank);
+          banner(`[${rInfo.name}] ${mDef ? mDef.name : '거치 시설'} 용해 파괴!`, '산성 포격에 의해 상부 거치 시설이 파괴되었습니다.', 'danger');
+        }
+        st.mounted = null;
+        topologyChanged = true;
+      }
+    }
+
+    if (st.hp <= 0) {
+      destroyBlockingStructureAt(p.targetTx, p.targetTy);
+      topologyChanged = true;
+    }
+
+    if (topologyChanged) {
+      recalculateBaseStats();
+      recomputeFlow();
+      notifyUi();
+    } else {
+      notifyUi();
+    }
+  }
+
+  function triggerShockerEmp(cx, cy, radius, duration) {
+    const rad = radius || 2.1;
+    const dur = duration || 3.0;
+    state.projectiles.push({
+      kind: 'emp_ring',
+      x: cx,
+      y: cy,
+      radius: rad,
+      color: DATA.PALETTE.mutantEmp || '#B26BFF',
+      life: 0.35,
+      maxLife: 0.35
+    });
+    spawnBurstParticles(cx, cy, 10, DATA.PALETTE.mutantEmp || '#B26BFF', 10);
+    triggerScreenShake(2.5, 0.16);
+
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const st = state.structGrid[y][x];
+        if (!st || st.id === 'command_hq') continue;
+        if (Math.hypot((x + 0.5) - cx, (y + 0.5) - cy) > rad + 0.05) continue;
+
+        const def = DATA.ITEMS[st.id];
+        if (def && def.requiresPower) {
+          st.empStunTimer = Math.max(st.empStunTimer || 0, dur);
+        }
+        if (st.mounted) {
+          const mDef = DATA.ITEMS[st.mounted.id];
+          if (mDef && mDef.requiresPower) {
+            st.mounted.empStunTimer = Math.max(st.mounted.empStunTimer || 0, dur);
+          }
+        }
+      }
+    }
+  }
+
   function updateProjectiles(dt) {
     for (let i = state.projectiles.length - 1; i >= 0; i--) {
       const p = state.projectiles[i];
       p.life -= dt;
+      if (p.kind === 'acid_glob') {
+        const maxL = p.maxLife || 0.4;
+        const progress = Math.min(1, 1 - Math.max(0, p.life) / maxL);
+        p.x = p.startX + (p.targetX - p.startX) * progress;
+        p.y = p.startY + (p.targetY - p.startY) * progress;
+        if (p.life <= 0) {
+          resolveAcidGlobHit(p);
+          state.projectiles.splice(i, 1);
+        }
+        continue;
+      }
       if (p.life <= 0) {
         state.projectiles.splice(i, 1);
         continue;
       }
-      if (p.kind === 'chain' || p.kind === 'ring' || p.kind === 'spark' || p.kind === 'sniper_trail' || p.kind === 'promo_ring') continue;
+      if (
+        p.kind === 'chain' ||
+        p.kind === 'ring' ||
+        p.kind === 'spark' ||
+        p.kind === 'sniper_trail' ||
+        p.kind === 'promo_ring' ||
+        p.kind === 'acid_mount_ring' ||
+        p.kind === 'emp_ring' ||
+        p.kind === 'warcry_ring' ||
+        p.kind === 'bleed_burst'
+      ) continue;
 
+      const prevX = p.x;
+      const prevY = p.y;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
       const hitList = p.hitUids || [];
 
-      // Hit detection against zombies (skip already pierced zombie uids)
+      // Hit detection against zombies (swept segment prevents fast sniper rounds from tunneling at dt=0.05)
+      const segDx = p.x - prevX;
+      const segDy = p.y - prevY;
+      const segLenSq = segDx * segDx + segDy * segDy;
       let hitIdx = -1;
+      let bestT = 2;
       for (let zIdx = 0; zIdx < state.zombies.length; zIdx++) {
         const z = state.zombies[zIdx];
         if (z.uid && hitList.includes(z.uid)) continue;
-        if (Math.hypot(z.x - p.x, z.y - p.y) <= 0.42) {
+        const t = segLenSq > 1e-8
+          ? Math.max(0, Math.min(1, ((z.x - prevX) * segDx + (z.y - prevY) * segDy) / segLenSq))
+          : 0;
+        const nearX = prevX + segDx * t;
+        const nearY = prevY + segDy * t;
+        if (Math.hypot(z.x - nearX, z.y - nearY) <= 0.42 && t < bestT) {
+          bestT = t;
           hitIdx = zIdx;
-          break;
         }
       }
 
@@ -2733,7 +2959,7 @@ ZS.Game = (function () {
     z.hitFlash = 1.0;
     spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, 3);
 
-    if (dmg >= 15 || isCrit) {
+    if (sourceUid !== '__silent_text__' && (dmg >= 15 || isCrit)) {
       addFloatingText(
         z.x + (Math.random() - 0.5) * 0.25,
         z.y,
@@ -2757,6 +2983,9 @@ ZS.Game = (function () {
 
       spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, def.isBoss ? 16 : 9);
       spawnZombieDeathVfx(z, def);
+      if (z.type === 'shocker') {
+        triggerShockerEmp(z.x, z.y, def.empRadius || 2.1, def.empDuration || 3.0);
+      }
       if (def.isBoss) {
         state.bossDefeated = true;
         addFloatingText(z.x - 0.18, z.y, 24, `+${scrapGain}`, DATA.PALETTE.resScrap, 13, DATA.PALETTE.outlineDark);
@@ -2771,15 +3000,212 @@ ZS.Game = (function () {
     }
   }
 
+  function findSpitterTargetInRange(z, tx, ty, rangeTiles) {
+    const hqCx = DATA.HQ_POS.x + 0.5;
+    const hqCy = DATA.HQ_POS.y + 0.5;
+    let cx = tx;
+    let cy = ty;
+    const visited = new Set([`${cx},${cy}`]);
+    for (let stepIdx = 0; stepIdx < 6; stepIdx++) {
+      const st = state.structGrid[cy] && state.structGrid[cy][cx];
+      if (st) {
+        if (st.id === 'command_hq') {
+          if (Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles) {
+            return { tx: cx, ty: cy, gx: hqCx, gy: hqCy };
+          }
+          break;
+        }
+        const def = DATA.ITEMS[st.id];
+        if (!(def && def.passable)) {
+          if (Math.hypot(cx + 0.5 - z.x, cy + 0.5 - z.y) <= rangeTiles) {
+            return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          }
+          break;
+        }
+      }
+      const nextStep = state.flow && state.flow.next[cy] && state.flow.next[cy][cx];
+      if (!nextStep) break;
+      cx += nextStep.dx;
+      cy += nextStep.dy;
+      const key = `${cx},${cy}`;
+      if (visited.has(key) || cx < 0 || cy < 0 || cx >= N || cy >= N) break;
+      visited.add(key);
+    }
+    if (Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x]) {
+      return { tx: DATA.HQ_POS.x, ty: DATA.HQ_POS.y, gx: hqCx, gy: hqCy };
+    }
+    let best = null;
+    let bestD = Infinity;
+    const minX = Math.max(0, Math.floor(z.x - rangeTiles - 1));
+    const maxX = Math.min(N - 1, Math.ceil(z.x + rangeTiles + 1));
+    const minY = Math.max(0, Math.floor(z.y - rangeTiles - 1));
+    const maxY = Math.min(N - 1, Math.ceil(z.y + rangeTiles + 1));
+    for (let sy = minY; sy <= maxY; sy++) {
+      for (let sx = minX; sx <= maxX; sx++) {
+        const st = state.structGrid[sy] && state.structGrid[sy][sx];
+        if (!st || st.id === 'command_hq') continue;
+        const def = DATA.ITEMS[st.id];
+        if (def && def.passable) continue;
+        const d = Math.hypot(sx + 0.5 - z.x, sy + 0.5 - z.y);
+        if (d <= rangeTiles && d < bestD) {
+          bestD = d;
+          best = { tx: sx, ty: sy, gx: sx + 0.5, gy: sy + 0.5 };
+        }
+      }
+    }
+    return best;
+  }
+
+  function findBossChargeTarget(z, tx, ty) {
+    let cx = tx;
+    let cy = ty;
+    const visited = new Set([`${cx},${cy}`]);
+    for (let stepIdx = 0; stepIdx < 6; stepIdx++) {
+      const nextStep = state.flow && state.flow.next[cy] && state.flow.next[cy][cx];
+      if (!nextStep) break;
+      cx += nextStep.dx;
+      cy += nextStep.dy;
+      const key = `${cx},${cy}`;
+      if (visited.has(key) || cx < 0 || cy < 0 || cx >= N || cy >= N) break;
+      visited.add(key);
+
+      const st = state.structGrid[cy] && state.structGrid[cy][cx];
+      if (!st) continue;
+      if (st.id === 'command_hq') break;
+      const def = DATA.ITEMS[st.id];
+      if (def && def.passable) continue;
+
+      if (def && (def.subType === 'wall' || def.subType === 'gate')) {
+        const dist = Math.hypot(cx + 0.5 - z.x, cy + 0.5 - z.y);
+        if (dist >= 1.2 && dist <= 3.4) {
+          return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+        }
+      }
+      break;
+    }
+    return null;
+  }
+
   function updateZombies(dt) {
     let structureDestroyed = false;
 
     for (let i = state.zombies.length - 1; i >= 0; i--) {
       const z = state.zombies[i];
       if (!z) continue;
+      const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
 
       if (z.slowTimer > 0) z.slowTimer = Math.max(0, z.slowTimer - dt);
       if (z.atkCooldown > 0) z.atkCooldown = Math.max(0, z.atkCooldown - dt);
+      if (z.frenzyTimer > 0) z.frenzyTimer = Math.max(0, z.frenzyTimer - dt);
+      if (zDef.isBoss) {
+        if (z.warCryCd > 0) z.warCryCd = Math.max(0, z.warCryCd - dt);
+        if (z.chargeCd > 0) z.chargeCd = Math.max(0, z.chargeCd - dt);
+      }
+
+      // Active Boss Siege Charge state (windup 0.45s -> dash 2.6x -> 2.5x wall/gate smash)
+      if (z.chargeState) {
+        const cs = z.chargeState;
+        const targetSt = state.structGrid[cs.targetTy] && state.structGrid[cs.targetTy][cs.targetTx];
+        if (!targetSt || targetSt.id === 'command_hq') {
+          z.chargeState = null;
+        } else if (cs.phase === 'windup') {
+          cs.timer += dt;
+          z.facingAngle = Math.atan2(cs.targetY - z.y, cs.targetX - z.x);
+          if (cs.timer >= cs.windupDur) {
+            cs.phase = 'dash';
+            cs.timer = 0;
+            cs.dashElapsed = 0;
+          }
+          continue;
+        } else if (cs.phase === 'dash') {
+          cs.dashElapsed = (cs.dashElapsed || 0) + dt;
+          const dx = cs.targetX - z.x;
+          const dy = cs.targetY - z.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0.01) {
+            z.facingAngle = Math.atan2(dy, dx);
+          }
+          const slowM = z.slowTimer > 0 ? 0.52 : 1.0;
+          const frenzyM = z.frenzyTimer > 0 ? 1.3 : 1.0;
+          const dashStep = z.speed * 2.6 * slowM * frenzyM * dt;
+          if (dist <= 0.86 || dist <= dashStep || cs.dashElapsed >= 2.2) {
+            const stopDist = Math.max(0.55, Math.min(dist, 0.72));
+            if (dist > 0.01) {
+              z.x = cs.targetX - (dx / dist) * stopDist;
+              z.y = cs.targetY - (dy / dist) * stopDist;
+            }
+            const siegeDmg = Math.round(z.damage * 2.5);
+            targetSt.hp -= siegeDmg;
+            targetSt.hitFlashTimer = 0.08;
+            targetSt.hitFlash = 1.0;
+            triggerScreenShake(6.5, 0.35);
+            spawnBurstParticles(cs.targetX, cs.targetY, 16, DATA.PALETTE.danger, 8);
+            spawnStructureDebris(cs.targetX, cs.targetY, targetSt.id, 10, targetSt.level || 1);
+            if (state.groundDecals.length >= 45) state.groundDecals.shift();
+            state.groundDecals.push({
+              kind: 'crater_crack',
+              x: cs.targetX,
+              y: cs.targetY,
+              radius: 0.55,
+              seed: Math.random() * 10,
+              life: 5.5,
+              maxLife: 5.5
+            });
+            addFloatingText(cs.targetX, cs.targetY, 32, `-${siegeDmg}`, DATA.PALETTE.danger, 14, DATA.PALETTE.outlineDark);
+            if (targetSt.hp <= 0) {
+              destroyBlockingStructureAt(cs.targetTx, cs.targetTy);
+              structureDestroyed = true;
+            }
+            z.chargeState = null;
+            z.atkCooldown = 1 / z.attackRate;
+            continue;
+          } else {
+            z.x += (dx / dist) * dashStep;
+            z.y += (dy / dist) * dashStep;
+            continue;
+          }
+        }
+      }
+
+      // Active Leaper parabolic wall-leap state (0.12s crouch -> 0.42s leap)
+      if (z.leapState) {
+        const ls = z.leapState;
+        z.facingAngle = Math.atan2(ls.targetY - ls.startY, ls.targetX - ls.startX);
+        if (ls.phase === 'crouch') {
+          ls.timer += dt;
+          if (ls.timer >= ls.crouchDur) {
+            ls.phase = 'air';
+            ls.timer = ls.timer - ls.crouchDur;
+          }
+          continue;
+        }
+        ls.timer += dt;
+        const u = Math.min(1, ls.timer / ls.airDur);
+        z.x = ls.startX + (ls.targetX - ls.startX) * u;
+        z.y = ls.startY + (ls.targetY - ls.startY) * u;
+        if (u >= 1) {
+          z.x = ls.targetX;
+          z.y = ls.targetY;
+          z.leapState = null;
+          spawnBuildDustPuffs(z.x, z.y, 6);
+          const landSt = state.structGrid[ls.landTy] && state.structGrid[ls.landTy][ls.landTx];
+          if (landSt && landSt.id === 'razor_pad') {
+            z.slowTimer = Math.max(z.slowTimer || 0, 2.5);
+            const bleedDmg = Math.max(1, Math.round(z.maxHp * 0.30));
+            state.projectiles.push({
+              kind: 'bleed_burst',
+              x: z.x,
+              y: z.y,
+              z: 3,
+              life: 0.32,
+              maxLife: 0.32
+            });
+            addFloatingText(z.x, z.y, 22, `-${bleedDmg}`, DATA.PALETTE.danger, 12, DATA.PALETTE.outlineDark);
+            damageZombie(i, bleedDmg, DATA.PALETTE.danger, false, '__silent_text__');
+          }
+        }
+        continue;
+      }
 
       const tx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
       const ty = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
@@ -2787,6 +3213,7 @@ ZS.Game = (function () {
       // Check passable razor pad trap & nearby tactical_gate slow aura (radius 1.15)
       const under = state.structGrid[ty][tx];
       let slowMult = z.slowTimer > 0 ? 0.52 : 1.0;
+      const frenzyMult = z.frenzyTimer > 0 ? 1.30 : 1.0;
       z.vulnOnPad = false;
       z.inGateAura = false;
       if (under && under.id === 'razor_pad') {
@@ -2819,6 +3246,51 @@ ZS.Game = (function () {
             const gSlow = gProf && gProf.gateSlowFactor ? gProf.gateSlowFactor : 0.75;
             slowMult = Math.min(slowMult, gSlow);
             z.inGateAura = true;
+          }
+        }
+      }
+
+      // Boss Active Skills: War Cry (3.8-tile +30% speed buff for 3.5s) & Siege Charge (1.2~3.4 tiles wall/gate smash)
+      if (zDef.isBoss) {
+        if (z.warCryCd <= 0) {
+          z.warCryCd = 9.0;
+          state.projectiles.push({
+            kind: 'warcry_ring',
+            x: z.x,
+            y: z.y,
+            radius: 3.8,
+            color: DATA.PALETTE.zombieBossCrack || '#E040FB',
+            life: 0.50,
+            maxLife: 0.50
+          });
+          triggerScreenShake(3.5, 0.22);
+          for (let k = 0; k < state.zombies.length; k++) {
+            const oz = state.zombies[k];
+            if (!oz) continue;
+            const oDef = DATA.ZOMBIES[oz.type];
+            if (oDef && oDef.isBoss) continue;
+            if (Math.hypot(oz.x - z.x, oz.y - z.y) <= 3.8) {
+              oz.frenzyTimer = Math.max(oz.frenzyTimer || 0, 3.5);
+            }
+          }
+        }
+        if (z.chargeCd <= 0) {
+          const ct = findBossChargeTarget(z, tx, ty);
+          if (ct) {
+            z.chargeCd = 11.0;
+            z.facingAngle = Math.atan2(ct.gy - z.y, ct.gx - z.x);
+            z.chargeState = {
+              phase: 'windup',
+              timer: 0,
+              windupDur: 0.45,
+              startX: z.x,
+              startY: z.y,
+              targetTx: ct.tx,
+              targetTy: ct.ty,
+              targetX: ct.gx,
+              targetY: ct.gy
+            };
+            continue;
           }
         }
       }
@@ -2877,6 +3349,74 @@ ZS.Game = (function () {
         }
       }
 
+      // Leaper single-wall leap (1x per spawn, 1.1-tile check, landing tile must be empty or passable)
+      if (z.type === 'leaper' && !z.hasLeaped && step) {
+        const ntx = tx + step.dx;
+        const nty = ty + step.dy;
+        const wallSt = state.structGrid[nty] && state.structGrid[nty][ntx];
+        const wallDef = wallSt ? DATA.ITEMS[wallSt.id] : null;
+        if (
+          wallSt &&
+          wallDef &&
+          (wallDef.subType === 'wall' || wallDef.subType === 'gate') &&
+          Math.hypot(ntx + 0.5 - z.x, nty + 0.5 - z.y) <= 1.1
+        ) {
+          const ltx = ntx + step.dx;
+          const lty = nty + step.dy;
+          if (ltx >= 0 && lty >= 0 && ltx < N && lty < N) {
+            const landSt = state.structGrid[lty] && state.structGrid[lty][ltx];
+            const landDef = landSt ? (landSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[landSt.id]) : null;
+            if (!landSt || (landDef && landDef.passable)) {
+              z.hasLeaped = true;
+              z.facingAngle = Math.atan2(lty + 0.5 - z.y, ltx + 0.5 - z.x);
+              z.leapState = {
+                phase: 'crouch',
+                timer: 0,
+                crouchDur: 0.12,
+                airDur: 0.42,
+                startX: z.x,
+                startY: z.y,
+                targetX: ltx + 0.5,
+                targetY: lty + 0.5,
+                landTx: ltx,
+                landTy: lty
+              };
+              continue;
+            }
+          }
+        }
+      }
+
+      // Spitter mid-range acid spit (<= 3.2 tiles toward blocking structure or HQ)
+      if (z.type === 'spitter') {
+        const spitTarget = findSpitterTargetInRange(z, tx, ty, z.acidRange || 3.2);
+        if (spitTarget) {
+          const sdx = spitTarget.gx - z.x;
+          const sdy = spitTarget.gy - z.y;
+          const sDist = Math.max(0.25, Math.hypot(sdx, sdy));
+          z.facingAngle = Math.atan2(sdy, sdx);
+          if (z.atkCooldown <= 0) {
+            z.atkCooldown = 1 / z.attackRate;
+            const travelLife = Math.max(0.08, sDist / 5.5);
+            state.projectiles.push({
+              kind: 'acid_glob',
+              startX: z.x,
+              startY: z.y,
+              x: z.x,
+              y: z.y,
+              targetX: spitTarget.gx,
+              targetY: spitTarget.gy,
+              targetTx: spitTarget.tx,
+              targetTy: spitTarget.ty,
+              damage: z.damage,
+              life: travelLife,
+              maxLife: travelLife
+            });
+          }
+          continue;
+        }
+      }
+
       // Also check if zombie is currently overlapping a blocking structure
       if (!blockingTarget && under && under.id !== 'command_hq') {
         const uDef = DATA.ITEMS[under.id];
@@ -2928,7 +3468,7 @@ ZS.Game = (function () {
           }
         }
       } else if (distGoal > 0.01) {
-        const moveSpd = z.speed * slowMult * dt;
+        const moveSpd = z.speed * slowMult * frenzyMult * dt;
         z.x += ((goalX - z.x) / distGoal) * moveSpd;
         z.y += ((goalY - z.y) / distGoal) * moveSpd;
       }
@@ -3003,16 +3543,22 @@ ZS.Game = (function () {
     state.scrap += scrapReward;
     state.coin += totalCoin;
 
-    // 2. Free Cozy Auto-Repair at Dawn
+    // 2. Free Cozy Auto-Repair & EMP Stun Clear at Dawn
     const freeRatio = state.cozyTier.freeRepair;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
-        if (st && st.hp < st.maxHp) {
-          st.hp = Math.min(st.maxHp, Math.round(st.hp + (st.maxHp - st.hp) * freeRatio));
-        }
-        if (st && st.mounted && st.mounted.hp < st.mounted.maxHp) {
-          st.mounted.hp = Math.min(st.mounted.maxHp, Math.round(st.mounted.hp + (st.mounted.maxHp - st.mounted.hp) * freeRatio));
+        if (st) {
+          st.empStunTimer = 0;
+          if (st.hp < st.maxHp) {
+            st.hp = Math.min(st.maxHp, Math.round(st.hp + (st.maxHp - st.hp) * freeRatio));
+          }
+          if (st.mounted) {
+            st.mounted.empStunTimer = 0;
+            if (st.mounted.hp < st.mounted.maxHp) {
+              st.mounted.hp = Math.min(st.mounted.maxHp, Math.round(st.mounted.hp + (st.mounted.maxHp - st.mounted.hp) * freeRatio));
+            }
+          }
         }
       }
     }
