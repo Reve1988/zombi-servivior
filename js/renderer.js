@@ -170,18 +170,24 @@ ZS.Renderer = (function () {
     const P = DATA.PALETTE;
     const N = DATA.GRID_SIZE;
     const zScale = Iso.cam.zoom;
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
 
     // 1. Background Sky / Tactical Tabletop Backdrop
-    const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
-    if (state.nightAlpha > 0.4) {
-      bgGrad.addColorStop(0, '#101B2D');
-      bgGrad.addColorStop(1, '#060A13');
+    if (isSil) {
+      ctx.fillStyle = '#EEF1F4';
+      ctx.fillRect(0, 0, w, h);
     } else {
-      bgGrad.addColorStop(0, '#2C3B49');
-      bgGrad.addColorStop(1, '#151E27');
+      const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
+      if (state.nightAlpha > 0.4) {
+        bgGrad.addColorStop(0, '#101B2D');
+        bgGrad.addColorStop(1, '#060A13');
+      } else {
+        bgGrad.addColorStop(0, '#2C3B49');
+        bgGrad.addColorStop(1, '#151E27');
+      }
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, w, h);
     }
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
 
     // Optional mild camera shake ONLY on Airstrike, Boss spawn, and HQ hit (#8 + accessibility toggle)
     const shakeActive =
@@ -226,9 +232,9 @@ ZS.Renderer = (function () {
           : checker
           ? P.terrainA
           : P.terrainB;
-        const tileFill = Iso.shadeHex(rawBase, cell.shadeFactor);
+        const tileFill = isSil ? (isEdge ? '#CBD3DB' : '#D5DBE1') : Iso.shadeHex(rawBase, cell.shadeFactor);
 
-        if (showEditGrid) {
+        if (showEditGrid && !isSil) {
           const gridStroke = isEdge ? 'rgba(255, 77, 109, 0.28)' : 'rgba(255, 255, 255, 0.14)';
           Iso.drawTilePoly(ctx, x, y, 0, tileFill, gridStroke, 1);
           if (isEdge && uiState.mode === 'build') {
@@ -257,15 +263,17 @@ ZS.Renderer = (function () {
     }
 
     // Crisp inner quarantine boundary & directional danger chevrons separating 1-tile outer spawn zone
-    drawQuarantineBorder(ctx, N, P, showEditGrid, zScale);
+    if (!isSil) {
+      drawQuarantineBorder(ctx, N, P, showEditGrid, zScale);
+    }
 
     // Fading zombie death ground stains (#8: drawn flat on ground above tiles/floors, below structures)
-    if (state.groundDecals && state.groundDecals.length > 0) {
+    if (!isSil && state.groundDecals && state.groundDecals.length > 0) {
       drawGroundStains(ctx, state.groundDecals, zScale);
     }
 
     // Subtle warm afternoon sunlight wash over the inner base during daytime
-    if (state.nightAlpha < 0.95) {
+    if (!isSil && state.nightAlpha < 0.95) {
       const sunCenter = Iso.gridToScreen(DATA.HQ_POS.x + 0.2, DATA.HQ_POS.y + 0.2, 4);
       const sunRad = N * 22 * zScale;
       const dayFactor = Math.max(0, 1 - state.nightAlpha * 1.15);
@@ -311,6 +319,9 @@ ZS.Renderer = (function () {
             }
             if (def.aura && def.aura.radius) {
               drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius, P.goldStroke, P.goldFill);
+            }
+            if (def.gateSlowRadius) {
+              drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.gateSlowRadius, P.rangeStroke, 'rgba(255, 255, 255, 0.08)');
             }
           }
         }
@@ -392,7 +403,9 @@ ZS.Renderer = (function () {
     emissiveList = null;
 
     // Creeping perimeter mist / fog band along the 4 outer edges ("outside = danger")
-    drawPerimeterFog(ctx, N, state.nightAlpha, timeSec, zScale);
+    if (!isSil) {
+      drawPerimeterFog(ctx, N, state.nightAlpha, timeSec, zScale);
+    }
 
     // 6. Ghost Preview of Structure Being Built or Moved
     if (uiState.hoverTile && state.phase === 'day') {
@@ -412,7 +425,7 @@ ZS.Renderer = (function () {
     drawParticles(ctx, state.particles, zScale);
 
     // Warm central base glow on Cozy Tier-Up (radius 3 tiles, 0.8s)
-    if (state.cozyTierUpTimer && state.cozyTierUpTimer > 0) {
+    if (!isSil && state.cozyTierUpTimer && state.cozyTierUpTimer > 0) {
       const progress = 1 - Math.max(0, Math.min(1, state.cozyTierUpTimer / 0.8));
       const alpha = Math.sin(progress * Math.PI) * 0.55;
       const center = Iso.gridToScreen(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 10);
@@ -431,7 +444,7 @@ ZS.Renderer = (function () {
     }
 
     // 8. Nighttime Tactical Darkness & Dynamic Glow Layer
-    if (state.nightAlpha > 0.02) {
+    if (!isSil && state.nightAlpha > 0.02) {
       drawNightLighting(ctx, w, h, state, powered, timeSec, zScale);
       if (nightEmissives && nightEmissives.length > 0) {
         drawEmissivePass(ctx, nightEmissives, state.nightAlpha, zScale);
@@ -440,7 +453,9 @@ ZS.Renderer = (function () {
 
     // ── Info Layer (Drawn above darkness: identical daytime brightness & contrast) ──
     // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout OFF Warnings
-    drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale);
+    if (!isSil) {
+      drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale);
+    }
 
     // 10. Floating Texts (Damage, Loot, Buff Callouts)
     drawFloatingTexts(ctx, state.floatingTexts, zScale);
@@ -452,6 +467,23 @@ ZS.Renderer = (function () {
 
   function drawIslandSlab(ctx, N, P, zScale) {
     const Iso = ZS.Iso;
+    if (window.ZS_SILHOUETTE_MODE) {
+      const fTopL = Iso.gridToScreen(0, N, 0);
+      const fTopF = Iso.gridToScreen(N, N, 0);
+      const fTopR = Iso.gridToScreen(N, 0, 0);
+      const fBotL = Iso.gridToScreen(0, N, -10);
+      const fBotF = Iso.gridToScreen(N, N, -10);
+      const fBotR = Iso.gridToScreen(N, 0, -10);
+      ctx.fillStyle = '#AEB7C0';
+      ctx.beginPath();
+      ctx.moveTo(fTopL.x, fTopL.y); ctx.lineTo(fTopF.x, fTopF.y); ctx.lineTo(fBotF.x, fBotF.y); ctx.lineTo(fBotL.x, fBotL.y);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#98A2AC';
+      ctx.beginPath();
+      ctx.moveTo(fTopF.x, fTopF.y); ctx.lineTo(fTopR.x, fTopR.y); ctx.lineTo(fBotR.x, fBotR.y); ctx.lineTo(fBotF.x, fBotF.y);
+      ctx.closePath(); ctx.fill();
+      return;
+    }
     // Floating diorama drop shadow underneath island
     const sTop = Iso.gridToScreen(0.4, 0.4, -27);
     const sRight = Iso.gridToScreen(N + 0.4, 0.4, -27);
@@ -847,6 +879,9 @@ ZS.Renderer = (function () {
       if (def.aura && def.aura.radius) {
         drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius, P.goldStroke, P.goldFill);
       }
+      if (def.gateSlowRadius) {
+        drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.gateSlowRadius, P.rangeStroke, 'rgba(255, 255, 255, 0.08)');
+      }
     } else {
       Iso.drawTilePoly(ctx, tx, ty, 2, P.hoverFill, P.hoverStroke, 1.2);
     }
@@ -876,6 +911,8 @@ ZS.Renderer = (function () {
 
   function getStructVisualTopZ(id, level) {
     switch (id) {
+      case 'barricade_wall': return level >= 3 ? 27.7 : level === 2 ? 14 : 10.9;
+      case 'tactical_gate': return 26.5;
       case 'hesco_wall': return level >= 3 ? 19 : 14;
       case 'blast_wall': return level >= 3 ? 29 : 25;
       case 'razor_pad': return 6;
@@ -916,12 +953,12 @@ ZS.Renderer = (function () {
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    if (withEdge !== false && !isEmissive) {
+    if (withEdge !== false && !isEmissive && !window.ZS_SILHOUETTE_MODE) {
       ctx.strokeStyle = 'rgba(10, 14, 20, 0.28)';
       ctx.lineWidth = Math.max(0.65, 0.8 * zScale);
       ctx.stroke();
     }
-    if (isEmissive && emissiveList) {
+    if (isEmissive && emissiveList && !window.ZS_SILHOUETTE_MODE) {
       emissiveList.push({ kind: 'poly', pts, fill, hex });
     }
   }
@@ -947,7 +984,7 @@ ZS.Renderer = (function () {
     }
   }
 
-  function drawFrustum(ctx, gx, gy, z, w, d, h, inset, hex, opts, zScale) {
+  function drawFrustumXY(ctx, gx, gy, z, w, d, h, ix, iy, hex, opts, zScale) {
     const Iso = ZS.Iso;
     const o = opts || {};
     const em = !!o.emissive;
@@ -955,17 +992,21 @@ ZS.Renderer = (function () {
     const b1 = Iso.gridToScreen(gx + w, gy, z);
     const b2 = Iso.gridToScreen(gx + w, gy + d, z);
     const b3 = Iso.gridToScreen(gx, gy + d, z);
-    const t0 = Iso.gridToScreen(gx + inset, gy + inset, z + h);
-    const t1 = Iso.gridToScreen(gx + w - inset, gy + inset, z + h);
-    const t2 = Iso.gridToScreen(gx + w - inset, gy + d - inset, z + h);
-    const t3 = Iso.gridToScreen(gx + inset, gy + d - inset, z + h);
+    const t0 = Iso.gridToScreen(gx + ix, gy + iy, z + h);
+    const t1 = Iso.gridToScreen(gx + w - ix, gy + iy, z + h);
+    const t2 = Iso.gridToScreen(gx + w - ix, gy + d - iy, z + h);
+    const t3 = Iso.gridToScreen(gx + ix, gy + d - iy, z + h);
     drawPolyFace(ctx, [b0, b1, t1, t0], hex, 0.95, em, true, zScale);
     drawPolyFace(ctx, [b0, b3, t3, t0], hex, 0.95, em, true, zScale);
-    drawPolyFace(ctx, [b3, b2, t2, t3], hex, 0.88, em, true, zScale);
-    drawPolyFace(ctx, [b2, b1, t1, t2], hex, 0.72, em, true, zScale);
+    drawPolyFace(ctx, [b3, b2, t2, t3], hex, 0.86, em, true, zScale);
+    drawPolyFace(ctx, [b2, b1, t1, t2], hex, 0.70, em, true, zScale);
     if (!o.noTop) {
       drawPolyFace(ctx, [t0, t1, t2, t3], hex, 1.0, em, true, zScale);
     }
+  }
+
+  function drawFrustum(ctx, gx, gy, z, w, d, h, inset, hex, opts, zScale) {
+    drawFrustumXY(ctx, gx, gy, z, w, d, h, inset, inset, hex, opts, zScale);
   }
 
   function calcSideShade(nx, ny) {
@@ -1151,7 +1192,7 @@ ZS.Renderer = (function () {
   function drawIsoLine(ctx, a, b, hex, widthPx, withOutline, zScale) {
     const Iso = ZS.Iso;
     ctx.lineCap = 'round';
-    if (withOutline) {
+    if (withOutline && !window.ZS_SILHOUETTE_MODE) {
       ctx.strokeStyle = 'rgba(10, 14, 20, 0.55)';
       ctx.lineWidth = (widthPx + 1.5) * zScale;
       ctx.beginPath();
@@ -1174,7 +1215,7 @@ ZS.Renderer = (function () {
     ctx.arc(p.x, p.y, rPx * zScale, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
-    if (isEmissive && emissiveList) {
+    if (isEmissive && emissiveList && !window.ZS_SILHOUETTE_MODE) {
       emissiveList.push({ kind: 'dot', p, r: rPx, hex, fill });
     }
   }
@@ -1262,6 +1303,348 @@ ZS.Renderer = (function () {
     ctx.restore();
   }
 
+  const WALL_PIECES = {
+    post: [0.30, 0.30, 0.40, 0.40],
+    N: [0.32, 0, 0.36, 0.30],
+    S: [0.32, 0.70, 0.36, 0.30],
+    W: [0, 0.32, 0.30, 0.36],
+    E: [0.70, 0.32, 0.30, 0.36],
+    iso: [0.18, 0.31, 0.64, 0.38]
+  };
+
+  function isWallConnectableCell(structGrid, tx, ty) {
+    const s = structGrid && structGrid[ty] && structGrid[ty][tx];
+    if (!s || s.hp <= 0) return false;
+    const def = ZS.DATA.ITEMS[s.id];
+    return !!(def && (def.subType === 'wall' || def.subType === 'gate'));
+  }
+
+  function getWallConnectMask(structGrid, tx, ty) {
+    if (!structGrid) return 0;
+    return (
+      (isWallConnectableCell(structGrid, tx, ty - 1) ? 1 : 0) |
+      (isWallConnectableCell(structGrid, tx + 1, ty) ? 2 : 0) |
+      (isWallConnectableCell(structGrid, tx, ty + 1) ? 4 : 0) |
+      (isWallConnectableCell(structGrid, tx - 1, ty) ? 8 : 0)
+    );
+  }
+
+  function drawWireXFrame(ctx, cx, cy, crossAxis, P, zScale) {
+    const Iso = ZS.Iso;
+    const wood = P.wireWood || '#8B6843';
+    const woodDark = P.wireWoodDark || '#5E452B';
+    const iron = P.wireIron || '#4A5562';
+    if (crossAxis === 'y') {
+      drawIsoBox(ctx, cx - 0.04, cy - 0.19, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
+      drawIsoBox(ctx, cx - 0.04, cy + 0.11, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
+      drawIsoLine(ctx, Iso.gridToScreen(cx, cy - 0.16, 1.0), Iso.gridToScreen(cx, cy + 0.16, 10.5), wood, 2.3, true, zScale);
+      drawIsoLine(ctx, Iso.gridToScreen(cx, cy + 0.16, 1.0), Iso.gridToScreen(cx, cy - 0.16, 10.5), wood, 2.3, true, zScale);
+    } else {
+      drawIsoBox(ctx, cx - 0.19, cy - 0.04, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
+      drawIsoBox(ctx, cx + 0.11, cy - 0.04, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
+      drawIsoLine(ctx, Iso.gridToScreen(cx - 0.16, cy, 1.0), Iso.gridToScreen(cx + 0.16, cy, 10.5), wood, 2.3, true, zScale);
+      drawIsoLine(ctx, Iso.gridToScreen(cx + 0.16, cy, 1.0), Iso.gridToScreen(cx - 0.16, cy, 10.5), wood, 2.3, true, zScale);
+    }
+    drawIsoBox(ctx, cx - 0.045, cy - 0.045, 4.9, 0.09, 0.09, 1.5, iron, null, zScale);
+  }
+
+  function drawWireHub(ctx, tx, ty, P, zScale) {
+    const Iso = ZS.Iso;
+    const wood = P.wireWood || '#8B6843';
+    const woodDark = P.wireWoodDark || '#5E452B';
+    const iron = P.wireIron || '#4A5562';
+    drawIsoBox(ctx, tx + 0.41, ty + 0.41, 0, 0.18, 0.18, 1.6, woodDark, null, zScale);
+    drawIsoBox(ctx, tx + 0.43, ty + 0.43, 1.6, 0.14, 0.14, 8.6, wood, null, zScale);
+    drawIsoBox(ctx, tx + 0.42, ty + 0.42, 4.9, 0.16, 0.16, 1.6, iron, null, zScale);
+    drawIsoBox(ctx, tx + 0.435, ty + 0.435, 10.2, 0.13, 0.13, 0.7, iron, null, zScale);
+    drawIsoLine(ctx, Iso.gridToScreen(tx + 0.35, ty + 0.65, 0.8), Iso.gridToScreen(tx + 0.50, ty + 0.50, 9.6), wood, 2.0, true, zScale);
+    drawIsoLine(ctx, Iso.gridToScreen(tx + 0.65, ty + 0.35, 0.8), Iso.gridToScreen(tx + 0.50, ty + 0.50, 9.6), wood, 2.0, true, zScale);
+  }
+
+  function drawWireCoilSpan(ctx, tx, ty, axis, t0, t1, loops, P, zScale) {
+    const Iso = ZS.Iso;
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
+    const rr = 0.145;
+    const zc = 5.7;
+    const rz = 3.9;
+    const span = t1 - t0;
+    const du = span / loops;
+    const ptAt = (u, a) =>
+      axis === 'x'
+        ? Iso.gridToScreen(tx + u, ty + 0.5 + rr * Math.cos(a), zc + rz * Math.sin(a))
+        : Iso.gridToScreen(tx + 0.5 + rr * Math.cos(a), ty + u, zc + rz * Math.sin(a));
+
+    const drawHalf = (uStart, a0, a1, steps, phaseOff, strokeHex, widthPx, withOutline) => {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let s = 0; s <= steps; s++) {
+        const f = s / steps;
+        const a = a0 + (a1 - a0) * f;
+        const u = Math.min(t1, Math.max(t0, uStart + (phaseOff + f * 0.5) * du));
+        const p = ptAt(u, a);
+        if (s === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      if (withOutline && !isSil) {
+        ctx.strokeStyle = 'rgba(10, 14, 20, 0.48)';
+        ctx.lineWidth = (widthPx + 1.0) * zScale;
+        ctx.stroke();
+      }
+      ctx.strokeStyle = Iso.resolveFaceColor(strokeHex, 1.0, false, 0) || strokeHex;
+      ctx.lineWidth = widthPx * zScale;
+      ctx.stroke();
+    };
+
+    const coilDim = P.wireCoilDim || '#6E7B88';
+    const coilCol = P.wireCoil || '#BAC6D2';
+    const barbCol = P.wireBarb || '#DCE5EE';
+    const wood = P.wireWood || '#8B6843';
+
+    for (let i = 0; i < loops; i++) {
+      drawHalf(t0 + i * du, 0.72 * Math.PI, 1.72 * Math.PI, 7, 0.0, coilDim, 1.2, false);
+    }
+
+    if (axis === 'x') drawIsoBox(ctx, tx + t0, ty + 0.475, 5.1, span, 0.05, 1.1, wood, null, zScale);
+    else drawIsoBox(ctx, tx + 0.475, ty + t0, 5.1, 0.05, span, 1.1, wood, null, zScale);
+
+    for (let i = 0; i < loops; i++) {
+      const uStart = t0 + i * du;
+      drawHalf(uStart, -0.28 * Math.PI, 0.72 * Math.PI, 8, 0.5, coilCol, 1.5, true);
+      const barbAngles = [0.48 * Math.PI, 0.05];
+      for (let bi = 0; bi < barbAngles.length; bi++) {
+        const ba = barbAngles[bi];
+        const f = (ba + 0.28 * Math.PI) / Math.PI;
+        const u = Math.min(t1, Math.max(t0, uStart + (0.5 + f * 0.5) * du));
+        const bp = ptAt(u, ba);
+        const d = 2.0 * zScale;
+        ctx.strokeStyle = Iso.resolveFaceColor(barbCol, 1.0, false, 0) || barbCol;
+        ctx.lineWidth = 1.1 * zScale;
+        ctx.beginPath();
+        ctx.moveTo(bp.x - d, bp.y - d * 0.65);
+        ctx.lineTo(bp.x + d, bp.y + d * 0.65);
+        ctx.moveTo(bp.x - d, bp.y + d * 0.65);
+        ctx.lineTo(bp.x + d, bp.y - d * 0.65);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawWireWallTile(ctx, tx, ty, mask, P, zScale) {
+    if (mask === 0) {
+      drawWireXFrame(ctx, tx + 0.24, ty + 0.50, 'y', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.16, 0.84, 5, P, zScale);
+      drawWireXFrame(ctx, tx + 0.76, ty + 0.50, 'y', P, zScale);
+      return;
+    }
+    if (mask === 10) {
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.00, 0.26, 2, P, zScale);
+      drawWireXFrame(ctx, tx + 0.26, ty + 0.50, 'y', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.26, 0.74, 3, P, zScale);
+      drawWireXFrame(ctx, tx + 0.74, ty + 0.50, 'y', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.74, 1.00, 2, P, zScale);
+      return;
+    }
+    if (mask === 5) {
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.00, 0.26, 2, P, zScale);
+      drawWireXFrame(ctx, tx + 0.50, ty + 0.26, 'x', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.26, 0.74, 3, P, zScale);
+      drawWireXFrame(ctx, tx + 0.50, ty + 0.74, 'x', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.74, 1.00, 2, P, zScale);
+      return;
+    }
+    if (mask === 1) {
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.00, 0.24, 2, P, zScale);
+      drawWireXFrame(ctx, tx + 0.50, ty + 0.24, 'x', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.24, 0.62, 3, P, zScale);
+      drawWireXFrame(ctx, tx + 0.50, ty + 0.62, 'x', P, zScale);
+      return;
+    }
+    if (mask === 4) {
+      drawWireXFrame(ctx, tx + 0.50, ty + 0.38, 'x', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.38, 0.76, 3, P, zScale);
+      drawWireXFrame(ctx, tx + 0.50, ty + 0.76, 'x', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'y', 0.76, 1.00, 2, P, zScale);
+      return;
+    }
+    if (mask === 8) {
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.00, 0.24, 2, P, zScale);
+      drawWireXFrame(ctx, tx + 0.24, ty + 0.50, 'y', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.24, 0.62, 3, P, zScale);
+      drawWireXFrame(ctx, tx + 0.62, ty + 0.50, 'y', P, zScale);
+      return;
+    }
+    if (mask === 2) {
+      drawWireXFrame(ctx, tx + 0.38, ty + 0.50, 'y', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.38, 0.76, 3, P, zScale);
+      drawWireXFrame(ctx, tx + 0.76, ty + 0.50, 'y', P, zScale);
+      drawWireCoilSpan(ctx, tx, ty, 'x', 0.76, 1.00, 2, P, zScale);
+      return;
+    }
+    if (mask & 1) drawWireCoilSpan(ctx, tx, ty, 'y', 0.00, 0.45, 3, P, zScale);
+    if (mask & 8) drawWireCoilSpan(ctx, tx, ty, 'x', 0.00, 0.45, 3, P, zScale);
+    drawWireHub(ctx, tx, ty, P, zScale);
+    if (mask & 2) drawWireCoilSpan(ctx, tx, ty, 'x', 0.55, 1.00, 3, P, zScale);
+    if (mask & 4) drawWireCoilSpan(ctx, tx, ty, 'y', 0.55, 1.00, 3, P, zScale);
+  }
+
+  function drawHescoPiece(ctx, x, y, w, d, h, lv, skipCap, steelCol, maxAccent, zScale) {
+    drawIsoBox(ctx, x, y, 0, w, d, h, '#C9B48A', null, zScale);
+    drawIsoBox(ctx, x + 0.035, y + 0.035, h, w - 0.07, d - 0.07, 0.6, '#9E8758', null, zScale);
+    if (lv >= 2) {
+      drawIsoBox(ctx, x - 0.006, y - 0.006, 4.8, w + 0.012, d + 0.012, 2.2, steelCol, { noTop: true }, zScale);
+    }
+    if (lv >= 3 && !skipCap) {
+      drawIsoBox(ctx, x - 0.005, y - 0.005, h + 0.6, w + 0.01, d + 0.01, 1.2, maxAccent, { noTop: true }, zScale);
+      drawIsoBox(ctx, x, y, h + 1.8, w, d, 2.4, steelCol, null, zScale);
+    }
+  }
+
+  function drawBlastSlab(ctx, x, y, w, d, z0, z1, H, I, axis, hex, top, zScale) {
+    const ix = axis === 'x' ? 0 : 1;
+    const iy = axis === 'y' ? 0 : 1;
+    const i0 = (I * z0) / H;
+    const i1 = (I * z1) / H;
+    drawFrustumXY(
+      ctx,
+      x + i0 * ix,
+      y + i0 * iy,
+      z0,
+      w - 2 * i0 * ix,
+      d - 2 * i0 * iy,
+      z1 - z0,
+      (i1 - i0) * ix,
+      (i1 - i0) * iy,
+      hex,
+      { noTop: !top },
+      zScale
+    );
+  }
+
+  function drawBlastPiece(ctx, x, y, w, d, axis, lv, skipCap, steelCol, maxAccent, zScale) {
+    const H = 24;
+    const I = 0.08;
+    const secs =
+      lv >= 2
+        ? [
+            [0, 4.5, '#6B7686'],
+            [4.5, 8.5, '#F0BD35'],
+            [8.5, 12.5, '#6B7686'],
+            [12.5, 15.5, steelCol],
+            [15.5, 24, '#6B7686']
+          ]
+        : [
+            [0, 4.5, '#6B7686'],
+            [4.5, 8.5, '#F0BD35'],
+            [8.5, 24, '#6B7686']
+          ];
+    for (let i = 0; i < secs.length; i++) {
+      const s = secs[i];
+      drawBlastSlab(ctx, x, y, w, d, s[0], s[1], H, I, axis, s[2], i === secs.length - 1, zScale);
+    }
+    if (lv >= 3 && !skipCap) {
+      const ix = axis === 'x' ? 0 : I;
+      const iy = axis === 'y' ? 0 : I;
+      drawIsoBox(ctx, x + ix - 0.004, y + iy - 0.004, H, w - 2 * ix + 0.008, d - 2 * iy + 0.008, 1.3, maxAccent, { noTop: true }, zScale);
+      drawIsoBox(ctx, x + ix, y + iy, H + 1.3, w - 2 * ix, d - 2 * iy, 2.4, steelCol, null, zScale);
+    }
+  }
+
+  function drawConnectedWallTile(ctx, tx, ty, mask, tier, mounted, P, steelCol, maxAccent, zScale) {
+    if (tier <= 1) {
+      drawWireWallTile(ctx, tx, ty, mask, P, zScale);
+      return;
+    }
+    const isHesco = tier === 2;
+    if (mask === 0) {
+      if (isHesco) {
+        drawHescoPiece(ctx, tx + 0.17, ty + 0.31, 0.32, 0.38, 13, tier, !!mounted, steelCol, maxAccent, zScale);
+        drawHescoPiece(ctx, tx + 0.51, ty + 0.31, 0.32, 0.38, 13, tier, !!mounted, steelCol, maxAccent, zScale);
+      } else {
+        const r = WALL_PIECES.iso;
+        drawBlastPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], 'both', tier, !!mounted, steelCol, maxAccent, zScale);
+      }
+      return;
+    }
+
+    const order = [];
+    if (mask & 1) order.push(['N', 'y']);
+    if (mask & 8) order.push(['W', 'x']);
+    const postAxis = mask === 10 ? 'x' : mask === 5 ? 'y' : 'both';
+    order.push(['post', postAxis]);
+    if (mask & 2) order.push(['E', 'x']);
+    if (mask & 4) order.push(['S', 'y']);
+
+    for (let i = 0; i < order.length; i++) {
+      const k = order[i][0];
+      const axis = order[i][1];
+      const r = WALL_PIECES[k];
+      if (isHesco) {
+        drawHescoPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], k === 'post' ? 14 : 13, tier, !!(mounted && k === 'post'), steelCol, maxAccent, zScale);
+      } else {
+        drawBlastPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], axis, tier, !!(mounted && k === 'post'), steelCol, maxAccent, zScale);
+      }
+    }
+  }
+
+  function drawTacticalGateTile(ctx, tx, ty, mask, lv, P, steelCol, zScale) {
+    const Iso = ZS.Iso;
+    const alongY = Boolean((mask & 5) && !(mask & 10));
+    const dk = P.gatePylon || '#59636E';
+    const beamCol = P.gateBeam || '#4A5562';
+    const barCol = lv >= 3 ? P.thornSpark || '#FF8A3D' : P.gateBar || '#2B333D';
+
+    const pyl = (x, y, w, d) => {
+      drawIsoBox(ctx, x, y, 0, w, d, 22, dk, null, zScale);
+      drawIsoBox(ctx, x - 0.004, y - 0.004, 3, w + 0.008, d + 0.008, 3, '#F0BD35', { noTop: true }, zScale);
+      if (lv >= 2) {
+        drawIsoBox(ctx, x - 0.004, y - 0.004, 9, w + 0.008, d + 0.008, 2.4, steelCol, { noTop: true }, zScale);
+      }
+      drawIsoBox(ctx, x + 0.04, y + 0.04, 22, w - 0.08, d - 0.08, 1.4, '#3E4650', null, zScale);
+      drawIsoDot(ctx, Iso.gridToScreen(x + w / 2, y + d / 2, 25), 1.9, P.danger, true, zScale);
+    };
+
+    const door = () => {
+      if (!alongY) {
+        drawIsoBox(ctx, tx + 0.24, ty + 0.46, 0, 0.52, 0.08, 1.6, '#3E4650', null, zScale);
+        drawIsoBox(ctx, tx + 0.24, ty + 0.46, 13.4, 0.52, 0.08, 1.6, '#3E4650', null, zScale);
+        for (let k = 0; k < 5; k++) {
+          drawIsoBox(ctx, tx + 0.28 + k * 0.1, ty + 0.48, 1.6, 0.035, 0.04, 11.8, barCol, null, zScale);
+        }
+        if (lv >= 3) {
+          const sx = [0.36, 0.5, 0.64];
+          for (let i = 0; i < sx.length; i++) {
+            drawIsoDot(ctx, Iso.gridToScreen(tx + sx[i], ty + 0.5, 5 + i * 3), 1.5, '#FFD08A', true, zScale);
+          }
+        }
+      } else {
+        drawIsoBox(ctx, tx + 0.46, ty + 0.24, 0, 0.08, 0.52, 1.6, '#3E4650', null, zScale);
+        drawIsoBox(ctx, tx + 0.46, ty + 0.24, 13.4, 0.08, 0.52, 1.6, '#3E4650', null, zScale);
+        for (let k = 0; k < 5; k++) {
+          drawIsoBox(ctx, tx + 0.48, ty + 0.28 + k * 0.1, 1.6, 0.04, 0.035, 11.8, barCol, null, zScale);
+        }
+        if (lv >= 3) {
+          const sy = [0.36, 0.5, 0.64];
+          for (let i = 0; i < sy.length; i++) {
+            drawIsoDot(ctx, Iso.gridToScreen(tx + 0.5, ty + sy[i], 5 + i * 3), 1.5, '#FFD08A', true, zScale);
+          }
+        }
+      }
+    };
+
+    if (!alongY) {
+      pyl(tx + 0, ty + 0.30, 0.24, 0.40);
+      door();
+      drawIsoBox(ctx, tx + 0.24, ty + 0.38, 19, 0.52, 0.24, 3, beamCol, null, zScale);
+      pyl(tx + 0.76, ty + 0.30, 0.24, 0.40);
+    } else {
+      pyl(tx + 0.30, ty + 0, 0.40, 0.24);
+      door();
+      drawIsoBox(ctx, tx + 0.38, ty + 0.24, 19, 0.24, 0.52, 3, beamCol, null, zScale);
+      pyl(tx + 0.30, ty + 0.76, 0.40, 0.24);
+    }
+  }
+
   function drawStructure(ctx, st, tx, ty, state, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
@@ -1273,7 +1656,7 @@ ZS.Renderer = (function () {
     const isUnpowered = state.isNight && def && def.requiresPower && !powered;
 
     // Soft ground shadow
-    if (!(def && def.passable)) {
+    if (!(def && def.passable) && !window.ZS_SILHOUETTE_MODE) {
       const sc = Iso.gridToScreen(tx + 0.52, ty + 0.55, 0.5);
       ctx.fillStyle = 'rgba(10, 16, 22, 0.28)';
       ctx.beginPath();
@@ -1314,6 +1697,18 @@ ZS.Renderer = (function () {
     switch (id) {
       case 'command_hq': {
         drawHqByLevel(ctx, st, tx, ty, state, timeSec, zScale);
+        break;
+      }
+
+      case 'barricade_wall': {
+        const mask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
+        drawConnectedWallTile(ctx, tx, ty, mask, lv, !!st.mounted, P, steelCol, maxAccent, zScale);
+        break;
+      }
+
+      case 'tactical_gate': {
+        const mask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
+        drawTacticalGateTile(ctx, tx, ty, mask, lv, P, steelCol, zScale);
         break;
       }
 
@@ -2375,6 +2770,15 @@ ZS.Renderer = (function () {
       ctx.stroke();
     }
 
+    // Gate slow aura ring (#C9D3DE, distinct from EMP cyan #5EF2FF)
+    if (z.inGateAura && !window.ZS_SILHOUETTE_MODE) {
+      ctx.strokeStyle = P.gateSlowRing || '#C9D3DE';
+      ctx.lineWidth = 1.5 * zScale;
+      ctx.beginPath();
+      ctx.ellipse(basePos.x, basePos.y, 11.4 * sc * zScale, 6.0 * sc * zScale, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Lv.3 Razor Pad Vulnerability ring (+15% incoming projectile damage)
     if (z.vulnOnPad) {
       ctx.fillStyle = P.dangerFill;
@@ -2873,7 +3277,14 @@ ZS.Renderer = (function () {
         const isUnpowered = state.isNight && def && def.requiresPower && !powered;
 
         const lv = st.level || 1;
-        const hasPips = id !== 'command_hq' && lv >= 2;
+        const isWall = id === 'barricade_wall' || (def && def.subType === 'wall');
+        const wallMask = isWall ? getWallConnectMask(state.structGrid, tx, ty) : 0;
+        const isWallInspOrHov =
+          (uiState.inspectedTile && uiState.inspectedTile.tx === tx && uiState.inspectedTile.ty === ty) ||
+          (uiState.hoverTile && uiState.hoverTile.tx === tx && uiState.hoverTile.ty === ty);
+        const isWallHub = isWall && wallMask !== 0 && ((wallMask & 5) !== 0 && (wallMask & 10) !== 0);
+        const showWallPips = isWall && lv >= 2 && (wallMask === 0 || isWallHub || isWallInspOrHov);
+        const hasPips = id !== 'command_hq' && (isWall ? showWallPips : lv >= 2);
         const hasRank = (st.rank || 0) >= 1;
         const topZ = id === 'command_hq'
           ? ((ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null)?.maxZ || 36)
@@ -3226,7 +3637,8 @@ ZS.Renderer = (function () {
           level: 1,
           hp: 100,
           maxHp: 100,
-          aimAngle: 0.78
+          aimAngle: 0.78,
+          previewMask: itemId === 'barricade_wall' || itemId === 'tactical_gate' ? 10 : undefined
         };
         drawStructure(tctx, dummySt, 0, 0, dummyState, true, 0.45, zoom);
       }
@@ -3250,6 +3662,7 @@ ZS.Renderer = (function () {
     render,
     renderItemThumbnail,
     getStructVisualTopZ,
+    getWallConnectMask,
     drawStructure,
     drawFloorTile
   };

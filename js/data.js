@@ -89,7 +89,42 @@ ZS.DATA = (function () {
     zombieBossCoat: '#591259',
     zombieBossCrack: '#E040FB',
     zombieBossSkin: '#F9DBFF',
-    zombieBossEye: '#FF4D6D'
+    zombieBossEye: '#FF4D6D',
+
+    // 5. Phase 2 Tokens (share/design/phase2-tokens.md)
+    mutantAcid: '#C8F542',
+    mutantAcidDim: '#6E8A1E',
+    mutantEmp: '#B26BFF',
+    mutantSpark: '#FFE14D',
+    mutantBone: '#F4EBDD',
+    zombieSpitterCoat: '#4F2147',
+    zombieSpitterLegs: '#3A1636',
+    zombieSpitterSkin: '#E9D3C2',
+    zombieLeaperCoat: '#7A2338',
+    zombieLeaperLegs: '#4A1522',
+    zombieLeaperSkin: '#F4D9CF',
+    zombieShockerCoat: '#2E1B4F',
+    zombieShockerLegs: '#1E1236',
+    zombieShockerPack: '#3B2A5E',
+    zombieShockerRod: '#6B5A8E',
+    zombieShockerSkin: '#D9CCE8',
+
+    reconRoute: '#FF8FA3',
+    reconRouteOutline: 'rgba(27, 36, 48, 0.55)',
+
+    wireWood: '#8B6843',
+    wireWoodDark: '#5E452B',
+    wireIron: '#4A5562',
+    wireCoil: '#BAC6D2',
+    wireCoilDim: '#6E7B88',
+    wireBarb: '#DCE5EE',
+    gatePylon: '#59636E',
+    gateBeam: '#4A5562',
+    gateBar: '#2B333D',
+    deckWood: '#8A6A45',
+    deckRail: '#6E5536',
+    deckSteelRail: '#3A434E',
+    gateSlowRing: '#C9D3DE'
   };
 
   return {
@@ -218,9 +253,15 @@ ZS.DATA = (function () {
     { id: 'decor',   iconId: 'cat-decor',   label: '모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
 
+  WALL_TIERS: {
+    1: { level: 1, name: '철조망 바리케이드', reqHqLevel: 1, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
+    2: { level: 2, name: '헤스코 전술 방벽', reqHqLevel: 2, upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
+    3: { level: 3, name: '합금 장갑 성벽', reqHqLevel: 3, upCost: { wood: 6, scrap: 18, coin: 6 }, maxHp: 640, thornsRatio: 0.35, thornsMin: 8, allowWallMount: true, mountBaseZ: 25.4, topZ: 27.7 }
+  },
+
   LV3_PERK_LABELS: {
-    hesco_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
-    blast_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
+    barricade_wall: '충격 반사 장갑 (근접 피격 35% 반사 · 상부 거치 유지)',
+    tactical_gate: '고장력 제압 게이트 (근접 둔화 40% · 피격 35% 반사)',
     razor_pad: '취약화 철조망 (둔화 60% · 받는 사격 피해 +15%)',
     rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
@@ -301,31 +342,35 @@ ZS.DATA = (function () {
     },
 
     // ================= DEFENSE: BARRIERS & TRAPS =================
-    hesco_wall: {
-      id: 'hesco_wall',
-      name: '헤스코 전술 방벽',
+    barricade_wall: {
+      id: 'barricade_wall',
+      name: '철조망 바리케이드',
       category: 'defense',
       layer: 'struct',
       subType: 'wall',
       reqHqLevel: 1,
-      cost: { wood: 10, scrap: 4 },
-      maxHp: 260,
-      desc: '철망 프레임과 고밀도 충진재로 구성된 현대 군용 표준 바리케이드입니다.'
+      cost: { wood: 6, scrap: 2 },
+      maxHp: 180,
+      thornsRatio: 0.15,
+      desc: '[3단 진화 성벽] 철조망(Lv.1) → 헤스코 방벽(Lv.2·상부 거치 해금) → 합금 장갑 성벽(Lv.3·35% 반사)으로 진화하며 인접 성벽·게이트와 자동 연결됩니다.'
     },
-    blast_wall: {
-      id: 'blast_wall',
-      name: '합금 장갑 방벽',
+    tactical_gate: {
+      id: 'tactical_gate',
+      name: '전술 방호 게이트',
       category: 'defense',
       layer: 'struct',
-      subType: 'wall',
-      reqHqLevel: 3,
-      cost: { wood: 6, scrap: 18 },
-      maxHp: 560,
-      desc: '중장갑 강철 경사 장갑판으로 제작되어 브루트 좀비의 돌파도 오래 버텨냅니다.'
+      subType: 'gate',
+      reqHqLevel: 2,
+      cost: { wood: 8, scrap: 16 },
+      maxHp: 420,
+      allowWallMount: false,
+      gateSlowRadius: 1.15,
+      gateSlowFactor: 0.75,
+      desc: '[전술 관문] 성벽과 매끄럽게 연결되며 좀비를 이 통로로 유도합니다. 통과 직전 적을 25% 둔화시킵니다 (거치 불가).'
     },
     razor_pad: {
       id: 'razor_pad',
-      name: '고장력 철조망 패드',
+      name: '스파이크 철조망 매트',
       category: 'defense',
       layer: 'struct',
       subType: 'trap',
@@ -335,7 +380,7 @@ ZS.DATA = (function () {
       maxHp: 180,
       trapDps: 11,
       slowFactor: 0.55,
-      desc: '[무전력 함정] 좀비가 밟고 지나가며 이동속도가 45% 감소하고 지속 피해를 입습니다.'
+      desc: '성벽 앞이나 게이트 입구에 까는 무전력 바닥 둔화·출혈 함정'
     },
 
     // ================= DEFENSE: MANNED POSTS (Pop: 1, Power: 0) =================

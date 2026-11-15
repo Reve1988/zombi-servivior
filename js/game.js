@@ -408,6 +408,11 @@ ZS.Game = (function () {
 
   function getUpgradeCost(def, fromLevel) {
     if (!isUpgradeableDef(def)) return null;
+    if (def.id === 'barricade_wall') {
+      if (fromLevel === 1) return { wood: 8, scrap: 6 };
+      if (fromLevel === 2) return { wood: 6, scrap: 18, coin: 6 };
+      return null;
+    }
     const base = def.cost || {};
     if (fromLevel === 1) {
       return {
@@ -426,9 +431,22 @@ ZS.Game = (function () {
     return null;
   }
 
+  function getStructureDisplayName(st) {
+    if (!st) return '';
+    if (st.id === 'command_hq') return DATA.HQ_STATS.name;
+    const def = DATA.ITEMS[st.id];
+    if (st.id === 'barricade_wall' && DATA.WALL_TIERS) {
+      const tier = DATA.WALL_TIERS[Math.max(1, Math.min(3, st.level || 1))];
+      if (tier && tier.name) return tier.name;
+    }
+    return def ? def.name : st.id;
+  }
+
   function getStructLevelProfile(def, level) {
     const lv = Math.max(1, Math.min(3, level || 1));
     let hpScale = 1.0;
+    let exactMaxHp = null;
+    let levelName = def.name;
     let dmgScale = 1.0;
     let rateScale = 1.0;
     let rangeAdd = 0;
@@ -442,8 +460,12 @@ ZS.Game = (function () {
     let trapDps = def.trapDps || 0;
     let trapWear = 3.2;
     let slowFactor = def.slowFactor || 1.0;
+    let gateSlowFactor = def.gateSlowFactor || 1.0;
     let vulnMult = 1.0;
-    let thornsRatio = 0;
+    let thornsRatio = def.thornsRatio || 0;
+    let thornsMin = 4;
+    let allowWallMount = false;
+    let mountBaseZ = 0;
     let pellets = def.pellets || 1;
     let knockback = 0;
     let pierceCount = 1;
@@ -452,11 +474,32 @@ ZS.Game = (function () {
     let chainCount = def.chainCount || 3;
     let slowDuration = def.slowDuration || 1.5;
 
-    if (def.subType === 'wall') {
+    if (def.id === 'barricade_wall' && DATA.WALL_TIERS && DATA.WALL_TIERS[lv]) {
+      const tier = DATA.WALL_TIERS[lv];
+      exactMaxHp = tier.maxHp;
+      levelName = tier.name;
+      thornsRatio = tier.thornsRatio || 0;
+      thornsMin = tier.thornsMin || 0;
+      allowWallMount = !!tier.allowWallMount;
+      mountBaseZ = tier.mountBaseZ || 0;
+    } else if (def.subType === 'wall') {
       if (lv === 2) hpScale = 1.45;
       else if (lv === 3) {
         hpScale = 2.00;
         thornsRatio = 0.35;
+        thornsMin = 8;
+      }
+    } else if (def.subType === 'gate') {
+      if (lv === 1) {
+        gateSlowFactor = def.gateSlowFactor || 0.75;
+      } else if (lv === 2) {
+        hpScale = 1.45;
+        gateSlowFactor = def.gateSlowFactor || 0.75;
+      } else if (lv === 3) {
+        hpScale = 2.05;
+        gateSlowFactor = 0.60;
+        thornsRatio = 0.35;
+        thornsMin = 8;
       }
     } else if (def.id === 'razor_pad') {
       if (lv === 2) {
@@ -554,7 +597,8 @@ ZS.Game = (function () {
 
     return {
       level: lv,
-      baseMaxHp: Math.round((def.maxHp || 100) * hpScale),
+      levelName,
+      baseMaxHp: exactMaxHp !== null ? exactMaxHp : Math.round((def.maxHp || 100) * hpScale),
       dmgScale,
       rateScale,
       rangeAdd,
@@ -568,8 +612,12 @@ ZS.Game = (function () {
       trapDps,
       trapWear,
       slowFactor,
+      gateSlowFactor,
       vulnMult,
       thornsRatio,
+      thornsMin,
+      allowWallMount,
+      mountBaseZ,
       pellets,
       knockback,
       pierceCount,
@@ -1105,8 +1153,14 @@ ZS.Game = (function () {
     spawnBurstParticles(cx, cy, 12, pipCol, 10);
     addFloatingText(cx, cy, 28, `Lv.${st.level}`, DATA.PALETTE.levelPip, 14, strokeCol);
 
+    if (def.subType === 'wall' || def.subType === 'gate') {
+      recomputeFlow();
+    }
+
     if (st.level === 3 && DATA.LV3_PERK_LABELS && DATA.LV3_PERK_LABELS[def.id]) {
-      banner(`[${def.name}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
+      banner(`[${getStructureDisplayName(st)}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
+    } else if (def.id === 'barricade_wall' && st.level === 2) {
+      banner(`[${getStructureDisplayName(st)}] Lv.2 진화 완료`, '방호벽이 헤스코 전술 방벽으로 진화했습니다 (상부 거치 해금).', 'good');
     }
 
     saveGame();
@@ -1245,7 +1299,7 @@ ZS.Game = (function () {
       pendingVeteranDemolish = null;
       const refundTotal = getCumulativeRefundCost(st, def);
       state.structGrid[ty][tx] = null;
-      spawnStructureDebris(tx + 0.5, ty + 0.5, st.id, 9);
+      spawnStructureDebris(tx + 0.5, ty + 0.5, st.id, 9, st.level || 1);
       if (rank >= 1) {
         spawnBadgeShatterVfx(tx + 0.5, ty + 0.5, rank);
       }
@@ -1534,7 +1588,7 @@ ZS.Game = (function () {
     state.flares.push({ x: gx, y: gy, radius: 4.5, life: 4.5 });
     spawnBurstParticles(gx, gy, 10, '#ffae42', 22);
     spawnBurstParticles(gx, gy, 14, DATA.PALETTE.danger, 16);
-    spawnStructureDebris(gx, gy, 'hesco_wall', 8);
+    spawnStructureDebris(gx, gy, 'barricade_wall', 8, 2);
     triggerScreenShake(7.5, 0.42);
     ZS.Audio.playExplosion();
 
@@ -2200,10 +2254,11 @@ ZS.Game = (function () {
       const tx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
       const ty = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
 
-      // Check passable razor pad trap under zombie
+      // Check passable razor pad trap & nearby tactical_gate slow aura (radius 1.15)
       const under = state.structGrid[ty][tx];
       let slowMult = z.slowTimer > 0 ? 0.52 : 1.0;
       z.vulnOnPad = false;
+      z.inGateAura = false;
       if (under && under.id === 'razor_pad') {
         const rDef = DATA.ITEMS.razor_pad;
         const rProf = getStructLevelProfile(rDef, under.level || 1);
@@ -2212,13 +2267,29 @@ ZS.Game = (function () {
         z.hp -= rProf.trapDps * dt;
         under.hp -= rProf.trapWear * dt;
         if (under.hp <= 0) {
+          const rLv = under.level || 1;
           state.structGrid[ty][tx] = null;
-          spawnStructureDebris(tx + 0.5, ty + 0.5, 'razor_pad', 7);
+          spawnStructureDebris(tx + 0.5, ty + 0.5, 'razor_pad', 7, rLv);
           structureDestroyed = true;
         }
         if (z.hp <= 0) {
           damageZombie(i, 1, '#cbd5e1', false);
           continue;
+        }
+      }
+
+      for (let gy = Math.max(0, ty - 2); gy <= Math.min(N - 1, ty + 2); gy++) {
+        for (let gx = Math.max(0, tx - 2); gx <= Math.min(N - 1, tx + 2); gx++) {
+          const gs = state.structGrid[gy] && state.structGrid[gy][gx];
+          if (!gs || gs.id !== 'tactical_gate' || gs.hp <= 0) continue;
+          const gDef = DATA.ITEMS.tactical_gate;
+          const gRad = (gDef && gDef.gateSlowRadius) || 1.15;
+          if (Math.hypot(z.x - (gx + 0.5), z.y - (gy + 0.5)) <= gRad) {
+            const gProf = gDef ? getStructLevelProfile(gDef, gs.level || 1) : null;
+            const gSlow = gProf && gProf.gateSlowFactor ? gProf.gateSlowFactor : 0.75;
+            slowMult = Math.min(slowMult, gSlow);
+            z.inGateAura = true;
+          }
         }
       }
 
@@ -2307,20 +2378,21 @@ ZS.Game = (function () {
           if (blockingTarget.hp <= 0) {
             const lostRank = blockingTarget.rank || computeRankFromXp(blockingTarget.xp || 0);
             const destroyedId = blockingTarget.id;
+            const destroyedLv = blockingTarget.level || 1;
             state.structGrid[bty][btx] = null;
-            spawnStructureDebris(btx + 0.5, bty + 0.5, destroyedId, 14);
+            spawnStructureDebris(btx + 0.5, bty + 0.5, destroyedId, 14, destroyedLv);
             spawnBurstParticles(btx + 0.5, bty + 0.5, 10, DATA.PALETTE.danger, 8);
             if (lostRank >= 1) {
               spawnBadgeShatterVfx(btx + 0.5, bty + 0.5, lostRank);
               const rInfo = getVeterancyRankInfo(lostRank);
-              banner(`[${rInfo.name}] ${bDef ? bDef.name : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
+              banner(`[${rInfo.name}] ${bDef ? getStructureDisplayName(blockingTarget) : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
             }
             structureDestroyed = true;
           }
 
-          // Wall Lv.3 Thorns: reflect max(8, round(z.damage * 0.35)) + orange spark line (0.12s)
+          // Wall/Gate Thorns: Lv.1 wire 15% (min 4), Lv.3 wall/gate 35% (min 8) + orange spark line (0.12s)
           if (bProf && bProf.thornsRatio > 0) {
-            const reflDmg = Math.max(8, Math.round(z.damage * bProf.thornsRatio));
+            const reflDmg = Math.max(bProf.thornsMin || 4, Math.round(z.damage * bProf.thornsRatio));
             state.projectiles.push({
               kind: 'spark',
               x1: btx + 0.5,
@@ -2499,10 +2571,17 @@ ZS.Game = (function () {
     }
   }
 
-  function getStructureDebrisPalette(itemId) {
+  function getStructureDebrisPalette(itemId, level) {
+    if (itemId === 'barricade_wall') {
+      const lv = level || 1;
+      if (lv >= 3) return ['#6B7686', '#F0BD35', '#FF9F43'];
+      if (lv === 2) return ['#C9B48A', '#9E8758', '#8C96A3'];
+      return ['#8B6843', '#BAC6D2', '#5E452B'];
+    }
     switch (itemId) {
+      case 'tactical_gate': return ['#59636E', '#4A5562', '#F0BD35'];
       case 'hesco_wall': return ['#C9B48A', '#9E8758', '#8C96A3'];
-      case 'blast_wall': return ['#6B7686', '#F0BD35', '#8C96A3'];
+      case 'blast_wall': return ['#6B7686', '#F0BD35', '#FF9F43'];
       case 'razor_pad': return ['#4A525C', '#C9D3DE', '#596574'];
       case 'rifle_bunker': return ['#B5A27A', '#55684F', '#8C96A3'];
       case 'shotgun_post': return ['#B5A27A', '#3A4654', '#EBA834'];
@@ -2528,8 +2607,8 @@ ZS.Game = (function () {
     }
   }
 
-  function spawnStructureDebris(gx, gy, itemId, count) {
-    const cols = getStructureDebrisPalette(itemId);
+  function spawnStructureDebris(gx, gy, itemId, count, level) {
+    const cols = getStructureDebrisPalette(itemId, level);
     const n = count || 12;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -2712,6 +2791,16 @@ ZS.Game = (function () {
       state.agents = d.agents ?? DATA.HQ_STATS.startingAgents;
       state.debugBonusPopCap = d.debugBonusPopCap || 0;
       state.freeVouchers = d.freeVouchers || {};
+      let migratedWalls = false;
+      if (state.freeVouchers.hesco_wall || state.freeVouchers.blast_wall) {
+        state.freeVouchers.barricade_wall =
+          (state.freeVouchers.barricade_wall || 0) +
+          (state.freeVouchers.hesco_wall || 0) +
+          (state.freeVouchers.blast_wall || 0);
+        delete state.freeVouchers.hesco_wall;
+        delete state.freeVouchers.blast_wall;
+        migratedWalls = true;
+      }
       state.floorGrid = nextFloorGrid;
       state.structGrid = nextStructGrid;
 
@@ -2719,6 +2808,15 @@ ZS.Game = (function () {
         for (let x = 0; x < N; x++) {
           const s = state.structGrid[y] && state.structGrid[y][x];
           if (!s) continue;
+          if (s.id === 'hesco_wall') {
+            s.id = 'barricade_wall';
+            s.level = Math.max(2, s.level || 1);
+            migratedWalls = true;
+          } else if (s.id === 'blast_wall') {
+            s.id = 'barricade_wall';
+            s.level = 3;
+            migratedWalls = true;
+          }
           if (!s.level) s.level = s.id === 'command_hq' ? state.hqLevel : 1;
           if (s.id !== 'command_hq') {
             if (!s.uid) s.uid = nextStructUid++;
@@ -2743,7 +2841,7 @@ ZS.Game = (function () {
       } else {
         refreshTraderOffers(false);
       }
-      if (offset > 0) saveGame();
+      if (offset > 0 || migratedWalls) saveGame();
       notifyUi();
       return true;
     } catch (e) {
@@ -2895,6 +2993,7 @@ ZS.Game = (function () {
     upgradeHq,
     isUpgradeableDef,
     getUpgradeCost,
+    getStructureDisplayName,
     getStructLevelProfile,
     canUpgradeStructure,
     upgradeStructure,
