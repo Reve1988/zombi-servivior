@@ -334,7 +334,7 @@ ZS.Game = (function () {
         maxLife: 0.8
       });
       addFloatingText(tx + 0.5, ty + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
-      banner(`🎖️ [${def.name}] ${rInfo.name} 진급!`, `전투 숙련도 Rank ${newRank} 달성 — 공격력 +${Math.round(rInfo.dmgBonus * 100)}% · 연사 +${Math.round(rInfo.rateBonus * 100)}%`, 'good');
+      banner(`[${def.name}] ${rInfo.name} 진급!`, `전투 숙련도 Rank ${newRank} 달성 — 공격력 +${Math.round(rInfo.dmgBonus * 100)}% · 연사 +${Math.round(rInfo.rateBonus * 100)}%`, 'good');
     }
   }
 
@@ -848,7 +848,7 @@ ZS.Game = (function () {
       const c = nextInfo.cost || {};
       return {
         ok: false,
-        reason: `증축 자원이 부족합니다. (필요: 🪵${c.wood || 0} · 🔩${c.scrap || 0} · 🪙${c.coin || 0})`,
+        reason: `증축 자원이 부족합니다. (필요: 목재 ${c.wood || 0} · 고철 ${c.scrap || 0} · 코인 ${c.coin || 0})`,
         nextInfo
       };
     }
@@ -1033,7 +1033,7 @@ ZS.Game = (function () {
     if (!canAffordCost(cost)) {
       return {
         ok: false,
-        reason: `강화 자원이 부족합니다. (필요: 🪵${cost.wood || 0} · 🔩${cost.scrap || 0} · 🪙${cost.coin || 0})`,
+        reason: `강화 자원이 부족합니다. (필요: 목재 ${cost.wood || 0} · 고철 ${cost.scrap || 0} · 코인 ${cost.coin || 0})`,
         cost
       };
     }
@@ -1106,7 +1106,7 @@ ZS.Game = (function () {
     addFloatingText(cx, cy, 28, `Lv.${st.level}`, DATA.PALETTE.levelPip, 14, strokeCol);
 
     if (st.level === 3 && DATA.LV3_PERK_LABELS && DATA.LV3_PERK_LABELS[def.id]) {
-      banner(`⚡ [${def.name}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
+      banner(`[${def.name}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
     }
 
     saveGame();
@@ -1234,7 +1234,7 @@ ZS.Game = (function () {
           const rInfo = getVeterancyRankInfo(rank);
           ZS.Audio.playError();
           banner(
-            `⚠️ [${rInfo.name}] ${def ? def.name : st.id} — 계급이 사라집니다`,
+            `[${rInfo.name}] ${def ? def.name : st.id} — 계급이 사라집니다`,
             `철거하면 누적 숙련도(${Math.floor(st.xp || 0)} XP)와 계급 배지가 영구 소멸합니다. 4초 내 한 번 더 클릭하면 철거됩니다.`,
             'warn'
           );
@@ -1280,20 +1280,20 @@ ZS.Game = (function () {
     if (cost.wood) {
       const rw = Math.max(1, Math.round(cost.wood * 0.8));
       state.wood += rw;
-      parts.push(`+${rw}🪵`);
+      parts.push(`목재 +${rw}`);
     }
     if (cost.scrap) {
       const rs = Math.max(1, Math.round(cost.scrap * 0.8));
       state.scrap += rs;
-      parts.push(`+${rs}🔩`);
+      parts.push(`고철 +${rs}`);
     }
     if (cost.coin) {
       const rc = Math.max(1, Math.round(cost.coin * 0.8));
       state.coin += rc;
-      parts.push(`+${rc}🪙`);
+      parts.push(`코인 +${rc}`);
     }
     if (parts.length > 0) {
-      addFloatingText(tx + 0.5, ty + 0.5, 16, `환급 ${parts.join(' ')}`, DATA.PALETTE.gold, 11);
+      addFloatingText(tx + 0.5, ty + 0.5, 16, `환급 ${parts.join(' ')}`, DATA.PALETTE.gold, 12);
     }
   }
 
@@ -1321,7 +1321,7 @@ ZS.Game = (function () {
     if (!info.needed) return false;
     if (state.wood < info.woodCost || state.scrap < info.scrapCost) {
       ZS.Audio.playError();
-      banner('수리 자재 부족', `전체 수리에 🪵${info.woodCost}, 🔩${info.scrapCost}이 필요합니다.`, 'warn');
+      banner('수리 자재 부족', `전체 수리에 목재 ${info.woodCost}, 고철 ${info.scrapCost}이 필요합니다.`, 'warn');
       return false;
     }
     state.wood -= info.woodCost;
@@ -1376,14 +1376,14 @@ ZS.Game = (function () {
     if (offer.type === 'agent') {
       if (state.agents >= state.popCap) {
         ZS.Audio.playError();
-        banner('숙소 수용량 부족!', '먼저 [⚡전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
+        banner('숙소 수용량 부족!', '먼저 [전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
         return false;
       }
       state.coin -= offer.coinCost;
       state.agents += offer.amount;
       offer.sold = true;
       ZS.Audio.playTrade();
-      banner('베테랑 요원 합류!', `작전 요원이 기지에 배치되었습니다. (현재 요원 👥 ${state.agents}/${state.popCap})`, 'good');
+      banner('베테랑 요원 합류!', `작전 요원이 기지에 배치되었습니다. (현재 요원 ${state.agents}/${state.popCap})`, 'good');
       saveGame();
       notifyUi();
       return true;
@@ -1445,8 +1445,8 @@ ZS.Game = (function () {
     ZS.Audio.playWaveStart();
     const isBossWave = state.wave % 5 === 0;
     banner(
-      isBossWave ? `⚠️ WAVE ${state.wave} — 알파 변이체 경보!` : `🌙 WAVE ${state.wave} 야간 방어 개시`,
-      `충전 전력 ⚡${Math.round(state.power)} · 적 개체 ${state.waveTotalZombies}기 접근 중`,
+      isBossWave ? `WAVE ${state.wave} — 알파 변이체 경보!` : `WAVE ${state.wave} 야간 방어 개시`,
+      `충전 전력 ${Math.round(state.power)} · 적 개체 ${state.waveTotalZombies}기 접근 중`,
       isBossWave ? 'warn' : 'info'
     );
     notifyUi();
@@ -1508,7 +1508,7 @@ ZS.Game = (function () {
       }
     }
     ZS.Audio.playBuild();
-    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `🛠️ 나노 수리 드론 가동! (${count}개 시설 회복)`, DATA.PALETTE.health, 13);
+    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `나노 수리 드론 가동! (${count}개 시설 회복)`, DATA.PALETTE.health, 13);
     notifyUi();
     return true;
   }
@@ -1532,7 +1532,7 @@ ZS.Game = (function () {
         damageZombie(i, strikeDmg * (1 - d * 0.18), '#ff9f43');
       }
     }
-    addFloatingText(gx, gy, 24, '🚀 전술 조명탄 & 폭격!', '#ffb142', 13);
+    addFloatingText(gx, gy, 24, '전술 조명탄 & 폭격!', '#ffb142', 13);
     notifyUi();
     return true;
   }
@@ -1671,7 +1671,7 @@ ZS.Game = (function () {
     state.blackoutFlickerTimer = 0.50;
     state.power = 0;
     ZS.Audio.playBlackout();
-    banner('⚡ 배터리 방전 — 블랙아웃!', '자동 포탑과 전기 투광등이 정지했습니다! 무전력 전투원이 방어를 지속합니다.', 'warn');
+    banner('배터리 방전 — 블랙아웃!', '자동 포탑과 전기 투광등이 정지했습니다! 무전력 전투원이 방어를 지속합니다.', 'warn');
   }
 
   function updateRepairBays(dt) {
@@ -2142,7 +2142,7 @@ ZS.Game = (function () {
         18,
         isCrit ? `${dmg}!` : `${dmg}`,
         isCrit ? DATA.PALETTE.critText : textColor || '#fff',
-        isCrit ? 13 : 11,
+        isCrit ? 13 : 12,
         isCrit ? DATA.PALETTE.critStroke : null
       );
     }
@@ -2161,10 +2161,11 @@ ZS.Game = (function () {
       spawnZombieDeathVfx(z, def);
       if (def.isBoss) {
         state.bossDefeated = true;
-        addFloatingText(z.x, z.y, 24, `+${scrapGain}🔩 +${coinGain}🪙`, DATA.PALETTE.gold, 13);
-        banner('🏆 알파 보스 격파!', `+${scrapGain}🔩 +${coinGain}🪙 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
+        addFloatingText(z.x - 0.18, z.y, 24, `+${scrapGain}`, DATA.PALETTE.resScrap, 13, DATA.PALETTE.outlineDark);
+        addFloatingText(z.x + 0.18, z.y, 26, `+${coinGain}`, DATA.PALETTE.coin, 13, DATA.PALETTE.outlineDark);
+        banner('알파 보스 격파!', `고철 +${scrapGain} · 코인 +${coinGain} 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
       } else if (Math.random() < 0.35 || z.type === 'brute') {
-        addFloatingText(z.x, z.y, 16, `+${scrapGain}🔩`, '#cbd5e1', 10);
+        addFloatingText(z.x, z.y, 16, `+${scrapGain}`, DATA.PALETTE.resScrap, 12, DATA.PALETTE.outlineDark);
       }
 
       state.zombies.splice(index, 1);
@@ -2298,7 +2299,7 @@ ZS.Game = (function () {
             if (lostRank >= 1) {
               spawnBadgeShatterVfx(btx + 0.5, bty + 0.5, lostRank);
               const rInfo = getVeterancyRankInfo(lostRank);
-              banner(`⚠️ [${rInfo.name}] ${bDef ? bDef.name : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
+              banner(`[${rInfo.name}] ${bDef ? bDef.name : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
             }
             structureDestroyed = true;
           }
@@ -2384,10 +2385,10 @@ ZS.Game = (function () {
     refreshTraderOffers(false);
     ZS.Audio.playWaveClear();
 
-    const agentMsg = arrivedAgent > 0 ? ` · 신규 요원 +1👥 합류!` : '';
+    const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : '';
     banner(
-      `☀️ WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
-      `보상 +${woodReward}🪵 +${scrapReward}🔩 +${totalCoin}🪙 · 주간 충전 +${gainedPower}⚡${agentMsg}`,
+      `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
+      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 주간 충전 전력 +${gainedPower}${agentMsg}`,
       'good'
     );
 
@@ -2398,7 +2399,7 @@ ZS.Game = (function () {
   function triggerGameOver() {
     state.phase = 'gameover';
     ZS.Audio.playBlackout();
-    banner('🚨 지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
+    banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
     notifyUi();
   }
 
@@ -2734,7 +2735,7 @@ ZS.Game = (function () {
     state.scrap += add;
     state.coin += add;
     ZS.Audio.playTrade();
-    banner(`🛠️ [DEBUG] +${add} 자원 지급`, `목재·고철·코인 각 +${add} 추가 완료`, 'good');
+    banner(`[DEBUG] +${add} 자원 지급`, `목재·고철·코인 각 +${add} 추가 완료`, 'good');
     saveGame();
     notifyUi();
     return true;
@@ -2748,14 +2749,14 @@ ZS.Game = (function () {
         triggerBlackout();
       } else {
         ZS.Audio.playBlackout();
-        banner('🛠️ [DEBUG] 전력 강제 방전 (0⚡)', '블랙아웃 테스트를 위해 배터리를 0으로 방전했습니다.', 'warn');
+        banner('[DEBUG] 전력 강제 방전 (0)', '블랙아웃 테스트를 위해 배터리를 0으로 방전했습니다.', 'warn');
       }
     } else {
       state.power = Math.max(85, state.powerCap);
       state.blackoutTriggered = false;
       state.blackoutFlickerTimer = 0;
       ZS.Audio.playBuild();
-      banner(`🛠️ [DEBUG] 전력 즉시 완충 (${state.power}⚡)`, '자동 포탑 및 전기 조명 전원이 복구되었습니다.', 'good');
+      banner(`[DEBUG] 전력 즉시 완충 (${state.power})`, '자동 포탑 및 전기 조명 전원이 복구되었습니다.', 'good');
     }
     saveGame();
     notifyUi();
@@ -2769,7 +2770,7 @@ ZS.Game = (function () {
     recalculateBaseStats(true);
     state.agents += n;
     ZS.Audio.playTrade();
-    banner(`🛠️ [DEBUG] 요원 +${n}명 충원`, `가용 요원 ${state.agents}명 · 숙소 수용량 ${state.popCap}명으로 확장`, 'good');
+    banner(`[DEBUG] 요원 +${n}명 충원`, `가용 요원 ${state.agents}명 · 숙소 수용량 ${state.popCap}명으로 확장`, 'good');
     saveGame();
     notifyUi();
     return true;
@@ -2779,14 +2780,14 @@ ZS.Game = (function () {
     if (!isDebugAllowed()) return false;
     if (state.phase !== 'day') {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 주간 전용 기능', '웨이브 번호 이동은 주간 정비 페이즈에서만 가능합니다.', 'warn');
+      banner('[DEBUG] 주간 전용 기능', '웨이브 번호 이동은 주간 정비 페이즈에서만 가능합니다.', 'warn');
       return false;
     }
     const step = Number(delta) || 1;
     state.wave = Math.max(1, state.wave + step);
     refreshTraderOffers(false);
     ZS.Audio.playBuild();
-    banner(`🛠️ [DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
+    banner(`[DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
     saveGame();
     notifyUi();
     return true;
@@ -2796,19 +2797,19 @@ ZS.Game = (function () {
     if (!isDebugAllowed()) return false;
     if (tx === undefined || ty === undefined || tx < 0 || ty < 0 || tx >= N || ty >= N) {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 대상 시설 미선택', '먼저 초소 또는 자동포탑을 클릭해 조회한 뒤 실행하세요.', 'warn');
+      banner('[DEBUG] 대상 시설 미선택', '먼저 초소 또는 자동포탑을 클릭해 조회한 뒤 실행하세요.', 'warn');
       return false;
     }
     const s = state.structGrid[ty] && state.structGrid[ty][tx];
     if (!s || s.id === 'command_hq') {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 숙련도 부여 불가', '전투원 초소(manned) 또는 자동포탑(turret)을 선택해 주세요.', 'warn');
+      banner('[DEBUG] 숙련도 부여 불가', '전투원 초소(manned) 또는 자동포탑(turret)을 선택해 주세요.', 'warn');
       return false;
     }
     const def = DATA.ITEMS[s.id];
     if (!isCombatVeterancyDef(def)) {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 숙련도 대상 아님', `[${def ? def.name : s.id}] 시설은 전투 숙련도 시스템 대상이 아닙니다.`, 'warn');
+      banner('[DEBUG] 숙련도 대상 아님', `[${def ? def.name : s.id}] 시설은 전투 숙련도 시스템 대상이 아닙니다.`, 'warn');
       return false;
     }
     const gain = Number(rawXp) || 20;
@@ -2831,10 +2832,10 @@ ZS.Game = (function () {
         maxLife: 0.8
       });
       addFloatingText(tx + 0.5, ty + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
-      banner(`🎖️ [DEBUG] [${def.name}] ${rInfo.name} 진급!`, `숙련도 +${gain} XP 부여 (누적 ${s.xp.toFixed(1)} XP · Rank ${newRank})`, 'good');
+      banner(`[DEBUG] [${def.name}] ${rInfo.name} 진급!`, `숙련도 +${gain} XP 부여 (누적 ${s.xp.toFixed(1)} XP · Rank ${newRank})`, 'good');
     } else {
       ZS.Audio.playBuild();
-      banner(`🛠️ [DEBUG] [${def.name}] +${gain} XP 부여`, `현재 누적 ${s.xp.toFixed(1)} XP (${getVeterancyRankInfo(newRank).name})`, 'good');
+      banner(`[DEBUG] [${def.name}] +${gain} XP 부여`, `현재 누적 ${s.xp.toFixed(1)} XP (${getVeterancyRankInfo(newRank).name})`, 'good');
     }
     saveGame();
     notifyUi();
