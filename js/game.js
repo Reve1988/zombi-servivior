@@ -32,8 +32,15 @@ ZS.Game = (function () {
     popUsed: 0,
 
     cozyScore: 0,
+    cozyFloorRaw: 0,
+    cozyFloorScore: 0,
+    cozyStructScore: 0,
+    cozySynergyScore: 0,
     cozyDiversityBonus: 0,
+    cozyGroupCounts: {},
     cozyTier: DATA.COZY_TIERS[0],
+    cozyTierUpTimer: 0,
+    cozyPulseSeq: 0,
 
     freeVouchers: {},
     traderOffers: [],
@@ -159,7 +166,8 @@ ZS.Game = (function () {
       upgradeAnimTimer: 0
     };
 
-    recalculateBaseStats();
+    recalculateBaseStats(true);
+    state.cozyTierUpTimer = 0;
     state.power = state.powerCap;
     recomputeFlow();
     refreshTraderOffers(false);
@@ -483,14 +491,18 @@ ZS.Game = (function () {
     };
   }
 
-  function recalculateBaseStats() {
+  function recalculateBaseStats(silentTierUp) {
     const hqInfo = getHqLevelInfo(state.hqLevel);
+    const prevTierLevel = state.cozyTier ? state.cozyTier.level : 1;
     let powerCap = hqInfo.basePowerCap;
     let dayCharge = hqInfo.baseDayCharge;
     let nightIdleDrain = 0;
     let popCap = hqInfo.basePopCap;
     let popUsed = 0;
-    let cozyRaw = 0;
+    let floorRaw = 0;
+    let synergyScore = 0;
+    const structGroups = {};
+    const groupCounts = {};
     const uniqueGroups = new Set();
 
     const hqStruct = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
@@ -508,7 +520,7 @@ ZS.Game = (function () {
         const fid = state.floorGrid[y][x];
         const fDef = fid ? DATA.ITEMS[fid] : null;
         if (fDef && fDef.cozy) {
-          cozyRaw += fDef.cozy;
+          floorRaw += fDef.cozy;
           if (fDef.cozyGroup) uniqueGroups.add(fDef.cozyGroup);
         }
 
@@ -534,17 +546,35 @@ ZS.Game = (function () {
         if (def.popUse) popUsed += def.popUse;
 
         if (prof.cozy) {
-          cozyRaw += prof.cozy;
+          const grp = def.cozyGroup || def.id;
+          if (!structGroups[grp]) structGroups[grp] = [];
+          structGroups[grp].push(prof.cozy);
+          groupCounts[grp] = (groupCounts[grp] || 0) + 1;
+
+          // Lounge tile +3 decor synergy is separate from the 60-point floor cap
           if (fDef && fDef.cozyTileBonus && def.category === 'decor') {
-            cozyRaw += fDef.cozyTileBonus;
+            synergyScore += fDef.cozyTileBonus;
           }
           if (def.cozyGroup) uniqueGroups.add(def.cozyGroup);
         }
       }
     }
 
+    const floorCap = DATA.COZY_FLOOR_CAP || 60;
+    const floorScore = Math.min(floorCap, floorRaw);
+
+    // Same cozyGroup structures: first 3 at 100%, 4th+ at Math.round(score * 0.5) (sorted descending so upgraded Lv.2/3 get full credit first)
+    let structScore = 0;
+    const grpKeys = Object.keys(structGroups);
+    for (let i = 0; i < grpKeys.length; i++) {
+      const scores = structGroups[grpKeys[i]].sort((a, b) => b - a);
+      for (let k = 0; k < scores.length; k++) {
+        structScore += k < 3 ? scores[k] : Math.round(scores[k] * 0.5);
+      }
+    }
+
     const diversityBonus = uniqueGroups.size * 5;
-    const totalCozy = cozyRaw + diversityBonus;
+    const totalCozy = floorScore + structScore + synergyScore + diversityBonus;
 
     let tier = DATA.COZY_TIERS[0];
     for (let i = 0; i < DATA.COZY_TIERS.length; i++) {
@@ -558,9 +588,67 @@ ZS.Game = (function () {
     state.nightIdleDrain = nightIdleDrain;
     state.popCap = popCap;
     state.popUsed = popUsed;
+    state.cozyFloorRaw = floorRaw;
+    state.cozyFloorScore = floorScore;
+    state.cozyStructScore = structScore;
+    state.cozySynergyScore = synergyScore;
+    state.cozyGroupCounts = groupCounts;
     state.cozyScore = totalCozy;
     state.cozyDiversityBonus = diversityBonus;
     state.cozyTier = tier;
+
+    if (!silentTierUp && tier.level > prevTierLevel) {
+      state.cozyTierUpTimer = 0.8;
+      state.cozyPulseSeq = (state.cozyPulseSeq || 0) + 1;
+      state.flares.push({
+        x: DATA.HQ_POS.x + 0.5,
+        y: DATA.HQ_POS.y + 0.5,
+        radius: 3.0,
+        life: 0.8
+      });
+      banner(`안락함 Lv.${tier.level} — ${tier.title}`, `요원 화력 +${Math.round(tier.agentDmg * 100)}% · 숙련도 +${Math.round((tier.xpBonus || 0) * 100)}% · 무료수리 ${Math.round(tier.freeRepair * 100)}%`, 'good');
+    }
+  }
+
+  function getPlacementCozyPreview(itemId, tx, ty) {
+    const def = DATA.ITEMS[itemId];
+    if (!def || !def.cozy) return null;
+    if (def.layer === 'floor') {
+      const cap = DATA.COZY_FLOOR_CAP || 60;
+      const curRaw = state.cozyFloorRaw || 0;
+      let prevFloorCozy = 0;
+      if (tx !== undefined && ty !== undefined && tx >= 0 && ty >= 0 && tx < N && ty < N) {
+        const oldFid = state.floorGrid[ty] && state.floorGrid[ty][tx];
+        const oldDef = oldFid ? DATA.ITEMS[oldFid] : null;
+        if (oldDef && oldDef.cozy) prevFloorCozy = oldDef.cozy;
+      }
+      const nextRaw = curRaw - prevFloorCozy + def.cozy;
+      const effectiveGain = Math.max(0, Math.min(cap, nextRaw) - Math.min(cap, curRaw));
+      return {
+        base: def.cozy,
+        gain: effectiveGain,
+        isDiminished: false,
+        isFloorCapped: curRaw >= cap || effectiveGain === 0
+      };
+    }
+
+    const grp = def.cozyGroup || def.id;
+    const existingCount = (state.cozyGroupCounts && state.cozyGroupCounts[grp]) || 0;
+    const isDiminished = existingCount >= 3;
+    let gain = isDiminished ? Math.round(def.cozy * 0.5) : def.cozy;
+    if (tx !== undefined && ty !== undefined && tx >= 0 && ty >= 0 && tx < N && ty < N) {
+      const fid = state.floorGrid[ty] && state.floorGrid[ty][tx];
+      const fDef = fid ? DATA.ITEMS[fid] : null;
+      if (fDef && fDef.cozyTileBonus && def.category === 'decor') {
+        gain += fDef.cozyTileBonus;
+      }
+    }
+    return {
+      base: def.cozy,
+      gain,
+      isDiminished,
+      isFloorCapped: false
+    };
   }
 
   function getStructureEffectiveStats(st, tx, ty, overrideLevel) {
@@ -1362,7 +1450,10 @@ ZS.Game = (function () {
     if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
     if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
 
-    // Update HQ / structure upgrade animations
+    // Update HQ / structure / cozy tier-up animations
+    if (state.cozyTierUpTimer > 0) {
+      state.cozyTierUpTimer = Math.max(0, state.cozyTierUpTimer - rawDt);
+    }
     const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
     if (hqSt && hqSt.upgradeAnimTimer > 0) {
       const prevT = hqSt.upgradeAnimTimer;
@@ -2243,7 +2334,8 @@ ZS.Game = (function () {
         }
       }
 
-      recalculateBaseStats();
+      recalculateBaseStats(true);
+      state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
       recomputeFlow();
       if (Array.isArray(d.traderOffers) && d.traderOffers.length > 0) {
@@ -2284,6 +2376,7 @@ ZS.Game = (function () {
     getVeterancyRankInfo,
     computeRankFromXp,
     recalculateBaseStats,
+    getPlacementCozyPreview,
     getStructureEffectiveStats,
     canPlaceItem,
     placeItem,

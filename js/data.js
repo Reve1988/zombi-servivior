@@ -196,13 +196,17 @@ ZS.DATA = (function () {
   ],
 
   COZY_TIERS: [
-    { level: 1, min: 0,   title: '임시 전초기지',     agentDmg: 0,    fireRate: 0,    coinBonus: 0,    freeRepair: 0.15 },
-    { level: 2, min: 20,  title: '정비된 작전소',     agentDmg: 0.10, fireRate: 0.04, coinBonus: 0.12, freeRepair: 0.30 },
-    { level: 3, min: 50,  title: '모던 전술 쉘터',    agentDmg: 0.20, fireRate: 0.08, coinBonus: 0.25, freeRepair: 0.50 },
-    { level: 4, min: 95,  title: '하이라이즈 아웃포스트', agentDmg: 0.32, fireRate: 0.13, coinBonus: 0.40, freeRepair: 0.70 },
-    { level: 5, min: 150, title: '네오 어반 요새',    agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.55, freeRepair: 0.85 },
-    { level: 6, min: 220, title: '엘리트 파라다이스', agentDmg: 0.60, fireRate: 0.25, coinBonus: 0.75, freeRepair: 1.00 }
+    { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.10 },
+    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.10, xpBonus: 0.10, freeRepair: 0.18 },
+    { level: 3, min: 60,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.20, xpBonus: 0.20, freeRepair: 0.26 },
+    { level: 4, min: 110, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.32, xpBonus: 0.30, freeRepair: 0.34 },
+    { level: 5, min: 175, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.45, xpBonus: 0.45, freeRepair: 0.42 },
+    { level: 6, min: 250, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.60, xpBonus: 0.60, freeRepair: 0.50 },
+    { level: 7, min: 330, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.75, xpBonus: 0.80, freeRepair: 0.58 },
+    { level: 8, min: 420, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.95, xpBonus: 1.00, freeRepair: 0.65 }
   ],
+
+  COZY_FLOOR_CAP: 60,
 
   CATEGORIES: [
     { id: 'defense', label: '🛡️ 방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
