@@ -235,7 +235,16 @@ window.ZS = window.ZS || {};
           cozyHint = ` [도배 감쇠 적용: 안락함 +${prev.gain} (50%)]`;
         }
         const catIcon = def.category === 'defense' ? 'cat-defense' : def.category === 'infra' ? 'cat-infra' : 'cat-decor';
-        setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + cozyHint)}`);
+        let mountHint = '';
+        if (def.canMountOnWall) {
+          mountHint =
+            def.id === 'led_floodlight'
+              ? ' [Lv.2+ 성벽 상부 거치 가능: 조명 +0.6 · 오라 +0.4]'
+              : ' [Lv.2+ 성벽 상부 거치 가능: 사거리 +0.5]';
+        } else if (def.id === 'barricade_wall') {
+          mountHint = ' [기존 거치 대상 위에 덮어 자동 하부 승격 가능]';
+        }
+        setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + cozyHint + mountHint)}`);
       }
     } else {
       uiState.selectedItemId = null;
@@ -292,30 +301,72 @@ window.ZS = window.ZS || {};
       return;
     }
 
-    let errReason = null;
+    let tipText = null;
+    let tipKind = 'err';
+    let tipIcon = 'state-alert';
+    let tipIconCls = 'icon-danger';
+
     if (uiState.mode === 'build' && uiState.selectedItemId && ZS.Game.canPlaceItem) {
       const check = ZS.Game.canPlaceItem(uiState.selectedItemId, tx, ty);
+      const hoveredSt = st.structGrid[ty] && st.structGrid[ty][tx];
+      const itemDef = ZS.DATA.ITEMS[uiState.selectedItemId];
       if (check && !check.ok && check.reason) {
-        errReason = check.reason;
+        tipText = check.reason;
+        tipKind = 'err';
+        if (hoveredSt && hoveredSt.id === 'barricade_wall' && (hoveredSt.level || 1) === 1 && itemDef && itemDef.canMountOnWall) {
+          tipIcon = 'mount';
+        }
+      } else if (check && check.ok && check.mountOnWall && hoveredSt) {
+        const wName = ZS.Game.getStructureDisplayName(hoveredSt);
+        const bonusLabel = uiState.selectedItemId === 'led_floodlight' ? '조명 +0.6 · 사기 반경 +0.4' : '사거리 +0.5';
+        tipText = `${wName} 상부 거치 가능 (${bonusLabel})`;
+        tipKind = 'ok';
+        tipIcon = 'mount';
+        tipIconCls = 'icon-heal';
+      } else if (check && check.ok && check.autoUnderlay && hoveredSt) {
+        const uName = ZS.Game.getStructureDisplayName(hoveredSt);
+        const uCost = check.underlayCost || { wood: 14, scrap: 8 };
+        const vCount = (st.freeVouchers && st.freeVouchers.barricade_wall) || 0;
+        const costStr = vCount > 0 ? '보급권 1 소모' : `목재 ${uCost.wood}·철재 ${uCost.scrap}`;
+        tipText = `성벽 자동 하부 승격 (${uName} Lv·숙련 유지, ${costStr})`;
+        tipKind = 'ok';
+        tipIcon = 'wall-link';
+        tipIconCls = 'icon-heal';
       }
     } else if (uiState.mode === 'move' && uiState.movingSource) {
       if (tx <= 0 || ty <= 0 || tx >= N - 1 || ty >= N - 1) {
-        errReason = '외곽 진입 구역으로는 시설을 옮길 수 없습니다.';
-      } else if (
-        !(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) &&
-        st.structGrid[ty] &&
-        st.structGrid[ty][tx]
-      ) {
-        errReason = '이미 다른 시설이 설치된 타일입니다.';
+        tipText = '외곽 진입 구역으로는 시설을 옮길 수 없습니다.';
+      } else if (!(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) && st.structGrid[ty] && st.structGrid[ty][tx]) {
+        const srcCell = st.structGrid[uiState.movingSource.ty] && st.structGrid[uiState.movingSource.ty][uiState.movingSource.tx];
+        const srcUnit = srcCell && (srcCell.mounted || srcCell);
+        const srcDef = srcUnit ? ZS.DATA.ITEMS[srcUnit.id] : null;
+        const dest = st.structGrid[ty][tx];
+        if (srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall') {
+          if ((dest.level || 1) >= 2 && !dest.mounted) {
+            tipText = `${ZS.Game.getStructureDisplayName(dest)} 상부에 거치 이동`;
+            tipKind = 'ok';
+            tipIcon = 'mount';
+            tipIconCls = 'icon-heal';
+          } else if ((dest.level || 1) === 1) {
+            tipText = '철조망(Lv.1) 위에는 거치 불가 — [U]로 헤스코 방벽 강화 필요';
+            tipIcon = 'mount';
+          } else {
+            tipText = '이미 다른 시설이 거치된 성벽입니다.';
+          }
+        } else {
+          tipText = '이미 다른 시설이 설치된 타일입니다.';
+        }
       }
     }
 
-    if (!errReason) {
+    if (!tipText) {
+      tipEl.classList.remove('ok');
       tipEl.classList.add('hidden');
       return;
     }
 
-    tipEl.innerHTML = `${ozIcon('state-alert', 14, 'icon-danger')}<span>${escapeHtml(errReason)}</span>`;
+    tipEl.innerHTML = `${ozIcon(tipIcon, 14, tipIconCls)}<span>${escapeHtml(tipText)}</span>`;
+    tipEl.classList.toggle('ok', tipKind === 'ok');
     tipEl.classList.remove('hidden');
 
     const vw = window.innerWidth || 1600;
@@ -329,10 +380,22 @@ window.ZS = window.ZS || {};
   }
 
   function setDetailHtml(html, actionsHtml) {
+    const bar = document.getElementById('detail-bar');
+    if (bar) bar.classList.remove('composite');
     document.getElementById('detail-text').innerHTML = html;
     const actEl = document.getElementById('detail-actions');
     if (actEl) {
       actEl.innerHTML = actionsHtml || '';
+    }
+  }
+
+  function setCompositeDetailHtml(innerHtml) {
+    const bar = document.getElementById('detail-bar');
+    if (bar) bar.classList.add('composite');
+    document.getElementById('detail-text').innerHTML = innerHtml;
+    const actEl = document.getElementById('detail-actions');
+    if (actEl) {
+      actEl.innerHTML = '';
     }
   }
 
@@ -670,7 +733,147 @@ window.ZS = window.ZS || {};
     const def = ZS.DATA.ITEMS[obj.id];
     if (!def) return;
 
+    const buildRankWidgetHtml = (targetObj, eff) => {
+      const rank = eff.rank || 0;
+      const rInfo = eff.rankInfo || ZS.Game.getVeterancyRankInfo(rank);
+      const xp = targetObj.xp || 0;
+      const ranks = ZS.DATA.VETERANCY_RANKS || [];
+      const nextR = ranks[rank + 1] || null;
+      const curMin = rInfo.minXp || 0;
+      const pct = nextR
+        ? Math.max(0, Math.min(100, ((xp - curMin) / Math.max(1, nextR.minXp - curMin)) * 100))
+        : 100;
+      const remLabel = nextR ? `남은 ${(Math.max(0.1, nextR.minXp - xp)).toFixed(1)} XP` : 'MAX';
+      return `
+        <span class="detail-rank-box" title="처치 ${targetObj.kills || 0}기 · 누적 ${xp.toFixed(1)} XP">
+          <span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span>
+          <span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span>
+          <span class="detail-xp-track"><span class="detail-xp-fill" style="width:${pct.toFixed(1)}%;background:${rInfo.color};"></span></span>
+          <span class="detail-xp-rem">${remLabel}</span>
+        </span>
+      `;
+    };
+
     const lv = obj.level || 1;
+    if (obj.id === 'barricade_wall' && lv >= 2 && obj.mounted) {
+      const m = obj.mounted;
+      const mDef = ZS.DATA.ITEMS[m.id];
+      const mLv = m.level || 1;
+      const wallName = ZS.Game.getStructureDisplayName(obj);
+      const wallProf = ZS.Game.getStructLevelProfile(def, lv);
+      const wallHpPct = obj.maxHp > 0 ? Math.max(0, Math.min(100, (obj.hp / obj.maxHp) * 100)) : 100;
+      const mHpPct = m.maxHp > 0 ? Math.max(0, Math.min(100, (m.hp / m.maxHp) * 100)) : 100;
+      const mEff = ZS.Game.getStructureEffectiveStats(m, tx, ty, undefined, true);
+
+      let mSubStats = '';
+      let mRankHtml = '';
+      if (mDef && (mDef.subType === 'manned' || mDef.subType === 'turret')) {
+        mRankHtml = buildRankWidgetHtml(m, mEff);
+        mSubStats = `화력 ${mEff.damage.toFixed(1)} · 연사 ${mEff.fireRate.toFixed(2)}/s · 사거리 ${mEff.range.toFixed(1)} (+0.5 고지대) · 치명 ${Math.round(mEff.critChance * 100)}%`;
+      } else if (mDef && mDef.id === 'led_floodlight') {
+        const lr = mEff.lightRadius != null ? mEff.lightRadius : mDef.lightRadius;
+        const ar = (mDef.aura && mDef.aura.radius ? mDef.aura.radius : 2.4) + 0.4;
+        mSubStats = `조명 반경 ${lr.toFixed(1)} (+0.6) · 사기 오라 ${ar.toFixed(1)} (+0.4) · 안락함 +${mDef.cozy || 0}`;
+      } else {
+        mSubStats = mDef ? escapeHtml(mDef.desc) : '';
+      }
+
+      let topUpHtml = '';
+      if (mDef && ZS.Game.isUpgradeableDef(mDef)) {
+        const topCheck = ZS.Game.canUpgradeStructure(tx, ty);
+        if (mLv >= 3) {
+          topUpHtml = `<span class="cost-chip free">◆◆◆ Lv.3 MAX</span>`;
+        } else {
+          const topCost = ZS.Game.getUpgradeCost(mDef, mLv) || {};
+          const topCostHtml = formatInlineCostHtml(topCost, 13);
+          const upCls = mLv + 1 === 3 && !topCheck.hqCapped ? 'icon-max' : '';
+          const inner = topCheck.hqCapped
+            ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>본부 Lv.${topCheck.reqHqLevel} 필요</span>(${topCostHtml})`
+            : `${ozIcon('state-upgrade', 14, upCls)}<span>상부 Lv.${mLv + 1}</span>(${topCostHtml})<span>[U]</span>`;
+          topUpHtml = `<button id="btn-comp-up-top" class="detail-upgrade-btn" ${topCheck.ok ? '' : 'disabled'} title="${escapeHtml(topCheck.ok ? '단축키 U로 상부 강화' : topCheck.reason)}">${inner}</button>`;
+        }
+      }
+
+      let wallUpHtml = '';
+      const wallCheck = ZS.Game.canUpgradeWallBase ? ZS.Game.canUpgradeWallBase(tx, ty) : null;
+      if (lv >= 3) {
+        wallUpHtml = `<span class="cost-chip free">◆◆◆ Lv.3 MAX</span>`;
+      } else if (wallCheck) {
+        const wCost = wallCheck.cost || ZS.Game.getUpgradeCost(def, lv) || {};
+        const wCostHtml = formatInlineCostHtml(wCost, 13);
+        const wInner = wallCheck.hqCapped
+          ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>본부 Lv.${wallCheck.reqHqLevel} 필요</span>(${wCostHtml})`
+          : `${ozIcon('wall-upgrade', 14)}<span>성벽 Lv.${lv + 1}</span>(${wCostHtml})<span>[G]</span>`;
+        wallUpHtml = `<button id="btn-comp-up-wall" class="detail-upgrade-btn" ${wallCheck.ok ? '' : 'disabled'} title="${escapeHtml(wallCheck.ok ? '단축키 G로 상부 유지 성벽 승강' : wallCheck.reason)}">${wInner}</button>`;
+      }
+
+      const wallStatSummary = `반사 ${Math.round((wallProf.thornsRatio || 0) * 100)}% (최소 ${wallProf.thornsMin || 0})${wallProf.perkLabel ? ` · ★${escapeHtml(wallProf.perkLabel.split(' (')[0])}` : ''}`;
+      const compHtml = `
+        <div class="comp-list">
+          <div class="comp-row top">
+            <span class="comp-slot">${ozIcon('mount', 13)} 상부 거치</span>
+            <div class="comp-info">
+              <div class="comp-title-line">
+                <span class="comp-title">${escapeHtml(mDef ? mDef.name : m.id)}</span>
+                ${mDef && ZS.Game.isUpgradeableDef(mDef) ? `<span class="comp-lv">Lv.${mLv}</span>` : ''}
+                ${mRankHtml}
+                <div class="comp-hpb-wrap">
+                  <span class="comp-hpb"><span style="width:${mHpPct.toFixed(1)}%"></span></span>
+                  <span class="comp-hp-txt">${Math.ceil(m.hp)}/${m.maxHp}</span>
+                </div>
+              </div>
+              <div class="comp-sub">${mSubStats}</div>
+            </div>
+            <div class="comp-actions">
+              ${topUpHtml}
+              <button id="btn-comp-move-top" class="detail-upgrade-btn" ${st.phase !== 'day' ? 'disabled' : ''} title="상부 유닛만 분리해 이동 (M)">${ozIcon('unmount', 13)}<span>분리 이동 M</span></button>
+              <button id="btn-comp-demolish-top" class="detail-upgrade-btn danger" ${st.phase !== 'day' ? 'disabled' : ''} title="상부 유닛만 먼저 철거 (X)">${ozIcon('tool-remove', 13, 'icon-danger')}<span>상부 철거 X</span></button>
+            </div>
+          </div>
+          <div class="comp-row">
+            <span class="comp-slot">${ozIcon('wall-link', 13)} 하부 성벽</span>
+            <div class="comp-info">
+              <div class="comp-title-line">
+                <span class="comp-title">${escapeHtml(wallName)}</span>
+                <span class="comp-lv">Lv.${lv}</span>
+                <div class="comp-hpb-wrap">
+                  <span class="comp-hpb wall"><span style="width:${wallHpPct.toFixed(1)}%"></span></span>
+                  <span class="comp-hp-txt">${Math.ceil(obj.hp)}/${obj.maxHp}</span>
+                </div>
+              </div>
+              <div class="comp-sub">${wallStatSummary}</div>
+            </div>
+            <div class="comp-actions">
+              ${wallUpHtml}
+            </div>
+          </div>
+          <div class="comp-foot">
+            <span class="inline-icon-text">${ozIcon('collapse-drop', 13)}<span>하부 성벽 파괴 시 상부 유닛이 지상 낙하 (최대 HP -25%, 최소 1 HP)</span></span>
+            <span>단축키: U 상부 · G 성벽 · M 분리 · X 철거</span>
+          </div>
+        </div>
+      `;
+      setCompositeDetailHtml(compHtml);
+      document.getElementById('btn-comp-up-top')?.addEventListener('click', () => {
+        ZS.Game.upgradeStructure(tx, ty);
+      });
+      document.getElementById('btn-comp-up-wall')?.addEventListener('click', () => {
+        if (ZS.Game.upgradeWallBase) ZS.Game.upgradeWallBase(tx, ty);
+      });
+      document.getElementById('btn-comp-move-top')?.addEventListener('click', () => {
+        if (st.phase !== 'day') return;
+        setToolMode('move');
+        uiState.movingSource = { tx, ty };
+        const canMountDest = !!(mDef && mDef.canMountOnWall);
+        setDetailHtml(`${ozIcon('unmount', 14)} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(m))}]</b> (상부 분리) 선택됨 — 이동할 빈 타일${canMountDest ? ' 또는 Lv.2+ 성벽' : ''}을 클릭하세요.`);
+      });
+      document.getElementById('btn-comp-demolish-top')?.addEventListener('click', () => {
+        if (st.phase !== 'day') return;
+        handleRemoveTile(tx, ty);
+      });
+      return;
+    }
+
     let actionHtml = '';
     if (ZS.Game.isUpgradeableDef(def)) {
       const upCheck = ZS.Game.canUpgradeStructure(tx, ty);
@@ -692,24 +895,7 @@ window.ZS = window.ZS || {};
 
     if (def.subType === 'manned' || def.subType === 'turret') {
       const eff = ZS.Game.getStructureEffectiveStats(obj, tx, ty);
-      const rank = eff.rank || 0;
-      const rInfo = eff.rankInfo || ZS.Game.getVeterancyRankInfo(rank);
-      const xp = obj.xp || 0;
-      const ranks = ZS.DATA.VETERANCY_RANKS || [];
-      const nextR = ranks[rank + 1] || null;
-      const curMin = rInfo.minXp || 0;
-      const pct = nextR
-        ? Math.max(0, Math.min(100, ((xp - curMin) / Math.max(1, nextR.minXp - curMin)) * 100))
-        : 100;
-      const remLabel = nextR ? `남은 ${(Math.max(0.1, nextR.minXp - xp)).toFixed(1)} XP` : 'MAX';
-      const rankWidgetHtml = `
-        <span class="detail-rank-box" title="처치 ${obj.kills || 0}기 · 누적 ${xp.toFixed(1)} XP">
-          <span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span>
-          <span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span>
-          <span class="detail-xp-track"><span class="detail-xp-fill" style="width:${pct.toFixed(1)}%;background:${rInfo.color};"></span></span>
-          <span class="detail-xp-rem">${remLabel}</span>
-        </span>
-      `;
+      const rankWidgetHtml = buildRankWidgetHtml(obj, eff);
       actionHtml = rankWidgetHtml + actionHtml;
 
       const pwrInfo = def.requiresPower
@@ -735,8 +921,13 @@ window.ZS = window.ZS || {};
         const parts = [];
         if (prof.thornsRatio > 0) {
           parts.push(`피해 반사 ${Math.round(prof.thornsRatio * 100)}% (최소 ${prof.thornsMin || 0})`);
-        } else {
-          parts.push('차단 방호벽 · 상부 거치 해금');
+        }
+        if (def.id === 'barricade_wall') {
+          if (lv === 1) {
+            parts.push('초소·포탑·조명 거치 불가 — [U] 헤스코 방벽(Lv.2) 강화 시 상부 거치 해금');
+          } else {
+            parts.push('상부 거치 가능 (사거리 +0.5)');
+          }
         }
         if (prof.perkLabel) parts.push(`★${escapeHtml(prof.perkLabel)}`);
         statSummary = parts.join(' · ');
@@ -778,6 +969,30 @@ window.ZS = window.ZS || {};
   }
 
   // ================= INPUT HANDLING =================
+  function handleRemoveTile(tx, ty) {
+    const st = ZS.Game.state;
+    const cell = st.structGrid[ty] && st.structGrid[ty][tx];
+    const actualTarget = cell ? (cell.mounted || cell) : null;
+    const rank = actualTarget && actualTarget.id !== 'command_hq' ? (actualTarget.rank || 0) : 0;
+    const removed = ZS.Game.removeAt(tx, ty);
+    if (!removed && actualTarget && rank >= 1) {
+      const rInfo = ZS.Game.getVeterancyRankInfo(rank);
+      setDetailHtml(
+        `${ozIcon('state-alert', 14, 'icon-danger')} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(actualTarget))}]</b> 철거 확인 — ${escapeHtml(rInfo.name)} 배지(${Math.floor(actualTarget.xp || 0)} XP) 계급이 사라집니다.`,
+        `<span class="detail-rank-box"><span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span><span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span></span><button id="btn-confirm-demolish" class="detail-demolish-confirm-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>계급 소멸 감수하고 철거</span></button>`
+      );
+      const confirmBtn = document.getElementById('btn-confirm-demolish');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', () => {
+          if (ZS.Game.removeAt(tx, ty, true)) {
+            setDetailHtml(`${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 완료]</b> 건설·강화 자원의 80%를 회수했습니다.`);
+          }
+        });
+      }
+    }
+    return removed;
+  }
+
   function handlePrimaryTileAction(tx, ty, gx, gy, isDrag) {
     const st = ZS.Game.state;
 
@@ -803,25 +1018,7 @@ window.ZS = window.ZS || {};
     }
 
     if (uiState.mode === 'remove') {
-      const target = st.structGrid[ty] && st.structGrid[ty][tx];
-      const rank = target && target.id !== 'command_hq' ? (target.rank || 0) : 0;
-      const removed = ZS.Game.removeAt(tx, ty);
-      if (!removed && target && rank >= 1) {
-        const def = ZS.DATA.ITEMS[target.id];
-        const rInfo = ZS.Game.getVeterancyRankInfo(rank);
-        setDetailHtml(
-          `${ozIcon('state-alert', 14, 'icon-danger')} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(target))}]</b> 철거 확인 — ${escapeHtml(rInfo.name)} 배지(${Math.floor(target.xp || 0)} XP) 계급이 사라집니다.`,
-          `<span class="detail-rank-box"><span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span><span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span></span><button id="btn-confirm-demolish" class="detail-demolish-confirm-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>계급 소멸 감수하고 철거</span></button>`
-        );
-        const confirmBtn = document.getElementById('btn-confirm-demolish');
-        if (confirmBtn) {
-          confirmBtn.addEventListener('click', () => {
-            if (ZS.Game.removeAt(tx, ty, true)) {
-              setDetailHtml(`${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 완료]</b> 건설·강화 자원의 80%를 회수했습니다.`);
-            }
-          });
-        }
-      }
+      handleRemoveTile(tx, ty);
       return;
     }
 
@@ -830,8 +1027,13 @@ window.ZS = window.ZS || {};
       if (!uiState.movingSource) {
         const src = st.structGrid[ty] && st.structGrid[ty][tx];
         if (src && src.id !== 'command_hq') {
+          const srcUnit = src.mounted || src;
+          const srcDef = ZS.DATA.ITEMS[srcUnit.id];
+          const canMountDest = !!(srcDef && srcDef.canMountOnWall);
           uiState.movingSource = { tx, ty };
-          setDetailHtml(`${ozIcon('tool-move', 14)} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(src))}]</b> 선택됨 — 이동할 빈 타일을 클릭하세요.`);
+          setDetailHtml(
+            `${ozIcon(src.mounted ? 'unmount' : 'tool-move', 14)} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(srcUnit))}]</b>${src.mounted ? ' (상부 분리)' : ''} 선택됨 — 이동할 빈 타일${canMountDest ? ' 또는 Lv.2+ 성벽' : ''}을 클릭하세요.`
+          );
         } else {
           ZS.Audio.playError();
         }
@@ -931,6 +1133,10 @@ window.ZS = window.ZS || {};
       } else if (e.code === 'KeyU') {
         if (uiState.inspectedTile) {
           ZS.Game.upgradeStructure(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
+        }
+      } else if (e.code === 'KeyG') {
+        if (uiState.inspectedTile && ZS.Game.upgradeWallBase) {
+          ZS.Game.upgradeWallBase(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
         }
       } else if (e.code === 'KeyM') {
         setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');

@@ -398,6 +398,8 @@ ZS.DATA = (function () {
       damage: 19,
       fireRate: 2.5,
       projType: 'rifle',
+      canMountOnWall: true,
+      mountTopOffset: 15.5,
       desc: '[요원 1명 · 무전력] 돌격소총 사수가 배치된 엄폐호. 정전 시에도 멈추지 않고 사격합니다.'
     },
     shotgun_post: {
@@ -416,6 +418,8 @@ ZS.DATA = (function () {
       spread: 0.34,
       fireRate: 1.1,
       projType: 'shotgun',
+      canMountOnWall: true,
+      mountTopOffset: 15,
       desc: '[요원 1명 · 무전력] 근접 저지용 전술 산탄 사수. 한 번에 4발의 산탄을 발사합니다.'
     },
     sniper_tower: {
@@ -453,6 +457,8 @@ ZS.DATA = (function () {
       damage: 13,
       fireRate: 5.6,
       projType: 'vulcan',
+      canMountOnWall: true,
+      mountTopOffset: 12,
       desc: '[전력 소모] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
     },
     missile_pod: {
@@ -605,6 +611,8 @@ ZS.DATA = (function () {
       lightRadius: 4.8,
       lightColor: 'rgba(94, 242, 255, 0.42)',
       aura: { radius: 3.4, rangeMult: 0.15, critChance: 0.18 },
+      canMountOnWall: true,
+      mountTopOffset: 16,
       desc: '[야간 전력 소모] 고광량 서치라이트. 반경 3.4칸 내 초소·포탑의 사거리 +15%, 치명타율 +18%!'
     },
     urban_planter: {
