@@ -34,6 +34,10 @@ ZS.Iso = (function () {
   let viewW = 1280;
   let viewH = 720;
 
+  function getViewport() {
+    return { w: viewW, h: viewH };
+  }
+
   function setViewport(w, h) {
     viewW = w;
     viewH = h;
@@ -256,7 +260,7 @@ ZS.Iso = (function () {
     }
 
     // Top face (100% brightness under top-left sun)
-    if (topCol) {
+    if (!c.noTop && topCol) {
       ctx.fillStyle = topCol;
       ctx.beginPath();
       ctx.moveTo(bTop.x, bTop.y);
@@ -267,7 +271,7 @@ ZS.Iso = (function () {
       ctx.fill();
     }
 
-    if (c.stroke) {
+    if (c.stroke && !c.noTop) {
       ctx.strokeStyle = effectiveFlash > 0.5 ? '#FFFFFF' : c.stroke;
       ctx.lineWidth = Math.max(0.75, 1 * cam.zoom);
       ctx.beginPath();
@@ -311,6 +315,7 @@ ZS.Iso = (function () {
     SHADE_LEFT,
     SHADE_RIGHT,
     cam,
+    getViewport,
     setViewport,
     resetCamera,
     panByScreen,
@@ -320,6 +325,7 @@ ZS.Iso = (function () {
     screenToGrid,
     shadeHex,
     mixHex,
+    resolveFaceColor,
     setSceneTint,
     setEntityFlash,
     setRenderModifiers,

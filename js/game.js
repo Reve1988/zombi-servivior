@@ -1826,7 +1826,7 @@ ZS.Game = (function () {
         spawnMuzzleFlash(
           b.cx + Math.cos(a) * 0.53,
           b.cy + Math.sin(a) * 0.53,
-          20.3,
+          9.0,
           a,
           '#FFE484',
           0.88
@@ -1836,7 +1836,7 @@ ZS.Game = (function () {
           sourceUid: b.sourceUid || null,
           x: b.cx,
           y: b.cy,
-          z: 13,
+          z: 9.0,
           vx: Math.cos(a) * spd,
           vy: Math.sin(a) * spd,
           damage: b.damage,
@@ -1875,20 +1875,19 @@ ZS.Game = (function () {
 
     const lvNow = (st && st.level) || 1;
     if (def.projType === 'emp') {
-      spawnMuzzleFlash(cx, cy, 29, angle, DATA.PALETTE.power, 1.35, 'emp');
+      spawnMuzzleFlash(cx, cy, 30.0, angle, DATA.PALETTE.power, 1.35, 'emp');
     } else if (def.id === 'sniper_tower') {
-      spawnMuzzleFlash(cx + Math.cos(angle) * 0.68, cy + Math.sin(angle) * 0.68, 31.8, angle, '#FFFFFF', 1.3);
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.68, cy + Math.sin(angle) * 0.68, 34.3, angle, '#FFFFFF', 1.3);
     } else if (def.id === 'shotgun_post') {
-      spawnMuzzleFlash(cx + Math.cos(angle) * 0.53, cy + Math.sin(angle) * 0.53, 18.8, angle, '#FFB347', 1.25);
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.53, cy - 0.06 + Math.sin(angle) * 0.53, 8.6, angle, '#FFB347', 1.25);
     } else if (def.id === 'rifle_bunker') {
-      const rZ = (lvNow >= 3 ? 13.5 : 11) + 6.8;
-      spawnMuzzleFlash(cx + Math.cos(angle) * 0.53, cy + Math.sin(angle) * 0.53, rZ, angle, '#FFE484', 0.95);
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.53, cy + Math.sin(angle) * 0.53, 9.0, angle, '#FFE484', 0.95);
     } else if (def.id === 'vulcan_turret') {
-      const vDist = (lvNow >= 3 ? 20 : 15) / 32;
-      const vZ = (lvNow >= 2 ? 12.5 : 10) + 6;
+      const vDist = lvNow >= 3 ? 0.62 : 0.50;
+      const vZ = (lvNow >= 2 ? 10.1 : 7.5) + 5.0;
       spawnMuzzleFlash(cx + Math.cos(angle) * vDist, cy + Math.sin(angle) * vDist, vZ, angle, '#FFE8B6', 1.0);
     } else if (def.id === 'missile_pod') {
-      spawnMuzzleFlash(cx + Math.cos(angle) * 0.22, cy + Math.sin(angle) * 0.22, 22.5, angle, '#FF8A47', 1.3);
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.22, cy + 0.22 + Math.sin(angle) * 0.14, 14.5, angle, '#FF8A47', 1.3);
     }
 
     if (def.projType === 'emp') {
@@ -1950,8 +1949,8 @@ ZS.Game = (function () {
           kind: 'bullet',
           sourceUid,
           x: cx,
-          y: cy,
-          z: 13,
+          y: cy - 0.06,
+          z: 9.0,
           vx: Math.cos(a) * spd,
           vy: Math.sin(a) * spd,
           damage: finalDmg,
@@ -2000,7 +1999,7 @@ ZS.Game = (function () {
       y: cy,
       startX: cx,
       startY: cy,
-      z: def.id === 'sniper_tower' ? 24 : 14,
+      z: def.id === 'sniper_tower' ? 34.0 : def.id === 'rifle_bunker' ? 9.0 : 14.0,
       vx: Math.cos(angle) * spd,
       vy: Math.sin(angle) * spd,
       damage: finalDmg,
@@ -2487,20 +2486,28 @@ ZS.Game = (function () {
 
   function getStructureDebrisPalette(itemId) {
     switch (itemId) {
-      case 'hesco_wall': return ['#D6C49E', '#8C96A3', '#635947'];
-      case 'blast_wall': return ['#5F6F82', '#C4834B', '#8C96A3'];
-      case 'razor_pad': return ['#596574', '#BCC8D6', '#454E59'];
-      case 'rifle_bunker': return ['#6E7D68', '#4B5D46', '#8C96A3'];
-      case 'shotgun_post': return ['#4D5968', '#8FA1B3', '#B87D4B'];
-      case 'sniper_tower': return ['#7C8B99', '#637282', '#3D4D42'];
-      case 'vulcan_turret': return ['#EEF4FA', '#525F6E', '#8C96A3'];
-      case 'missile_pod': return ['#6C7D65', '#4C574A', '#FF7B54'];
-      case 'emp_coil': return ['#60748A', '#B87333', '#3E4A59'];
-      case 'solar_array': return ['#254E7A', '#64748B', '#94A3B8'];
-      case 'wind_turbine': return ['#E2E8F0', '#64748B', '#94A3B8'];
-      case 'battery_bank': return ['#3B4959', '#64748B', '#8C96A3'];
-      case 'field_tent': return ['#748269', '#5C6953', '#D49A5A'];
-      case 'shelter_pod': return ['#CBD5E1', '#475569', '#D97706'];
+      case 'hesco_wall': return ['#C9B48A', '#9E8758', '#8C96A3'];
+      case 'blast_wall': return ['#6B7686', '#F0BD35', '#8C96A3'];
+      case 'razor_pad': return ['#4A525C', '#C9D3DE', '#596574'];
+      case 'rifle_bunker': return ['#B5A27A', '#55684F', '#8C96A3'];
+      case 'shotgun_post': return ['#B5A27A', '#3A4654', '#EBA834'];
+      case 'sniper_tower': return ['#7C8B99', '#4F5D4B', '#5B6875'];
+      case 'vulcan_turret': return ['#E8EEF4', '#4E5A68', '#5EF2FF'];
+      case 'missile_pod': return ['#6C7D65', '#4C574A', '#E0603A'];
+      case 'emp_coil': return ['#60748A', '#B87333', '#5EF2FF'];
+      case 'solar_array': return ['#2466B5', '#A9B6C4', '#7B8996'];
+      case 'wind_turbine': return ['#EEF3F8', '#D0DBE6', '#758594'];
+      case 'battery_bank': return ['#DDE5EC', '#9AA8B6', '#5EF2FF'];
+      case 'field_tent': return ['#6E8466', '#2E3A2B', '#FFD27A'];
+      case 'shelter_pod': return ['#DCE5ED', '#EA6A3B', '#556370'];
+      case 'gas_heater': return ['#D5DEE7', '#9AA6B2', '#FFB347'];
+      case 'led_floodlight': return ['#EBA834', '#59636E', '#FFF6DA'];
+      case 'urban_planter': return ['#B8C0C7', '#5DBB63', '#6B4A33'];
+      case 'vending_machine': return ['#2E86DE', '#FFF3D6', '#1B4F86'];
+      case 'repair_bay': return ['#475361', '#F0A93A', '#4ADE80'];
+      case 'lounge_set': return ['#F4E6C8', '#E8A04A', '#E8EEF5'];
+      case 'arcade_neon': return ['#3A2C54', '#FF5CE1', '#52E8FF'];
+      case 'boss_trophy': return ['#2E3744', '#D4AF37', '#FFE066'];
       case 'command_hq': return ['#5B6B7C', '#DCE4EC', '#FFD27A'];
       default: return ['#94A3B8', '#64748B', '#D49A5A'];
     }
