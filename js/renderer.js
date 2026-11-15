@@ -4248,6 +4248,28 @@ ZS.Renderer = (function () {
     ctx.restore();
   }
 
+  /** Renders the unpowered OFF pill badge with a 1.65x zoom cap so 2.50x closeups stay unobstructed. */
+  function drawPowerOffPillBadge(ctx, gx, gy, warnZ, zScale, P) {
+    const warnPos = ZS.Iso.gridToScreen(gx, gy, warnZ);
+    const badgeScale = Math.max(1.0, Math.min(1.65, zScale));
+    const fontPx = Math.max(12, Math.round(12 * badgeScale));
+    const pillW = 46 * badgeScale;
+    const pillH = 16 * badgeScale;
+    const pillY = warnPos.y - pillH + 2 * badgeScale;
+    ctx.fillStyle = P.outlineDark || '#1B2430';
+    ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+    ctx.strokeStyle = P.danger;
+    ctx.lineWidth = 1.3;
+    ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+
+    drawCanvasPowerOffIcon(ctx, warnPos.x - 13 * badgeScale, pillY + pillH * 0.5, Math.max(12, 12 * badgeScale), P.danger);
+    ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'center';
+    const textY = pillY + pillH * 0.5 + fontPx * 0.35;
+    ctx.fillStyle = P.danger;
+    ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
+  }
+
   function drawInfoLayer(ctx, state, uiState, renderList, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
@@ -4371,31 +4393,15 @@ ZS.Renderer = (function () {
             drawRankBadge(ctx, tx + 0.5, ty + 0.5, topZ + 9, m.rank || 0, hasPips, m.promoAnimTimer || 0, zScale);
           }
 
+          const badgeScaleCap = Math.max(1.0, Math.min(1.65, zScale));
           const isMountUnpowered = state.isNight && mDef && mDef.requiresPower && !powered;
           const isMountEmpStunned = !isMountUnpowered && mDef && mDef.requiresPower && (m.empStunTimer || 0) > 0;
           if (isMountUnpowered) {
             const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
-            const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, warnZ);
-            const badgeScale = Math.max(1.0, zScale);
-            const fontPx = Math.max(12, Math.round(12 * badgeScale));
-            const pillW = 46 * badgeScale;
-            const pillH = 16 * badgeScale;
-            const pillY = warnPos.y - pillH + 2 * badgeScale;
-            ctx.fillStyle = P.outlineDark || '#1B2430';
-            ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
-            ctx.strokeStyle = P.danger;
-            ctx.lineWidth = 1.3;
-            ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
-
-            drawCanvasPowerOffIcon(ctx, warnPos.x - 13 * badgeScale, pillY + pillH * 0.5, Math.max(12, 12 * badgeScale), P.danger);
-            ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
-            ctx.textAlign = 'center';
-            const textY = pillY + pillH * 0.5 + fontPx * 0.35;
-            ctx.fillStyle = P.danger;
-            ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
+            drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
           } else if (isMountEmpStunned) {
             const empZ = showDualHp ? dualHpZ + 8 : topZ + (hasPips || hasRank ? 14 : 6);
-            drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, m.empStunTimer || 0, timeSec, Math.max(1.0, zScale), zScale, P);
+            drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, m.empStunTimer || 0, timeSec, badgeScaleCap, zScale, P);
           }
         } else {
           const isDamaged = st.hp < st.maxHp && st.hp > 0;
@@ -4439,27 +4445,10 @@ ZS.Renderer = (function () {
           const isEmpStunned = !isUnpowered && def && def.requiresPower && (st.empStunTimer || 0) > 0;
           if (isUnpowered) {
             const warnZ = isDamaged ? 35 : 29;
-            const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, warnZ);
-            const badgeScale = Math.max(1.0, zScale);
-            const fontPx = Math.max(12, Math.round(12 * badgeScale));
-            const pillW = 46 * badgeScale;
-            const pillH = 16 * badgeScale;
-            const pillY = warnPos.y - pillH + 2 * badgeScale;
-            ctx.fillStyle = P.outlineDark || '#1B2430';
-            ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
-            ctx.strokeStyle = P.danger;
-            ctx.lineWidth = 1.3;
-            ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
-
-            drawCanvasPowerOffIcon(ctx, warnPos.x - 13 * badgeScale, pillY + pillH * 0.5, Math.max(12, 12 * badgeScale), P.danger);
-            ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
-            ctx.textAlign = 'center';
-            const textY = pillY + pillH * 0.5 + fontPx * 0.35;
-            ctx.fillStyle = P.danger;
-            ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
+            drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
           } else if (isEmpStunned) {
             const empZ = Math.max(topZ + (hasPips || hasRank ? 12 : 4), isDamaged ? 32 : 24);
-            drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, zScale), zScale, P);
+            drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, Math.min(1.65, zScale)), zScale, P);
           }
         }
       } else if (item.kind === 'zombie') {
