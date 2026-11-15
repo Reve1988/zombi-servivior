@@ -36,7 +36,7 @@ ZS.Pathfinding = (function () {
 
     cost[hqPos.y][hqPos.x] = 0;
 
-    // Simple O(N^2) Dijkstra on 18x18 (324 nodes) — ultra fast & zero GC churn
+    // Simple O(N^2) Dijkstra on 22x22 (484 nodes) — ultra fast & zero GC churn
     const total = gridSize * gridSize;
     for (let iter = 0; iter < total; iter++) {
       let bestCost = INF;

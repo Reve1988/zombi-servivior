@@ -23,11 +23,13 @@ ZS.Iso = (function () {
     tintStrength: 0
   };
 
+  const initHqX = (ZS.DATA && ZS.DATA.HQ_POS ? ZS.DATA.HQ_POS.x : 10) + 0.5;
+  const initHqY = (ZS.DATA && ZS.DATA.HQ_POS ? ZS.DATA.HQ_POS.y : 10) + 0.5;
   const cam = {
-    x: 0,
-    y: 17 * 17 + 24,
+    x: (initHqX - initHqY) * (TILE_W * 0.5),
+    y: (initHqX + initHqY) * (TILE_H * 0.5) + 24,
     zoom: 1.0,
-    minZoom: 0.58,
+    minZoom: 0.50,
     maxZoom: 1.75
   };
 
@@ -44,9 +46,10 @@ ZS.Iso = (function () {
   }
 
   function resetCamera() {
-    const center = ZS.DATA.HQ_POS.x + 0.5;
-    cam.x = 0;
-    cam.y = (center + center) * (TILE_H / 2) + 24;
+    const hqX = ZS.DATA.HQ_POS.x + 0.5;
+    const hqY = ZS.DATA.HQ_POS.y + 0.5;
+    cam.x = (hqX - hqY) * (TILE_W * 0.5);
+    cam.y = (hqX + hqY) * (TILE_H * 0.5) + 24;
     cam.zoom = Math.min(1.12, Math.max(0.78, Math.min(viewW / 1280, viewH / 760)));
   }
 
