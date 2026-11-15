@@ -323,22 +323,44 @@ ZS.Renderer = (function () {
   }
 
   function drawBuildGhost(ctx, state, uiState, tx, ty, timeSec, zScale) {
-    let previewId = null;
+    let previewObj = null;
     if (uiState.mode === 'build' && uiState.selectedItemId) {
       const def = ZS.DATA.ITEMS[uiState.selectedItemId];
       if (def && def.layer === 'struct' && !state.structGrid[ty][tx]) {
-        previewId = def.id;
+        previewObj = { id: def.id, level: 1, hp: 100, maxHp: 100, aimAngle: 0 };
       }
     } else if (uiState.mode === 'move' && uiState.movingSource && !state.structGrid[ty][tx]) {
       const src = state.structGrid[uiState.movingSource.ty][uiState.movingSource.tx];
-      if (src) previewId = src.id;
+      if (src) {
+        previewObj = { id: src.id, level: src.level || 1, hp: 100, maxHp: 100, aimAngle: src.aimAngle || 0 };
+      }
     }
 
-    if (previewId) {
+    if (previewObj) {
       ctx.save();
       ctx.globalAlpha = 0.58;
-      drawStructure(ctx, { id: previewId, hp: 100, maxHp: 100, aimAngle: 0 }, tx, ty, state, true, timeSec, zScale);
+      drawStructure(ctx, previewObj, tx, ty, state, true, timeSec, zScale);
       ctx.restore();
+    }
+  }
+
+  function getStructVisualTopZ(id, level) {
+    switch (id) {
+      case 'hesco_wall': return level >= 3 ? 21 : 17;
+      case 'blast_wall': return level >= 3 ? 25 : 21;
+      case 'razor_pad': return 6;
+      case 'rifle_bunker': return 22;
+      case 'shotgun_post': return 23;
+      case 'sniper_tower': return 36;
+      case 'vulcan_turret': return level >= 2 ? 26 : 23;
+      case 'missile_pod': return 23;
+      case 'emp_coil': return 32;
+      case 'solar_array': return 15;
+      case 'wind_turbine': return 40;
+      case 'battery_bank': return 21;
+      case 'field_tent': return 17;
+      case 'shelter_pod': return 21;
+      default: return 22;
     }
   }
 
@@ -346,6 +368,9 @@ ZS.Renderer = (function () {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
     const id = st.id;
+    const lv = st.level || 1;
+    const steelCol = P.steelBand || '#8C96A3';
+    const maxAccent = P.levelMax || '#FF9F43';
     const def = id === 'command_hq' ? ZS.DATA.HQ_STATS : ZS.DATA.ITEMS[id];
     const isUnpowered = state.isNight && def && def.requiresPower && !powered;
 
@@ -367,20 +392,33 @@ ZS.Renderer = (function () {
       }
 
       case 'hesco_wall': {
-        // Modern HESCO military gabion bastion
+        // Modern HESCO military gabion bastion + Lv.2 steel band + Lv.3 orange-rimmed top armor plate
         Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.08, 1, 0.84, 0.84, 16, {
           base: '#d6c49e',
           stroke: '#635947'
         });
-        // Wire mesh frame band
         Iso.drawVoxelBox(ctx, tx + 0.07, ty + 0.07, 8, 0.86, 0.86, 2, {
           base: '#6c7680'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.065, ty + 0.065, 3.5, 0.87, 0.87, 2.4, {
+            base: steelCol
+          });
+        }
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.055, ty + 0.055, 17, 0.89, 0.89, 1.3, {
+            base: maxAccent
+          });
+          Iso.drawVoxelBox(ctx, tx + 0.065, ty + 0.065, 18.3, 0.87, 0.87, 2.5, {
+            base: steelCol,
+            stroke: maxAccent
+          });
+        }
         break;
       }
 
       case 'blast_wall': {
-        // Heavy Armored Alloy Blast Barrier (copper-bronze stripe instead of coin gold)
+        // Heavy Armored Alloy Blast Barrier + Lv.2 steel band + Lv.3 shock-reflect armor crown
         Iso.drawVoxelBox(ctx, tx + 0.06, ty + 0.06, 1, 0.88, 0.88, 20, {
           base: '#5f6f82',
           stroke: '#8396ad'
@@ -388,16 +426,31 @@ ZS.Renderer = (function () {
         Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.05, 5, 0.90, 0.90, 3, {
           base: '#c4834b'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.045, ty + 0.045, 12, 0.91, 0.91, 2.4, {
+            base: steelCol
+          });
+        }
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.04, ty + 0.04, 21, 0.92, 0.92, 1.4, {
+            base: maxAccent
+          });
+          Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.05, 22.4, 0.90, 0.90, 2.6, {
+            base: steelCol,
+            stroke: maxAccent
+          });
+        }
         break;
       }
 
       case 'razor_pad': {
         Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 2, {
-          base: '#454e59'
+          base: lv >= 2 ? '#596574' : '#454e59',
+          stroke: lv >= 2 ? steelCol : null
         });
         const c = Iso.gridToScreen(tx + 0.5, ty + 0.5, 4);
-        ctx.strokeStyle = '#bcc8d6';
-        ctx.lineWidth = 1.4 * zScale;
+        ctx.strokeStyle = lv >= 3 ? maxAccent : '#bcc8d6';
+        ctx.lineWidth = (lv >= 3 ? 1.8 : 1.4) * zScale;
         for (let k = -1; k <= 1; k++) {
           ctx.beginPath();
           ctx.ellipse(c.x + k * 7 * zScale, c.y, 6 * zScale, 4 * zScale, 0.3, 0, Math.PI * 2);
@@ -407,27 +460,46 @@ ZS.Renderer = (function () {
       }
 
       case 'rifle_bunker': {
-        // Sandbag/Composite Bunker + Modern Kevlar Rifleman
-        Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 10, {
+        // Sandbag/Composite Bunker (Lv.3 raises parapet 10->12.5 + orange muzzle dot; Lv.2 steel rim)
+        const wallH = lv >= 3 ? 12.5 : 10;
+        Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, wallH, {
           base: '#6e7d68',
           stroke: '#85967e'
         });
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 11, '#4b5d46', '#38463a', st.aimAngle || 0, zScale, false);
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.09, ty + 0.09, wallH - 1.4, 0.82, 0.82, 2.2, {
+            base: steelCol
+          });
+        }
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, wallH + 1, '#4b5d46', '#38463a', st.aimAngle || 0, zScale, false, lv >= 3);
         break;
       }
 
       case 'shotgun_post': {
-        // Ballistic Shield Breacher Post
+        // Ballistic Shield Breacher Post (Lv.2 steel band; Lv.3 double orange ballistic stripes)
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 11, {
           base: '#4d5968',
           stroke: '#8fa1b3'
         });
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 12, '#3a4654', '#b87d4b', st.aimAngle || 0, zScale, false);
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.09, ty + 0.09, 4.5, 0.82, 0.82, 2.4, {
+            base: steelCol
+          });
+        }
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.085, ty + 0.085, 7.8, 0.83, 0.83, 1.3, {
+            base: maxAccent
+          });
+          Iso.drawVoxelBox(ctx, tx + 0.085, ty + 0.085, 10.2, 0.83, 0.83, 1.3, {
+            base: maxAccent
+          });
+        }
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 12, '#3a4654', '#b87d4b', st.aimAngle || 0, zScale, false, false);
         break;
       }
 
       case 'sniper_tower': {
-        // Steel Truss Overwatch Tower + Sniper
+        // Steel Truss Overwatch Tower + Sniper (Lv.2 steel deck band; Lv.3 orange roof beacon)
         const legs = [
           [0.14, 0.14],
           [0.74, 0.14],
@@ -440,35 +512,71 @@ ZS.Renderer = (function () {
           });
         });
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 21, 0.80, 0.80, 4, {
-          base: '#637282',
+          base: lv >= 2 ? steelCol : '#637282',
           stroke: '#94a6b8'
         });
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25, '#3d4d42', '#6f8072', st.aimAngle || 0, zScale, true);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25, '#3d4d42', '#6f8072', st.aimAngle || 0, zScale, true, false);
+        if (lv >= 3) {
+          const bPos = Iso.gridToScreen(tx + 0.22, ty + 0.22, 27.5);
+          ctx.fillStyle = maxAccent;
+          ctx.beginPath();
+          ctx.arc(bPos.x, bPos.y, 2.5 * zScale, 0, Math.PI * 2);
+          ctx.fill();
+        }
         break;
       }
 
       case 'vulcan_turret': {
-        // CIWS Radar Dome Auto-Turret
+        // CIWS Radar Dome Auto-Turret (Lv.2 steel collar; Lv.3 extended barrel + superconducting cyan feed core)
         Iso.drawVoxelBox(ctx, tx + 0.14, ty + 0.14, 1, 0.72, 0.72, 9, {
           base: '#525f6e'
         });
-        Iso.drawVoxelBox(ctx, tx + 0.25, ty + 0.25, 10, 0.50, 0.50, 13, {
+        let domeZ = 10;
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.18, ty + 0.18, 10, 0.64, 0.64, 2.5, {
+            base: steelCol
+          });
+          domeZ = 12.5;
+        }
+        Iso.drawVoxelBox(ctx, tx + 0.25, ty + 0.25, domeZ, 0.50, 0.50, 13, {
           base: isUnpowered ? '#7a828a' : '#eef4fa'
         });
-        drawTurretBarrel(ctx, tx + 0.5, ty + 0.5, 16, st.aimAngle || 0, 15, '#2b333d', zScale);
+        const bLen = lv >= 3 ? 20 : 15;
+        const aim = st.aimAngle || 0;
+        drawTurretBarrel(ctx, tx + 0.5, ty + 0.5, domeZ + 6, aim, bLen, '#2b333d', zScale);
+        if (lv >= 3) {
+          // Superconducting feed core — power-saving perk, cyan explicitly approved in art spec §3
+          const midGx = tx + 0.5 + Math.cos(aim) * 0.34;
+          const midGy = ty + 0.5 + Math.sin(aim) * 0.34;
+          const corePos = Iso.gridToScreen(midGx, midGy, domeZ + 6);
+          ctx.fillStyle = isUnpowered ? P.powerDim : P.power;
+          ctx.beginPath();
+          ctx.arc(corePos.x, corePos.y, 2.6 * zScale, 0, Math.PI * 2);
+          ctx.fill();
+        }
         break;
       }
 
       case 'missile_pod': {
-        // Multi-cell Tactical Grenade/SAM Pod
+        // Multi-cell Tactical Grenade/SAM Pod (Lv.2 steel band; Lv.3 orange tube rim)
         Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 1, 0.76, 0.76, 9, {
           base: '#4c574a'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.11, 6.5, 0.78, 0.78, 2.4, {
+            base: steelCol
+          });
+        }
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.20, 10, 0.60, 0.60, 12, {
           base: isUnpowered ? '#596159' : '#6c7d65',
-          stroke: '#94a3b8'
+          stroke: lv >= 3 ? maxAccent : '#94a3b8'
         });
-        const podTop = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22);
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.19, ty + 0.19, 20.5, 0.62, 0.62, 1.6, {
+            base: maxAccent
+          });
+        }
+        const podTop = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22.5);
         ctx.fillStyle = isUnpowered ? '#444' : P.danger;
         ctx.beginPath();
         ctx.arc(podTop.x - 3 * zScale, podTop.y, 2 * zScale, 0, Math.PI * 2);
@@ -478,35 +586,51 @@ ZS.Renderer = (function () {
       }
 
       case 'emp_coil': {
-        // Futuristic Tesla EMP Pylon
+        // Futuristic Tesla EMP Pylon (Lv.2 steel base band; Lv.3 4 copper coil rings vs 3)
         Iso.drawVoxelBox(ctx, tx + 0.16, ty + 0.16, 1, 0.68, 0.68, 8, {
           base: '#3e4a59'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.15, ty + 0.15, 5.5, 0.70, 0.70, 2.4, {
+            base: steelCol
+          });
+        }
         Iso.drawVoxelBox(ctx, tx + 0.34, ty + 0.34, 9, 0.32, 0.32, 17, {
           base: '#60748a'
         });
+        const ringZs = lv >= 3 ? [11, 15, 19, 23] : [12, 17, 22];
+        for (let r = 0; r < ringZs.length; r++) {
+          Iso.drawVoxelBox(ctx, tx + 0.28, ty + 0.28, ringZs[r], 0.44, 0.44, 1.6, {
+            base: lv >= 3 && r === ringZs.length - 1 ? maxAccent : '#B87333'
+          });
+        }
         const orb = Iso.gridToScreen(tx + 0.5, ty + 0.5, 29);
         const pulse = isUnpowered ? 0.55 : 0.85 + 0.2 * Math.sin(timeSec * 7);
         ctx.fillStyle = isUnpowered ? P.powerDim : P.power;
         ctx.beginPath();
-        ctx.arc(orb.x, orb.y, 5.8 * zScale * pulse, 0, Math.PI * 2);
+        ctx.arc(orb.x, orb.y, (lv >= 3 ? 6.6 : 5.8) * zScale * pulse, 0, Math.PI * 2);
         ctx.fill();
         break;
       }
 
       case 'solar_array': {
-        // Pedestal + Aluminum Tray + Glossy Photovoltaic Panel
+        // Pedestal + Aluminum Tray + Glossy Photovoltaic Panel (Lv.2 steel mount; Lv.3 extra auxiliary solar wing)
         Iso.drawVoxelBox(ctx, tx + 0.35, ty + 0.35, 1, 0.30, 0.30, 8, {
-          base: '#7b8996'
+          base: lv >= 2 ? steelCol : '#7b8996'
         });
         Iso.drawVoxelBox(ctx, tx + 0.08, ty + 0.12, 9, 0.84, 0.76, 2.2, {
           base: '#9cb0c4'
         });
         Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.15, 11.2, 0.78, 0.70, 1.8, {
           base: '#286ec2',
-          stroke: '#8ec8ff'
+          stroke: lv >= 3 ? maxAccent : '#8ec8ff'
         });
-        // Solar reflection line
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.04, 13.2, 0.60, 0.24, 1.5, {
+            base: '#2f7bd6',
+            stroke: '#8ec8ff'
+          });
+        }
         const s1 = Iso.gridToScreen(tx + 0.22, ty + 0.5, 13.5);
         const s2 = Iso.gridToScreen(tx + 0.78, ty + 0.5, 13.5);
         ctx.strokeStyle = 'rgba(170, 225, 255, 0.48)';
@@ -519,10 +643,15 @@ ZS.Renderer = (function () {
       }
 
       case 'wind_turbine': {
-        // Sleek Modern 3-Blade Wind Turbine
+        // Sleek Modern 3-Blade Wind Turbine (Lv.2 steel base collar; Lv.3 orange blade tips)
         Iso.drawVoxelBox(ctx, tx + 0.28, ty + 0.28, 1, 0.44, 0.44, 5, {
           base: '#758594'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.34, ty + 0.34, 6, 0.32, 0.32, 2.4, {
+            base: steelCol
+          });
+        }
         Iso.drawVoxelBox(ctx, tx + 0.40, ty + 0.40, 6, 0.20, 0.20, 28, {
           base: '#f0f5fa'
         });
@@ -532,10 +661,18 @@ ZS.Renderer = (function () {
         ctx.lineWidth = 2.6 * zScale;
         for (let b = 0; b < 3; b++) {
           const a = bladeAngle + (b * Math.PI * 2) / 3;
+          const tipX = hub.x + Math.cos(a) * 16 * zScale;
+          const tipY = hub.y + Math.sin(a) * 14 * zScale;
           ctx.beginPath();
           ctx.moveTo(hub.x, hub.y);
-          ctx.lineTo(hub.x + Math.cos(a) * 16 * zScale, hub.y + Math.sin(a) * 14 * zScale);
+          ctx.lineTo(tipX, tipY);
           ctx.stroke();
+          if (lv >= 3) {
+            ctx.fillStyle = maxAccent;
+            ctx.beginPath();
+            ctx.arc(tipX, tipY, 2.1 * zScale, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         ctx.fillStyle = P.power;
         ctx.beginPath();
@@ -545,54 +682,95 @@ ZS.Renderer = (function () {
       }
 
       case 'battery_bank': {
-        // Lithium ESS Battery Cabinet with Emissive Charge LED
+        // Lithium ESS Battery Cabinet (Lv.2 steel band; Lv.3 5 segmented charge bars vs 4)
         Iso.drawVoxelBox(ctx, tx + 0.12, ty + 0.12, 1, 0.76, 0.76, 19, {
           base: '#e2ebf2',
           stroke: P.power
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.11, 2.5, 0.78, 0.78, 2.2, {
+            base: steelCol
+          });
+        }
         const ratio = Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0));
         const ledColor = ratio > 0.35 ? P.power : ratio > 0.05 ? P.healthMid : P.danger;
-        Iso.drawVoxelBox(ctx, tx + 0.11, ty + 0.25, 6, 0.78, 0.50, Math.max(2, 10 * ratio), {
-          base: ledColor,
-          emissive: true
-        });
+        const barSlots = lv >= 3 ? 5 : 4;
+        const litSlots = Math.max(1, Math.round(ratio * barSlots));
+        const stepZ = 12.5 / barSlots;
+        for (let k = 0; k < barSlots; k++) {
+          const isLit = ratio > 0.01 && k < litSlots;
+          Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.84, 5.5 + k * stepZ, 0.56, 0.05, stepZ * 0.68, {
+            base: isLit ? ledColor : P.powerDim,
+            emissive: isLit
+          });
+        }
         break;
       }
 
       case 'field_tent': {
-        // Modern Olive Tactical Dome Tent
+        // Modern Olive Tactical Dome Tent (Lv.2 steel skirt; Lv.3 extra warm window + comms mast)
         Iso.drawVoxelBox(ctx, tx + 0.10, ty + 0.10, 1, 0.80, 0.80, 9, {
           base: '#5d7059'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.09, ty + 0.09, 2.5, 0.82, 0.82, 2.2, {
+            base: steelCol
+          });
+        }
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.20, 10, 0.60, 0.60, 6, {
           base: '#72876d'
         });
-        // Warm illuminated tent window
         Iso.drawVoxelBox(ctx, tx + 0.35, ty + 0.86, 4, 0.30, 0.06, 4, {
           base: P.baseLight,
           emissive: true
         });
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.86, ty + 0.35, 4, 0.06, 0.28, 4, {
+            base: P.baseLight,
+            emissive: true
+          });
+          const pA = Iso.gridToScreen(tx + 0.68, ty + 0.32, 16);
+          const pB = Iso.gridToScreen(tx + 0.68, ty + 0.32, 22);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1.3 * zScale;
+          ctx.beginPath();
+          ctx.moveTo(pA.x, pA.y);
+          ctx.lineTo(pB.x, pB.y);
+          ctx.stroke();
+        }
         break;
       }
 
       case 'shelter_pod': {
-        // Modern Modular Container Home (container wall + terracotta roof cap)
+        // Modern Modular Container Home (Lv.2 steel band; Lv.3 extra side window + roof planter)
         Iso.drawVoxelBox(ctx, tx + 0.06, ty + 0.12, 1, 0.88, 0.76, 13.5, {
           base: '#dce5ed',
           stroke: 'rgba(255,255,255,0.2)'
         });
+        if (lv >= 2) {
+          Iso.drawVoxelBox(ctx, tx + 0.055, ty + 0.115, 2.5, 0.89, 0.77, 2.2, {
+            base: steelCol
+          });
+        }
         Iso.drawVoxelBox(ctx, tx + 0.05, ty + 0.11, 14.5, 0.90, 0.78, 2.5, {
           base: '#ea6a3b'
         });
-        // Warm illuminated panoramic window
         Iso.drawVoxelBox(ctx, tx + 0.20, ty + 0.85, 5.5, 0.55, 0.06, 7, {
           base: P.baseLight,
           emissive: true
         });
-        // Rooftop HVAC unit
         Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.25, 17, 0.32, 0.32, 4, {
           base: '#8fa0b0'
         });
+        if (lv >= 3) {
+          Iso.drawVoxelBox(ctx, tx + 0.91, ty + 0.28, 6, 0.05, 0.42, 6, {
+            base: P.baseLight,
+            emissive: true
+          });
+          Iso.drawVoxelBox(ctx, tx + 0.62, ty + 0.26, 17, 0.20, 0.20, 3.2, {
+            base: '#64c466'
+          });
+        }
         break;
       }
 
@@ -719,6 +897,16 @@ ZS.Renderer = (function () {
     }
 
     Iso.setEntityFlash(0);
+
+    // 0.6s Facility Upgrade white scanline sweep VFX
+    if (id !== 'command_hq' && st.upgradeAnimTimer > 0) {
+      const p = 1 - Math.max(0, Math.min(1, st.upgradeAnimTimer / 0.6));
+      const scanZ = 1 + p * getStructVisualTopZ(id, lv);
+      ctx.save();
+      ctx.globalAlpha = (1 - p) * 0.85;
+      Iso.drawTilePoly(ctx, tx + 0.08, ty + 0.08, scanZ, 'rgba(255,255,255,0.22)', '#FFFFFF', 2.0 * zScale);
+      ctx.restore();
+    }
   }
 
   function drawHqByLevel(ctx, st, tx, ty, state, timeSec, zScale) {
@@ -910,8 +1098,9 @@ ZS.Renderer = (function () {
     }
   }
 
-  function drawOperatorFigure(ctx, gx, gy, zBase, vestColor, helmetAccent, aimAngle, zScale, hasLaser) {
+  function drawOperatorFigure(ctx, gx, gy, zBase, vestColor, helmetAccent, aimAngle, zScale, hasLaser, hasOrangeTip) {
     const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
     // Voxel torso + face + helmet cap (each single-material with unified top-left shading)
     Iso.drawVoxelBox(ctx, gx - 0.11, gy - 0.11, zBase, 0.22, 0.22, 8, {
       base: vestColor
@@ -922,7 +1111,17 @@ ZS.Renderer = (function () {
     Iso.drawVoxelBox(ctx, gx - 0.095, gy - 0.095, zBase + 11.4, 0.19, 0.19, 2.8, {
       base: helmetAccent
     });
-    drawTurretBarrel(ctx, gx, gy, zBase + 6, aimAngle, hasLaser ? 16 : 12, '#1f242b', zScale);
+    const bLen = hasLaser ? 16 : 12;
+    drawTurretBarrel(ctx, gx, gy, zBase + 6, aimAngle, bLen, '#1f242b', zScale);
+    if (hasOrangeTip) {
+      const tipGx = gx + Math.cos(aimAngle) * (bLen / 32);
+      const tipGy = gy + Math.sin(aimAngle) * (bLen / 32);
+      const tipP = Iso.gridToScreen(tipGx, tipGy, zBase + 6);
+      ctx.fillStyle = P.levelMax || '#FF9F43';
+      ctx.beginPath();
+      ctx.arc(tipP.x, tipP.y, 1.8 * zScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (hasLaser) {
       const p1 = Iso.gridToScreen(gx, gy, zBase + 6);
       const tx = gx + Math.cos(aimAngle) * 1.4;
@@ -1108,6 +1307,17 @@ ZS.Renderer = (function () {
       ctx.ellipse(basePos.x, basePos.y, 9.2 * sc * zScale, 5 * sc * zScale, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
+
+    // Lv.3 Razor Pad Vulnerability ring (+15% incoming projectile damage)
+    if (z.vulnOnPad) {
+      ctx.fillStyle = P.dangerFill;
+      ctx.strokeStyle = P.danger;
+      ctx.lineWidth = 1.4 * zScale;
+      ctx.beginPath();
+      ctx.ellipse(basePos.x, basePos.y, 10.6 * sc * zScale, 5.6 * sc * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   function drawProjectiles(ctx, projectiles, zScale) {
@@ -1122,9 +1332,39 @@ ZS.Renderer = (function () {
         ctx.restore();
         continue;
       }
+      if (p.kind === 'spark') {
+        const p1 = Iso.gridToScreen(p.x1, p.y1, p.z || 10);
+        const p2 = Iso.gridToScreen(p.x2, p.y2, p.z || 10);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.life / (p.maxLife || 0.12));
+        ctx.strokeStyle = p.color || '#FF8A3D';
+        ctx.lineWidth = 2.4 * zScale;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo((p1.x + p2.x) * 0.5 + 3 * zScale, (p1.y + p2.y) * 0.5 - 4 * zScale);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+      if (p.kind === 'sniper_trail') {
+        const p1 = Iso.gridToScreen(p.x1, p.y1, p.z || 24);
+        const p2 = Iso.gridToScreen(p.x2, p.y2, p.z || 24);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.life / (p.maxLife || 0.15)) * 0.9;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 3.2 * zScale;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
       if (p.kind === 'chain') {
         ctx.strokeStyle = ZS.DATA.PALETTE.power;
-        ctx.lineWidth = 2.2 * zScale;
+        ctx.lineWidth = 2.2 * (p.widthMult || 1.0) * zScale;
         ctx.beginPath();
         for (let k = 0; k < p.points.length; k++) {
           const pt = Iso.gridToScreen(p.points[k].x, p.points[k].y, 14);
@@ -1311,8 +1551,15 @@ ZS.Renderer = (function () {
         const isDamaged = st.hp < st.maxHp && st.hp > 0;
         const isUnpowered = state.isNight && def && def.requiresPower && !powered;
 
+        const lv = st.level || 1;
+        const hasPips = id !== 'command_hq' && lv >= 2;
+        const hasRank = (st.rank || 0) >= 1;
+        const topZ = id === 'command_hq'
+          ? ((ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null)?.maxZ || 36)
+          : getStructVisualTopZ(id, lv);
+
         if (isDamaged) {
-          let hpZ = 28;
+          let hpZ = topZ + 8 + (hasPips || hasRank ? 6 : 0);
           let hpW = 26;
           if (id === 'command_hq') {
             const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null;
@@ -1327,6 +1574,11 @@ ZS.Renderer = (function () {
           ctx.fillRect(barPos.x - bw * 0.5 - 1.2, barPos.y - 1.2, bw + 2.4, bh + 2.4);
           ctx.fillStyle = ratio > 0.5 ? P.heal : ratio > 0.25 ? P.caution : P.danger;
           ctx.fillRect(barPos.x - bw * 0.5, barPos.y, bw * ratio, bh);
+        }
+
+        // Facility Upgrade ◆ Pips in Info Layer (Lv.2 = ◆◆ #F2F4F7, Lv.3 = ◆◆◆ #FF9F43, 70% alpha at night)
+        if (hasPips) {
+          drawUpgradePips(ctx, tx + 0.5, ty + 0.5, topZ + 9, lv, hasRank, state.isNight, st.upgradeAnimTimer || 0, zScale);
         }
 
         if (isUnpowered) {
@@ -1398,6 +1650,42 @@ ZS.Renderer = (function () {
       ctx.restore();
     }
 
+    ctx.restore();
+  }
+
+  function drawUpgradePips(ctx, gx, gy, zPos, lv, hasRank, isNight, animTimer, zScale) {
+    const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
+    const c = Iso.gridToScreen(gx, gy, zPos);
+    const scale = Math.max(0.82, zScale);
+    const rBase = 3.3 * scale;
+    const gap = 8 * scale;
+    const fill = lv >= 3 ? (P.levelMax || '#FF9F43') : (P.levelPip || '#F2F4F7');
+    const stroke = lv >= 3 ? (P.levelMaxStroke || '#5C2E00') : (P.levelPipStroke || '#1B2430');
+    const x0 = c.x - ((lv - 1) * gap) * 0.5 + (hasRank ? 7 * scale : 0);
+
+    ctx.save();
+    ctx.globalAlpha = isNight ? 0.70 : 1.0;
+    for (let i = 0; i < lv; i++) {
+      let r = rBase;
+      if (animTimer > 0 && i === lv - 1) {
+        const pop = Math.sin(Math.min(1, (0.6 - animTimer) / 0.6) * Math.PI);
+        r = rBase * (1 + pop * 0.55);
+      }
+      const px = x0 + i * gap;
+      const py = c.y;
+      ctx.beginPath();
+      ctx.moveTo(px, py - r);
+      ctx.lineTo(px + r, py);
+      ctx.lineTo(px, py + r);
+      ctx.lineTo(px - r, py);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = Math.max(1.0, 1.2 * scale);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

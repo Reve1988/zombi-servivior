@@ -4,6 +4,7 @@ ZS.Game = (function () {
   const SAVE_KEY = 'outpost_zero_save_v1';
   const DATA = ZS.DATA;
   const N = DATA.GRID_SIZE;
+  let nextZombieUid = 1;
 
   const state = {
     wave: 1,
@@ -54,6 +55,7 @@ ZS.Game = (function () {
 
     zombies: [],
     projectiles: [],
+    burstQueue: [],
     particles: [],
     floatingTexts: [],
     flares: [],
@@ -129,6 +131,7 @@ ZS.Game = (function () {
 
     state.zombies = [];
     state.projectiles = [];
+    state.burstQueue = [];
     state.particles = [];
     state.floatingTexts = [];
     state.flares = [];
@@ -165,6 +168,186 @@ ZS.Game = (function () {
     state.flow = ZS.Pathfinding.computeFlowField(N, DATA.HQ_POS, state.structGrid);
   }
 
+  function isUpgradeableDef(def) {
+    if (!def || def.layer !== 'struct') return false;
+    return def.category === 'defense' || def.category === 'infra';
+  }
+
+  function getUpgradeCost(def, fromLevel) {
+    if (!isUpgradeableDef(def)) return null;
+    const base = def.cost || {};
+    if (fromLevel === 1) {
+      return {
+        wood: Math.max(12, Math.round((base.wood || 8) * 1.15)),
+        scrap: Math.max(8, Math.round((base.scrap || 6) * 0.85)),
+        coin: (base.coin || 0) + 10
+      };
+    }
+    if (fromLevel === 2) {
+      return {
+        wood: Math.max(24, Math.round((base.wood || 10) * 1.80)),
+        scrap: Math.max(16, Math.round((base.scrap || 10) * 1.45)),
+        coin: Math.round((base.coin || 0) * 1.5) + 25
+      };
+    }
+    return null;
+  }
+
+  function getStructLevelProfile(def, level) {
+    const lv = Math.max(1, Math.min(3, level || 1));
+    let hpScale = 1.0;
+    let dmgScale = 1.0;
+    let rateScale = 1.0;
+    let rangeAdd = 0;
+    let critAdd = 0;
+    let powerIdle = def.powerIdle || 0;
+    let powerShot = def.powerShot || 0;
+    let powerCap = def.powerCap || 0;
+    let dayCharge = def.dayCharge || 0;
+    let popCap = def.popCap || 0;
+    let cozy = def.cozy || 0;
+    let trapDps = def.trapDps || 0;
+    let trapWear = 3.2;
+    let slowFactor = def.slowFactor || 1.0;
+    let vulnMult = 1.0;
+    let thornsRatio = 0;
+    let pellets = def.pellets || 1;
+    let knockback = 0;
+    let pierceCount = 1;
+    let burstSecondMult = 0;
+    let splashRadius = def.splashRadius || 0;
+    let chainCount = def.chainCount || 3;
+    let slowDuration = def.slowDuration || 1.5;
+
+    if (def.subType === 'wall') {
+      if (lv === 2) hpScale = 1.45;
+      else if (lv === 3) {
+        hpScale = 2.00;
+        thornsRatio = 0.35;
+      }
+    } else if (def.id === 'razor_pad') {
+      if (lv === 2) {
+        hpScale = 1.40;
+        trapDps = 17;
+        trapWear = 2.4;
+      } else if (lv === 3) {
+        hpScale = 1.90;
+        trapDps = 26;
+        trapWear = 2.4;
+        slowFactor = 0.40;
+        vulnMult = 1.15;
+      }
+    } else if (def.subType === 'manned') {
+      if (lv === 2) {
+        dmgScale = 1.28;
+        rateScale = 1.10;
+        hpScale = 1.25;
+      } else if (lv === 3) {
+        dmgScale = 1.62;
+        rateScale = 1.20;
+        hpScale = 1.55;
+        if (def.id === 'rifle_bunker') {
+          burstSecondMult = 0.50;
+        } else if (def.id === 'shotgun_post') {
+          pellets = 6;
+          knockback = 0.20;
+        } else if (def.id === 'sniper_tower') {
+          rangeAdd = 1.0;
+          pierceCount = 2;
+        }
+      }
+    } else if (def.subType === 'turret') {
+      if (lv === 2) {
+        dmgScale = 1.30;
+        rateScale = 1.12;
+        hpScale = 1.25;
+        powerIdle = +(powerIdle * 1.15).toFixed(2);
+      } else if (lv === 3) {
+        dmgScale = 1.68;
+        rateScale = 1.25;
+        hpScale = 1.55;
+        powerIdle = +(powerIdle * 1.30).toFixed(2);
+        if (def.id === 'vulcan_turret') {
+          powerShot = 0.24;
+          critAdd = 0.12;
+        } else if (def.id === 'missile_pod') {
+          splashRadius = 1.75;
+        } else if (def.id === 'emp_coil') {
+          chainCount = 5;
+          slowDuration = 2.4;
+        }
+      }
+    } else if (def.id === 'solar_array' || def.id === 'wind_turbine') {
+      if (lv === 2) {
+        hpScale = 1.25;
+        dayCharge = Math.round(dayCharge * 1.4);
+        powerCap = Math.round(powerCap * 1.4);
+      } else if (lv === 3) {
+        hpScale = 1.55;
+        dayCharge = Math.round(dayCharge * 1.9);
+        powerCap = Math.round(powerCap * 1.9);
+      }
+    } else if (def.id === 'battery_bank') {
+      if (lv === 2) {
+        hpScale = 1.25;
+        powerCap = 145;
+        dayCharge = 18;
+      } else if (lv === 3) {
+        hpScale = 1.55;
+        powerCap = 205;
+        dayCharge = 28;
+      }
+    } else if (def.id === 'field_tent') {
+      if (lv === 2) {
+        hpScale = 1.25;
+        popCap = 2;
+        cozy = 8;
+      } else if (lv === 3) {
+        hpScale = 1.55;
+        popCap = 3;
+        cozy = 12;
+      }
+    } else if (def.id === 'shelter_pod') {
+      if (lv === 2) {
+        hpScale = 1.25;
+        popCap = 3;
+        cozy = 18;
+      } else if (lv === 3) {
+        hpScale = 1.55;
+        popCap = 4;
+        cozy = 26;
+      }
+    }
+
+    return {
+      level: lv,
+      baseMaxHp: Math.round((def.maxHp || 100) * hpScale),
+      dmgScale,
+      rateScale,
+      rangeAdd,
+      critAdd,
+      powerIdle,
+      powerShot,
+      powerCap,
+      dayCharge,
+      popCap,
+      cozy,
+      trapDps,
+      trapWear,
+      slowFactor,
+      vulnMult,
+      thornsRatio,
+      pellets,
+      knockback,
+      pierceCount,
+      burstSecondMult,
+      splashRadius,
+      chainCount,
+      slowDuration,
+      perkLabel: lv >= 3 && DATA.LV3_PERK_LABELS ? DATA.LV3_PERK_LABELS[def.id] || null : null
+    };
+  }
+
   function recalculateBaseStats() {
     const hqInfo = getHqLevelInfo(state.hqLevel);
     let powerCap = hqInfo.basePowerCap;
@@ -199,23 +382,24 @@ ZS.Game = (function () {
         const def = DATA.ITEMS[st.id];
         if (!def) continue;
 
-        // Update maxHp with floor bonus
+        // Update maxHp & infra stats with upgrade level + floor bonus
+        const prof = getStructLevelProfile(def, st.level || 1);
         const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
-        const targetMax = Math.round(def.maxHp * hpMult);
+        const targetMax = Math.round(prof.baseMaxHp * hpMult);
         if (st.maxHp !== targetMax) {
           const ratio = st.maxHp > 0 ? st.hp / st.maxHp : 1;
           st.maxHp = targetMax;
           st.hp = Math.min(targetMax, Math.max(1, Math.round(targetMax * ratio)));
         }
 
-        if (def.powerCap) powerCap += def.powerCap;
-        if (def.dayCharge) dayCharge += def.dayCharge;
-        if (def.requiresPower && def.powerIdle) nightIdleDrain += def.powerIdle;
-        if (def.popCap) popCap += def.popCap;
+        if (prof.powerCap) powerCap += prof.powerCap;
+        if (prof.dayCharge) dayCharge += prof.dayCharge;
+        if (def.requiresPower && prof.powerIdle) nightIdleDrain += prof.powerIdle;
+        if (prof.popCap) popCap += prof.popCap;
         if (def.popUse) popUsed += def.popUse;
 
-        if (def.cozy) {
-          cozyRaw += def.cozy;
+        if (prof.cozy) {
+          cozyRaw += prof.cozy;
           if (fDef && fDef.cozyTileBonus && def.category === 'decor') {
             cozyRaw += fDef.cozyTileBonus;
           }
@@ -244,14 +428,17 @@ ZS.Game = (function () {
     state.cozyTier = tier;
   }
 
-  function getStructureEffectiveStats(st, tx, ty) {
+  function getStructureEffectiveStats(st, tx, ty, overrideLevel) {
     const def = DATA.ITEMS[st.id];
     if (!def) return { damage: 0, fireRate: 0, range: 0, critChance: 0 };
+
+    const lv = overrideLevel !== undefined ? overrideLevel : (st.level || 1);
+    const prof = getStructLevelProfile(def, lv);
 
     let dmgMult = 1.0;
     let rateMult = 1.0 + state.cozyTier.fireRate;
     let rangeMult = 1.0;
-    let critChance = 0.04;
+    let critChance = 0.04 + prof.critAdd;
 
     if (def.subType === 'manned') {
       dmgMult += state.cozyTier.agentDmg;
@@ -292,11 +479,27 @@ ZS.Game = (function () {
       }
     }
 
+    const baseDmg = (def.damage || 0) * prof.dmgScale;
+    const baseRate = (def.fireRate || 0) * prof.rateScale;
+    const baseRange = (def.range || 0) + prof.rangeAdd;
+
     return {
-      damage: (def.damage || 0) * dmgMult,
-      fireRate: (def.fireRate || 0) * rateMult,
-      range: (def.range || 0) * rangeMult,
-      critChance: Math.min(0.65, critChance)
+      level: lv,
+      damage: baseDmg * dmgMult,
+      fireRate: baseRate * rateMult,
+      range: baseRange * rangeMult,
+      critChance: Math.min(0.75, critChance),
+      powerIdle: prof.powerIdle,
+      powerShot: prof.powerShot,
+      pellets: prof.pellets,
+      knockback: prof.knockback,
+      pierceCount: prof.pierceCount,
+      burstSecondMult: prof.burstSecondMult,
+      splashRadius: prof.splashRadius,
+      chainCount: prof.chainCount,
+      slowDuration: prof.slowDuration,
+      perkLabel: prof.perkLabel,
+      prof
     };
   }
 
@@ -450,6 +653,150 @@ ZS.Game = (function () {
     return { ok: true };
   }
 
+  function getCumulativeRefundCost(st, def) {
+    if (!def) return null;
+    if (st.invested) {
+      return {
+        wood: st.invested.wood || 0,
+        scrap: st.invested.scrap || 0,
+        coin: st.invested.coin || 0
+      };
+    }
+    // Fallback reconstruction for legacy saves without st.invested
+    const total = { wood: 0, scrap: 0, coin: 0 };
+    if (!st.usedVoucher && def.cost) {
+      total.wood += def.cost.wood || 0;
+      total.scrap += def.cost.scrap || 0;
+      total.coin += def.cost.coin || 0;
+    }
+    const lv = st.level || 1;
+    for (let k = 1; k < lv; k++) {
+      const up = getUpgradeCost(def, k);
+      if (up) {
+        total.wood += up.wood || 0;
+        total.scrap += up.scrap || 0;
+        total.coin += up.coin || 0;
+      }
+    }
+    return total;
+  }
+
+  function canUpgradeStructure(tx, ty) {
+    if (state.phase !== 'day') {
+      return { ok: false, reason: '정비 페이즈(낮)에만 시설을 강화할 수 있습니다.' };
+    }
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) {
+      return { ok: false, reason: '잘못된 타일입니다.' };
+    }
+    const st = state.structGrid[ty] && state.structGrid[ty][tx];
+    if (!st) return { ok: false, reason: '시설이 없습니다.' };
+    if (st.id === 'command_hq') {
+      return canUpgradeHq();
+    }
+    const def = DATA.ITEMS[st.id];
+    if (!isUpgradeableDef(def)) {
+      return { ok: false, reason: '이 시설은 강화 대상이 아닙니다.', notUpgradeable: true };
+    }
+    const curLv = st.level || 1;
+    if (curLv >= 3) {
+      return { ok: false, reason: '이미 최고 강화 단계(Lv.3)입니다.', isMax: true };
+    }
+    const nextLv = curLv + 1;
+    const capLv = Math.min(3, state.hqLevel || 1);
+    const cost = getUpgradeCost(def, curLv);
+    if (nextLv > capLv) {
+      return {
+        ok: false,
+        reason: `지휘 본부 Lv.${nextLv} 증축 후 Lv.${nextLv} 강화가 해금됩니다.`,
+        hqCapped: true,
+        reqHqLevel: nextLv,
+        cost
+      };
+    }
+    if (!canAffordCost(cost)) {
+      return {
+        ok: false,
+        reason: `강화 자원이 부족합니다. (필요: 🪵${cost.wood || 0} · 🔩${cost.scrap || 0} · 🪙${cost.coin || 0})`,
+        cost
+      };
+    }
+    return { ok: true, nextLv, cost };
+  }
+
+  function upgradeStructure(tx, ty) {
+    const st = state.structGrid[ty] && state.structGrid[ty][tx];
+    if (st && st.id === 'command_hq') {
+      return upgradeHq();
+    }
+    const check = canUpgradeStructure(tx, ty);
+    if (!check.ok) {
+      ZS.Audio.playError();
+      banner('시설 강화 불가', check.reason, 'warn');
+      return false;
+    }
+
+    const def = DATA.ITEMS[st.id];
+    const cost = check.cost;
+    payCost(cost);
+
+    const prevMax = st.maxHp;
+    const prevCap = state.powerCap;
+    const prevPopCap = state.popCap;
+
+    st.level = check.nextLv;
+    if (!st.invested) {
+      st.invested = getCumulativeRefundCost(st, def) || { wood: 0, scrap: 0, coin: 0 };
+      // Note: getCumulativeRefundCost already counted up to old st.level-1, so reset properly:
+      const base = st.usedVoucher ? {} : (def.cost || {});
+      st.invested = {
+        wood: base.wood || 0,
+        scrap: base.scrap || 0,
+        coin: base.coin || 0
+      };
+      for (let k = 1; k < check.nextLv - 1; k++) {
+        const prevUp = getUpgradeCost(def, k);
+        if (prevUp) {
+          st.invested.wood += prevUp.wood || 0;
+          st.invested.scrap += prevUp.scrap || 0;
+          st.invested.coin += prevUp.coin || 0;
+        }
+      }
+    }
+    st.invested.wood = (st.invested.wood || 0) + (cost.wood || 0);
+    st.invested.scrap = (st.invested.scrap || 0) + (cost.scrap || 0);
+    st.invested.coin = (st.invested.coin || 0) + (cost.coin || 0);
+    st.upgradeAnimTimer = 0.6;
+
+    recalculateBaseStats();
+    const hpDelta = Math.max(0, st.maxHp - prevMax);
+    st.hp = Math.min(st.maxHp, st.hp + hpDelta);
+
+    if (state.powerCap > prevCap && def.subType === 'power') {
+      state.power = Math.min(state.powerCap, state.power + Math.round((state.powerCap - prevCap) * 0.5));
+    }
+    if (state.popCap > prevPopCap && state.agents < state.popCap && state.wave === 1) {
+      // Keep natural morning arrival rule unless HQ upgraded
+    }
+
+    if (ZS.Audio.playUpgrade) ZS.Audio.playUpgrade();
+    else ZS.Audio.playBuild();
+
+    const cx = tx + 0.5;
+    const cy = ty + 0.5;
+    const pipCol = st.level >= 3 ? DATA.PALETTE.levelMax : DATA.PALETTE.levelPip;
+    const strokeCol = st.level >= 3 ? DATA.PALETTE.levelMaxStroke : DATA.PALETTE.outlineDark;
+    spawnBurstParticles(cx, cy, 12, pipCol, 10);
+    addFloatingText(cx, cy, 28, `Lv.${st.level}`, DATA.PALETTE.levelPip, 14, strokeCol);
+
+    if (st.level === 3 && DATA.LV3_PERK_LABELS && DATA.LV3_PERK_LABELS[def.id]) {
+      banner(`⚡ [${def.name}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
+    }
+
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
   function placeItem(itemId, tx, ty) {
     const check = canPlaceItem(itemId, tx, ty);
     if (!check.ok) {
@@ -459,8 +806,10 @@ ZS.Game = (function () {
     }
 
     const def = DATA.ITEMS[itemId];
+    let usedVoucher = false;
     if ((state.freeVouchers[itemId] || 0) > 0) {
       state.freeVouchers[itemId] -= 1;
+      usedVoucher = true;
     } else {
       payCost(def.cost);
     }
@@ -472,12 +821,21 @@ ZS.Game = (function () {
       const fDef = fid ? DATA.ITEMS[fid] : null;
       const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
       const maxHp = Math.round(def.maxHp * hpMult);
+      const baseCost = usedVoucher ? {} : (def.cost || {});
       state.structGrid[ty][tx] = {
         id: itemId,
+        level: 1,
+        usedVoucher,
+        invested: {
+          wood: baseCost.wood || 0,
+          scrap: baseCost.scrap || 0,
+          coin: baseCost.coin || 0
+        },
         hp: maxHp,
         maxHp,
         cooldown: 0,
-        aimAngle: 0
+        aimAngle: 0,
+        upgradeAnimTimer: 0
       };
     }
 
@@ -536,8 +894,9 @@ ZS.Game = (function () {
         return false;
       }
       const def = DATA.ITEMS[st.id];
+      const refundTotal = getCumulativeRefundCost(st, def);
       state.structGrid[ty][tx] = null;
-      refundCost(def && def.cost, tx, ty);
+      refundCost(refundTotal, tx, ty);
       recalculateBaseStats();
       state.power = Math.min(state.power, Math.max(state.powerCap, state.power));
       recomputeFlow();
@@ -756,6 +1115,7 @@ ZS.Game = (function () {
     const hqCx = DATA.HQ_POS.x + 0.5;
     const hqCy = DATA.HQ_POS.y + 0.5;
     state.zombies.push({
+      uid: nextZombieUid++,
       type: entry.type,
       x: gx,
       y: gy,
@@ -766,6 +1126,7 @@ ZS.Game = (function () {
       attackRate: def.attackRate,
       atkCooldown: 0,
       slowTimer: 0,
+      vulnOnPad: false,
       facingAngle: Math.atan2(hqCy - gy, hqCx - gx),
       seed: Math.random() * 10
     });
@@ -844,8 +1205,12 @@ ZS.Game = (function () {
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const s = state.structGrid[y] && state.structGrid[y][x];
-        if (s && s.hitFlash > 0) {
+        if (!s) continue;
+        if (s.hitFlash > 0) {
           s.hitFlash = Math.max(0, s.hitFlash - rawDt * 5.5);
+        }
+        if (s.id !== 'command_hq' && s.upgradeAnimTimer > 0) {
+          s.upgradeAnimTimer = Math.max(0, s.upgradeAnimTimer - rawDt);
         }
       }
     }
@@ -881,8 +1246,9 @@ ZS.Game = (function () {
       }
     }
 
-    // 4. Update Defenders & Auto-Turrets
+    // 4. Update Defenders & Auto-Turrets + Delayed Burst Shots
     updateDefenders(dt);
+    updateBurstQueue(dt);
 
     // 5. Update Projectiles
     updateProjectiles(dt);
@@ -1009,14 +1375,15 @@ ZS.Game = (function () {
 
         if (bestIdx === -1) continue;
 
-        // Check shot power cost for electric turrets
-        if (def.requiresPower && def.powerShot) {
-          if (state.power < def.powerShot * 0.35) {
+        // Check shot power cost for electric turrets (uses upgraded powerShot, e.g. vulcan Lv.3 = 0.24)
+        const shotCost = eff.powerShot !== undefined ? eff.powerShot : (def.powerShot || 0);
+        if (def.requiresPower && shotCost) {
+          if (state.power < shotCost * 0.35) {
             state.power = 0;
             if (!state.blackoutTriggered) triggerBlackout();
             continue;
           }
-          state.power = Math.max(0, state.power - def.powerShot);
+          state.power = Math.max(0, state.power - shotCost);
           if (state.power <= 0 && !state.blackoutTriggered) triggerBlackout();
         }
 
@@ -1024,12 +1391,49 @@ ZS.Game = (function () {
         st.aimAngle = Math.atan2(target.y - cy, target.x - cx);
         st.cooldown = 1 / Math.max(0.2, eff.fireRate);
 
-        fireWeapon(def, eff, cx, cy, bestIdx);
+        fireWeapon(def, eff, cx, cy, bestIdx, st);
       }
     }
   }
 
-  function fireWeapon(def, eff, cx, cy, targetIdx) {
+  function updateBurstQueue(dt) {
+    for (let i = state.burstQueue.length - 1; i >= 0; i--) {
+      const b = state.burstQueue[i];
+      b.delay -= dt;
+      if (b.delay <= 0) {
+        state.burstQueue.splice(i, 1);
+        const a = b.angle + (Math.random() - 0.5) * 0.08;
+        const spd = 18;
+        ZS.Audio.playShoot('rifle');
+        state.projectiles.push({
+          kind: 'bullet',
+          x: b.cx,
+          y: b.cy,
+          z: 13,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          damage: b.damage,
+          isCrit: b.isCrit,
+          splash: 0,
+          color: '#FFE484',
+          width: 1.9,
+          life: 0.60,
+          pierceLeft: 1,
+          hitUids: []
+        });
+      }
+    }
+  }
+
+  function isZombieOnLv3RazorPad(z) {
+    if (!z) return false;
+    const tx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
+    const ty = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
+    const under = state.structGrid[ty] && state.structGrid[ty][tx];
+    return !!(under && under.id === 'razor_pad' && (under.level || 1) >= 3);
+  }
+
+  function fireWeapon(def, eff, cx, cy, targetIdx, st) {
     const target = state.zombies[targetIdx];
     if (!target) return;
 
@@ -1040,13 +1444,16 @@ ZS.Game = (function () {
     ZS.Audio.playShoot(def.projType);
 
     if (def.projType === 'emp') {
-      // Instant chain lightning across up to chainCount zombies
+      // Instant chain lightning across up to eff.chainCount zombies (Lv.3 = 5)
+      const chainMax = eff.chainCount || def.chainCount || 3;
+      const slowDur = eff.slowDuration || def.slowDuration || 1.6;
+      const isLv3Emp = (eff.level || 1) >= 3;
       const hitIndices = [targetIdx];
       let curX = target.x;
       let curY = target.y;
       const points = [{ x: cx, y: cy }, { x: curX, y: curY }];
 
-      for (let c = 1; c < (def.chainCount || 3); c++) {
+      for (let c = 1; c < chainMax; c++) {
         let nextIdx = -1;
         let minDist = 2.4;
         for (let i = 0; i < state.zombies.length; i++) {
@@ -1067,6 +1474,7 @@ ZS.Game = (function () {
       state.projectiles.push({
         kind: 'chain',
         points,
+        widthMult: isLv3Emp ? 1.4 : 1.0,
         life: 0.14
       });
 
@@ -1074,16 +1482,19 @@ ZS.Game = (function () {
       const sorted = hitIndices.slice().sort((a, b) => b - a);
       for (let k = 0; k < sorted.length; k++) {
         const idx = sorted[k];
-        if (state.zombies[idx]) {
-          state.zombies[idx].slowTimer = Math.max(state.zombies[idx].slowTimer, def.slowDuration || 1.5);
-          damageZombie(idx, finalDmg, DATA.PALETTE.power, isCrit);
+        const zk = state.zombies[idx];
+        if (zk) {
+          zk.slowTimer = Math.max(zk.slowTimer, slowDur);
+          const vuln = isZombieOnLv3RazorPad(zk) ? 1.15 : 1.0;
+          damageZombie(idx, finalDmg * vuln, DATA.PALETTE.power, isCrit);
         }
       }
       return;
     }
 
     if (def.projType === 'shotgun') {
-      const pellets = def.pellets || 4;
+      const pellets = eff.pellets || def.pellets || 4;
+      const kb = eff.knockback || 0;
       for (let p = 0; p < pellets; p++) {
         const a = angle + (Math.random() - 0.5) * (def.spread || 0.32);
         const spd = 15;
@@ -1097,12 +1508,27 @@ ZS.Game = (function () {
           damage: finalDmg,
           isCrit,
           splash: 0,
+          knockback: kb,
           color: '#ffd6a5',
           width: 2.0,
-          life: 0.32
+          life: 0.32,
+          pierceLeft: 1,
+          hitUids: []
         });
       }
       return;
+    }
+
+    // Rifle Lv.3: Tactical 2-Round Burst (secondary shot at 50% damage after 0.06s)
+    if (def.id === 'rifle_bunker' && eff.burstSecondMult > 0) {
+      state.burstQueue.push({
+        delay: 0.06,
+        cx,
+        cy,
+        angle,
+        damage: finalDmg * eff.burstSecondMult,
+        isCrit
+      });
     }
 
     const spd = def.projType === 'sniper' ? 24 : def.projType === 'missile' ? 11 : 18;
@@ -1114,20 +1540,28 @@ ZS.Game = (function () {
         : def.projType === 'vulcan'
         ? '#ffe8b6'
         : '#ffe0a8';
+    const splashR = eff.splashRadius !== undefined ? eff.splashRadius : (def.splashRadius || 0);
+    const pierceCnt = eff.pierceCount || 1;
 
     state.projectiles.push({
       kind: 'bullet',
       x: cx,
       y: cy,
+      startX: cx,
+      startY: cy,
       z: def.id === 'sniper_tower' ? 24 : 14,
       vx: Math.cos(angle) * spd,
       vy: Math.sin(angle) * spd,
       damage: finalDmg,
       isCrit,
-      splash: def.splashRadius || 0,
+      splash: splashR,
+      splashRingLv3: def.id === 'missile_pod' && (eff.level || 1) >= 3 ? splashR : 0,
       color,
       width: def.projType === 'sniper' ? 2.8 : def.projType === 'missile' ? 3.5 : 2.1,
-      life: 0.65
+      life: 0.65,
+      pierceLeft: pierceCnt,
+      isPiercingSniper: def.id === 'sniper_tower' && pierceCnt > 1,
+      hitUids: []
     });
   }
 
@@ -1139,15 +1573,18 @@ ZS.Game = (function () {
         state.projectiles.splice(i, 1);
         continue;
       }
-      if (p.kind === 'chain' || p.kind === 'ring') continue;
+      if (p.kind === 'chain' || p.kind === 'ring' || p.kind === 'spark' || p.kind === 'sniper_trail') continue;
 
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
-      // Hit detection against zombies
+      const hitList = p.hitUids || [];
+
+      // Hit detection against zombies (skip already pierced zombie uids)
       let hitIdx = -1;
       for (let zIdx = 0; zIdx < state.zombies.length; zIdx++) {
         const z = state.zombies[zIdx];
+        if (z.uid && hitList.includes(z.uid)) continue;
         if (Math.hypot(z.x - p.x, z.y - p.y) <= 0.42) {
           hitIdx = zIdx;
           break;
@@ -1159,12 +1596,13 @@ ZS.Game = (function () {
           ZS.Audio.playExplosion();
           spawnBurstParticles(p.x, p.y, 12, '#ff8a47', p.isHqShot ? 8 : 12);
           state.flares.push({ x: p.x, y: p.y, radius: p.isHqShot ? 1.5 : 2.3, life: 0.20 });
-          if (p.splashFlashRadius > 0) {
+          const ringRad = p.splashFlashRadius || p.splashRingLv3 || 0;
+          if (ringRad > 0) {
             state.projectiles.push({
               kind: 'ring',
               x: p.x,
               y: p.y,
-              radius: p.splashFlashRadius,
+              radius: ringRad,
               color: '#FF9F43',
               life: 0.20,
               maxLife: 0.20
@@ -1174,13 +1612,66 @@ ZS.Game = (function () {
             const zk = state.zombies[k];
             const dist = Math.hypot(zk.x - p.x, zk.y - p.y);
             if (dist <= p.splash) {
-              damageZombie(k, p.damage * (1 - dist / (p.splash * 1.5)), '#ff9f43', p.isCrit);
+              const vuln = isZombieOnLv3RazorPad(zk) ? 1.15 : 1.0;
+              damageZombie(k, p.damage * vuln * (1 - dist / (p.splash * 1.5)), '#ff9f43', p.isCrit);
             }
           }
+          state.projectiles.splice(i, 1);
         } else {
-          damageZombie(hitIdx, p.damage, p.isCrit ? DATA.PALETTE.critText : '#ffffff', p.isCrit);
+          const hitZ = state.zombies[hitIdx];
+          if (hitZ && hitZ.uid) {
+            if (!p.hitUids) p.hitUids = [];
+            p.hitUids.push(hitZ.uid);
+          }
+          const isSecondPierce = p.isPiercingSniper && p.hitUids && p.hitUids.length === 2;
+          const pierceMult = isSecondPierce ? 0.70 : 1.0;
+          const vuln = isZombieOnLv3RazorPad(hitZ) ? 1.15 : 1.0;
+
+          // Shotgun Lv.3 knockback (0.20 tiles, bosses immune, prevent pushing into solid structure or outside map)
+          if (p.knockback > 0 && hitZ) {
+            const zDef = DATA.ZOMBIES[hitZ.type];
+            if (!(zDef && zDef.isBoss)) {
+              const vLen = Math.hypot(p.vx, p.vy) || 1;
+              const nx = hitZ.x + (p.vx / vLen) * p.knockback;
+              const ny = hitZ.y + (p.vy / vLen) * p.knockback;
+              const ntx = Math.floor(nx);
+              const nty = Math.floor(ny);
+              if (ntx >= 0 && nty >= 0 && ntx < N && nty < N) {
+                const blk = state.structGrid[nty] && state.structGrid[nty][ntx];
+                const bDef = blk ? (blk.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[blk.id]) : null;
+                if (!blk || (bDef && bDef.passable)) {
+                  hitZ.x = nx;
+                  hitZ.y = ny;
+                  spawnBurstParticles(nx, ny, 2, '#C8BFA8', 4);
+                }
+              }
+            }
+          }
+
+          // Sniper Lv.3 white piercing trail (0.15s)
+          if (p.isPiercingSniper) {
+            state.projectiles.push({
+              kind: 'sniper_trail',
+              x1: p.startX !== undefined ? p.startX : p.x - p.vx * 0.08,
+              y1: p.startY !== undefined ? p.startY : p.y - p.vy * 0.08,
+              x2: p.x,
+              y2: p.y,
+              z: p.z || 24,
+              life: 0.15,
+              maxLife: 0.15
+            });
+            p.startX = p.x;
+            p.startY = p.y;
+          }
+
+          damageZombie(hitIdx, p.damage * pierceMult * vuln, p.isCrit ? DATA.PALETTE.critText : '#ffffff', p.isCrit);
+
+          const rem = (p.pierceLeft || 1) - 1;
+          p.pierceLeft = rem;
+          if (rem <= 0) {
+            state.projectiles.splice(i, 1);
+          }
         }
-        state.projectiles.splice(i, 1);
       }
     }
   }
@@ -1241,11 +1732,14 @@ ZS.Game = (function () {
       // Check passable razor pad trap under zombie
       const under = state.structGrid[ty][tx];
       let slowMult = z.slowTimer > 0 ? 0.52 : 1.0;
+      z.vulnOnPad = false;
       if (under && under.id === 'razor_pad') {
         const rDef = DATA.ITEMS.razor_pad;
-        slowMult = Math.min(slowMult, rDef.slowFactor);
-        z.hp -= rDef.trapDps * dt;
-        under.hp -= 3.2 * dt;
+        const rProf = getStructLevelProfile(rDef, under.level || 1);
+        slowMult = Math.min(slowMult, rProf.slowFactor);
+        z.vulnOnPad = rProf.vulnMult > 1.0;
+        z.hp -= rProf.trapDps * dt;
+        under.hp -= rProf.trapWear * dt;
         if (under.hp <= 0) {
           state.structGrid[ty][tx] = null;
           structureDestroyed = true;
@@ -1326,11 +1820,33 @@ ZS.Game = (function () {
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
           blockingTarget.hp -= z.damage;
+          blockingTarget.hitFlash = 0.55;
           spawnBurstParticles(btx + 0.5, bty + 0.5, 10, '#cbd5e1', 4);
+
+          const bDef = DATA.ITEMS[blockingTarget.id];
+          const bProf = bDef ? getStructLevelProfile(bDef, blockingTarget.level || 1) : null;
+
           if (blockingTarget.hp <= 0) {
             state.structGrid[bty][btx] = null;
             spawnBurstParticles(btx + 0.5, bty + 0.5, 10, DATA.PALETTE.danger, 10);
             structureDestroyed = true;
+          }
+
+          // Wall Lv.3 Thorns: reflect max(8, round(z.damage * 0.35)) + orange spark line (0.12s)
+          if (bProf && bProf.thornsRatio > 0) {
+            const reflDmg = Math.max(8, Math.round(z.damage * bProf.thornsRatio));
+            state.projectiles.push({
+              kind: 'spark',
+              x1: btx + 0.5,
+              y1: bty + 0.5,
+              x2: z.x,
+              y2: z.y,
+              z: 10,
+              color: DATA.PALETTE.thornSpark || '#FF8A3D',
+              life: 0.12,
+              maxLife: 0.12
+            });
+            damageZombie(i, reflDmg, DATA.PALETTE.thornSpark || '#FF8A3D', false);
           }
         }
       } else if (distGoal > 0.01) {
@@ -1352,6 +1868,7 @@ ZS.Game = (function () {
     state.phase = 'day';
     state.isNight = false;
     state.projectiles = [];
+    state.burstQueue = [];
 
     recalculateBaseStats();
 
@@ -1519,10 +2036,13 @@ ZS.Game = (function () {
       state.floorGrid = d.floorGrid;
       state.structGrid = d.structGrid;
 
-      const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
-      if (hq && hq.id === 'command_hq') {
-        hq.level = state.hqLevel;
-        hq.upgradeAnimTimer = 0;
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const s = state.structGrid[y] && state.structGrid[y][x];
+          if (!s) continue;
+          if (!s.level) s.level = s.id === 'command_hq' ? state.hqLevel : 1;
+          s.upgradeAnimTimer = 0;
+        }
       }
 
       recalculateBaseStats();
@@ -1557,6 +2077,11 @@ ZS.Game = (function () {
     getHqLevelInfo,
     canUpgradeHq,
     upgradeHq,
+    isUpgradeableDef,
+    getUpgradeCost,
+    getStructLevelProfile,
+    canUpgradeStructure,
+    upgradeStructure,
     recalculateBaseStats,
     getStructureEffectiveStats,
     canPlaceItem,
