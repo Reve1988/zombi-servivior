@@ -19,8 +19,8 @@
           <div id="hud-phase-text" class="wave-sub">주간 정비 페이즈</div>
         </div>
       </div>
-      <div class="hq-health-box" title="전술 지휘 본부 내구도">
-        <div class="hq-label">🏛️ 지휘 본부 <span id="hud-hq-hp">800 / 800</span></div>
+      <div class="hq-health-box" id="hud-hq-box" title="전술 지휘 본부 내구도 및 등급 (클릭하여 본부 조회)">
+        <div class="hq-label"><span id="hud-hq-title">🏛️ 본부 Lv.1</span> <span id="hud-hq-hp">800 / 800</span></div>
         <div class="bar-track"><div id="hud-hq-bar" class="bar-fill hp-fill" style="width:100%"></div></div>
       </div>
     </div>
@@ -71,17 +71,24 @@
       </div>
 
       <div class="res-pill cozy-pill" id="cozy-pill">
-        <span class="res-icon">💛</span>
+        <span class="res-icon cozy-heart-icon" id="res-cozy-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path id="res-cozy-heart-path" d="M12 20.6C12 20.6 4 15.1 4 9.2C4 6.5 6.1 4.5 8.7 4.5C10.3 4.5 11.5 5.3 12 6.4C12.5 5.3 13.7 4.5 15.3 4.5C17.9 4.5 20 6.5 20 9.2C20 15.1 12 20.6 12 20.6Z" fill="#FFC94A" fill-opacity="0.32" stroke="#FFC94A" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </span>
         <div>
           <div class="res-label">안락함·사기</div>
-          <div id="res-cozy" class="res-val">Lv.1 (8)</div>
+          <div class="cozy-val-row">
+            <span id="res-cozy" class="res-val">Lv.1</span>
+            <span id="res-cozy-segments" class="cozy-segments"></span>
+          </div>
         </div>
         <div id="cozy-tooltip" class="cozy-popover"></div>
       </div>
     </div>
 
     <div class="hud-group hud-sys">
-      <span id="hud-version" class="version-badge" title="현재 게임 빌드 버전">v0.1.0</span>
+      <span id="hud-version" class="version-badge" title="현재 게임 빌드 버전">v0.2.0</span>
       <button id="btn-sound" class="sys-btn" title="효과음 켜기/끄기">🔊</button>
       <button id="btn-center" class="sys-btn" title="본부 중심으로 카메라 초기화 (Space)">🎯</button>
       <button id="btn-guide" class="sys-btn" title="작전 가이드 열기">❔ 가이드</button>
@@ -94,6 +101,9 @@
     <div id="banner-title" class="banner-title"></div>
     <div id="banner-sub" class="banner-sub"></div>
   </div>
+
+  <!-- Collapsible Staging / Local Debug Toolbar (strictly double-gated by isDevEnvironment && ?debug=1) -->
+  <div id="debug-toolbar" class="debug-toolbar hidden"></div>
 
   <!-- Right Side Tactical Controls -->
   <aside id="right-controls">
@@ -149,6 +159,7 @@
 
     <div id="detail-bar" class="dock-detail">
       <span id="detail-text">건설할 항목을 선택하거나 기지 시설을 클릭해 상세 능력치와 오라 시너지를 확인하세요. (우클릭 드래그 / WASD: 화면 이동, 휠: 확대·축소)</span>
+      <div id="detail-actions" class="detail-actions"></div>
     </div>
   </section>
 
@@ -175,7 +186,7 @@
     <div class="modal-card guide-card">
       <div class="modal-head">
         <div>
-          <h2>📡 OUTPOST ZERO <span id="guide-version" class="version-inline">v0.1.0</span> — 전술 지휘관 매뉴얼</h2>
+          <h2>📡 OUTPOST ZERO <span id="guide-version" class="version-inline">v0.2.0</span> — 전술 지휘관 매뉴얼</h2>
           <p>현대 전술 기지를 건설·꾸미고 밤마다 몰려오는 감염체 웨이브를 방어하세요.</p>
         </div>
         <button id="btn-close-guide" class="close-btn">✕</button>
@@ -203,7 +214,7 @@
           <span><b>좌클릭 / 드래그</b>: 설치 및 시설 조회</span>
           <span><b>우클릭 드래그 또는 WASD</b>: 카메라 이동</span>
           <span><b>마우스 휠</b>: 줌 인/아웃</span>
-          <span><b>M / X / ESC</b>: 이동 / 철거 / 취소</span>
+          <span><b>U / M / X / ESC</b>: 강화 / 이동 / 철거 / 취소</span>
         </div>
       </div>
     </div>

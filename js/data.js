@@ -1,9 +1,98 @@
 window.ZS = window.ZS || {};
 
-ZS.DATA = {
-  VERSION: 'v0.1.0',
+ZS.DATA = (function () {
+  // Single-source-of-truth Semantic Palette (share/design/issue-03-palette-tokens.md)
+  const PALETTE = {
+    // 1. Semantic Tokens (1 Color = 1 Meaning)
+    power: '#5EF2FF',
+    powerDim: '#2A7F8C',
+    powerSoft: 'rgba(94, 242, 255, 0.24)',
+    powerGlow: 'rgba(94, 242, 255, 0.44)',
+
+    coin: '#FFC94A',
+    gold: '#FFC94A',
+    goldStroke: 'rgba(255, 201, 74, 0.78)',
+    goldFill: 'rgba(255, 201, 74, 0.10)',
+
+    danger: '#FF4D6D',
+    dangerFill: 'rgba(255, 77, 109, 0.24)',
+
+    heal: '#4ADE80',
+    health: '#4ADE80',
+    healthFill: 'rgba(74, 222, 128, 0.24)',
+
+    caution: '#FACC15',
+    healthMid: '#FACC15',
+
+    select: 'rgba(255, 255, 255, 0.85)',
+    selectStroke: 'rgba(255, 255, 255, 0.85)',
+    selectFill: 'rgba(255, 255, 255, 0.10)',
+    rangeStroke: 'rgba(255, 255, 255, 0.85)',
+    rangeFill: 'rgba(255, 255, 255, 0.10)',
+    hoverStroke: 'rgba(255, 255, 255, 0.45)',
+    hoverFill: 'rgba(255, 255, 255, 0.10)',
+
+    critText: '#FFFFFF',
+    critStroke: '#FF4D6D',
+    neutralText: '#F1F5F9',
+
+    // 2. Growth / Rank Metal Tokens (#12, #13)
+    rankBronze: '#D08A4E',
+    rankBronzeStroke: '#5A3317',
+    rankSilver: '#E3E8EE',
+    rankSilverStroke: '#4A5563',
+    rankGold: '#FFD34D',
+    rankGoldStroke: '#6B4A00',
+    levelPip: '#F2F4F7',
+    levelPipStroke: '#1B2430',
+    levelMax: '#FF9F43',
+    levelMaxStroke: '#5C2E00',
+    steelBand: '#8C96A3',
+    thornSpark: '#FF8A3D',
+
+    // 3. World Base Tokens (issue-03-palette-tokens.md §3: keep terrain #485E4D/#415646 until #5)
+    groundA: '#485E4D',
+    groundB: '#415646',
+    groundEdge: '#4A4F48',
+    terrainA: '#485E4D',
+    terrainB: '#415646',
+    terrainEdgeA: '#3C4B42',
+    terrainEdgeB: '#36443B',
+    slabSideLeft: '#3A3027',
+    slabSideRight: '#2C241D',
+    baseLight: '#FFD27A',
+    nightOverlay: 'rgb(7, 13, 25)',
+    outlineDark: '#1B2430',
+    resWood: '#D49A5A',
+    resScrap: '#AEB8C4',
+    warmGlow: 'rgba(255, 210, 122, 0.42)',
+
+    // 4. Enemy (Zombie) Complementary Palette (share/design/issue-03-palette-tokens.md §4 approved)
+    zombieWalkerCoat: '#6E1E3E',
+    zombieWalkerSkin: '#F2CCD0',
+    zombieWalkerEye: '#FF4D6D',
+
+    zombieRunnerCoat: '#991B2E',
+    zombieRunnerAccent: '#FF9466',
+    zombieRunnerSkin: '#FFF0E6',
+    zombieRunnerEye: '#FFB347',
+
+    zombieBruteCoat: '#3B1029',
+    zombieBruteArmor: '#C97A9E',
+    zombieBruteSkin: '#E8BBD0',
+    zombieBruteEye: '#FF4D6D',
+
+    zombieBossCoat: '#591259',
+    zombieBossCrack: '#E040FB',
+    zombieBossSkin: '#F9DBFF',
+    zombieBossEye: '#FF4D6D'
+  };
+
+  return {
+  VERSION: 'v0.2.0',
   GRID_SIZE: 18,
   HQ_POS: { x: 8, y: 8 },
+  PALETTE,
 
   INITIAL_RESOURCES: {
     wood: 150,
@@ -21,20 +110,141 @@ ZS.DATA = {
     startingAgents: 2
   },
 
-  COZY_TIERS: [
-    { level: 1, min: 0,   title: '임시 전초기지',     agentDmg: 0,    fireRate: 0,    coinBonus: 0,    freeRepair: 0.15 },
-    { level: 2, min: 20,  title: '정비된 작전소',     agentDmg: 0.10, fireRate: 0.04, coinBonus: 0.12, freeRepair: 0.30 },
-    { level: 3, min: 50,  title: '모던 전술 쉘터',    agentDmg: 0.20, fireRate: 0.08, coinBonus: 0.25, freeRepair: 0.50 },
-    { level: 4, min: 95,  title: '하이라이즈 아웃포스트', agentDmg: 0.32, fireRate: 0.13, coinBonus: 0.40, freeRepair: 0.70 },
-    { level: 5, min: 150, title: '네오 어반 요새',    agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.55, freeRepair: 0.85 },
-    { level: 6, min: 220, title: '엘리트 파라다이스', agentDmg: 0.60, fireRate: 0.25, coinBonus: 0.75, freeRepair: 1.00 }
+  HQ_LEVELS: [
+    {
+      level: 1,
+      name: '임시 지휘소',
+      cost: null,
+      maxHp: 800,
+      basePowerCap: 85,
+      baseDayCharge: 42,
+      basePopCap: 2,
+      structUpgradeCap: 1,
+      maxZ: 36,
+      hpBarWidth: 38,
+      weapon: null
+    },
+    {
+      level: 2,
+      name: '전술 작전 본부',
+      cost: { wood: 90, scrap: 70, coin: 45 },
+      maxHp: 1150,
+      basePowerCap: 115,
+      baseDayCharge: 55,
+      basePopCap: 3,
+      structUpgradeCap: 2,
+      maxZ: 30,
+      hpBarWidth: 41,
+      weapon: {
+        name: '경기관총',
+        range: 5.0,
+        damage: 16,
+        fireRate: 2.2,
+        projType: 'hq_lmg',
+        color: '#FFE484',
+        width: 1.8,
+        speed: 19,
+        splashRadius: 0
+      }
+    },
+    {
+      level: 3,
+      name: '통합 요새 사령부',
+      cost: { wood: 170, scrap: 140, coin: 95 },
+      maxHp: 1600,
+      basePowerCap: 150,
+      baseDayCharge: 72,
+      basePopCap: 4,
+      structUpgradeCap: 3,
+      maxZ: 38,
+      hpBarWidth: 44,
+      weapon: {
+        name: '중기관총',
+        range: 5.8,
+        damage: 26,
+        fireRate: 2.8,
+        projType: 'hq_hmg',
+        color: '#FFE484',
+        width: 2.4,
+        speed: 20,
+        splashRadius: 0
+      }
+    },
+    {
+      level: 4,
+      name: '이지스 코어 사령부',
+      cost: { wood: 280, scrap: 240, coin: 170 },
+      maxHp: 2200,
+      basePowerCap: 200,
+      baseDayCharge: 95,
+      basePopCap: 5,
+      structUpgradeCap: 3,
+      maxZ: 48,
+      hpBarWidth: 46,
+      weapon: {
+        name: '이지스 트윈캐논',
+        range: 6.5,
+        damage: 38,
+        fireRate: 3.5,
+        projType: 'hq_aegis',
+        color: '#FF9F43',
+        width: 3.0,
+        speed: 17,
+        splashRadius: 0.8
+      }
+    }
   ],
+
+  COZY_TIERS: [
+    { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.10 },
+    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.10, xpBonus: 0.10, freeRepair: 0.18 },
+    { level: 3, min: 60,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.20, xpBonus: 0.20, freeRepair: 0.26 },
+    { level: 4, min: 110, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.32, xpBonus: 0.30, freeRepair: 0.34 },
+    { level: 5, min: 175, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.45, xpBonus: 0.45, freeRepair: 0.42 },
+    { level: 6, min: 250, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.60, xpBonus: 0.60, freeRepair: 0.50 },
+    { level: 7, min: 330, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.75, xpBonus: 0.80, freeRepair: 0.58 },
+    { level: 8, min: 420, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.95, xpBonus: 1.00, freeRepair: 0.65 }
+  ],
+
+  COZY_FLOOR_CAP: 60,
 
   CATEGORIES: [
     { id: 'defense', label: '🛡️ 방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
     { id: 'infra',   label: '⚡ 전력·숙소', desc: '주간 충전 발전기, 배터리, 요원 숙소' },
     { id: 'decor',   label: '✨ 모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
+
+  LV3_PERK_LABELS: {
+    hesco_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
+    blast_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
+    razor_pad: '취약화 철조망 (둔화 60% · 받는 사격 피해 +15%)',
+    rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
+    shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
+    sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
+    vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
+    missile_pod: '고폭 확산탄 (폭발 반경 1.75 확대)',
+    emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)',
+    solar_array: '고밀도 발전 셀 (충전·용량 ×1.9)',
+    wind_turbine: '고출력 로터 (충전·용량 ×1.9)',
+    battery_bank: '대용량 ESS 팩 (용량 205⚡ · 충전 +28⚡)',
+    field_tent: '확장형 전술 막사 (수용 +3👥 · 안락함 +12)',
+    shelter_pod: '프리미엄 모듈러 생활관 (수용 +4👥 · 안락함 +26)'
+  },
+
+  VETERANCY_RANKS: [
+    { rank: 0, minXp: 0,  name: '신병',   dmgBonus: 0.00, rateBonus: 0.00, critAdd: 0.00, rangeAdd: 0.0, color: '#94A3B8', stroke: '#1B2430' },
+    { rank: 1, minXp: 12, name: '숙련',   dmgBonus: 0.08, rateBonus: 0.05, critAdd: 0.00, rangeAdd: 0.0, color: PALETTE.rankBronze, stroke: PALETTE.rankBronzeStroke },
+    { rank: 2, minXp: 32, name: '베테랑', dmgBonus: 0.18, rateBonus: 0.12, critAdd: 0.06, rangeAdd: 0.0, color: PALETTE.rankSilver, stroke: PALETTE.rankSilverStroke },
+    { rank: 3, minXp: 70, name: '에이스', dmgBonus: 0.30, rateBonus: 0.20, critAdd: 0.12, rangeAdd: 0.4, color: PALETTE.rankGold,   stroke: PALETTE.rankGoldStroke }
+  ],
+
+  ZOMBIE_KILL_XP: {
+    walker: 1.0,
+    runner: 1.5,
+    brute: 4.0,
+    boss: 12.0,
+    bossGlobalBonus: 4.0
+  },
 
   ITEMS: {
     // ================= FLOORS (layer: 'floor') =================
@@ -44,10 +254,11 @@ ZS.DATA = {
       category: 'decor',
       layer: 'floor',
       icon: '🛣️',
+      reqHqLevel: 1,
       cost: { wood: 4 },
       cozy: 1,
       cozyGroup: 'floor_road',
-      desc: '노란 전술 차선이 마킹된 깔끔한 아스팔트 도로 타일입니다.'
+      desc: '전술 유도 차선이 마킹된 깔끔한 아스팔트 도로 타일입니다.'
     },
     steel_deck: {
       id: 'steel_deck',
@@ -55,6 +266,7 @@ ZS.DATA = {
       category: 'decor',
       layer: 'floor',
       icon: '🔩',
+      reqHqLevel: 1,
       cost: { scrap: 5 },
       cozy: 2,
       cozyGroup: 'floor_steel',
@@ -67,6 +279,7 @@ ZS.DATA = {
       category: 'decor',
       layer: 'floor',
       icon: '⬜',
+      reqHqLevel: 2,
       cost: { wood: 5, coin: 4 },
       cozy: 4,
       cozyGroup: 'floor_lounge',
@@ -79,6 +292,7 @@ ZS.DATA = {
       category: 'decor',
       layer: 'floor',
       icon: '⚠️',
+      reqHqLevel: 3,
       cost: { scrap: 4, coin: 5 },
       cozy: 3,
       cozyGroup: 'floor_hazard',
@@ -94,6 +308,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'wall',
       icon: '🧱',
+      reqHqLevel: 1,
       cost: { wood: 10, scrap: 4 },
       maxHp: 260,
       desc: '철망 프레임과 고밀도 충진재로 구성된 현대 군용 표준 바리케이드입니다.'
@@ -105,6 +320,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'wall',
       icon: '🛡️',
+      reqHqLevel: 3,
       cost: { wood: 6, scrap: 18 },
       maxHp: 560,
       desc: '중장갑 강철 경사 장갑판으로 제작되어 브루트 좀비의 돌파도 오래 버텨냅니다.'
@@ -117,6 +333,7 @@ ZS.DATA = {
       subType: 'trap',
       passable: true,
       icon: '🕸️',
+      reqHqLevel: 1,
       cost: { wood: 6, scrap: 10 },
       maxHp: 180,
       trapDps: 11,
@@ -132,6 +349,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'manned',
       icon: '🪖',
+      reqHqLevel: 1,
       cost: { wood: 24, scrap: 10 },
       popUse: 1,
       maxHp: 210,
@@ -148,6 +366,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'manned',
       icon: '💥',
+      reqHqLevel: 1,
       cost: { wood: 22, scrap: 15 },
       popUse: 1,
       maxHp: 240,
@@ -166,6 +385,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'manned',
       icon: '🎯',
+      reqHqLevel: 2,
       cost: { wood: 30, scrap: 24 },
       popUse: 1,
       maxHp: 195,
@@ -185,6 +405,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'turret',
       icon: '🔫',
+      reqHqLevel: 2,
       cost: { wood: 8, scrap: 36 },
       requiresPower: true,
       powerIdle: 0.55,
@@ -203,6 +424,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'turret',
       icon: '🚀',
+      reqHqLevel: 3,
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
       powerIdle: 0.85,
@@ -222,6 +444,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'turret',
       icon: '⚡',
+      reqHqLevel: 4,
       cost: { wood: 10, scrap: 52, coin: 15 },
       requiresPower: true,
       powerIdle: 1.0,
@@ -244,6 +467,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'power',
       icon: '☀️',
+      reqHqLevel: 1,
       cost: { wood: 10, scrap: 22 },
       maxHp: 155,
       dayCharge: 36,
@@ -259,6 +483,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'power',
       icon: '🌬️',
+      reqHqLevel: 3,
       cost: { wood: 14, scrap: 38 },
       maxHp: 175,
       dayCharge: 68,
@@ -274,6 +499,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'power',
       icon: '🔋',
+      reqHqLevel: 2,
       cost: { wood: 8, scrap: 28 },
       maxHp: 215,
       dayCharge: 12,
@@ -289,6 +515,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'housing',
       icon: '⛺',
+      reqHqLevel: 1,
       cost: { wood: 26, scrap: 8 },
       maxHp: 165,
       popCap: 1,
@@ -303,6 +530,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'housing',
       icon: '🏢',
+      reqHqLevel: 3,
       cost: { wood: 32, scrap: 26, coin: 15 },
       maxHp: 245,
       popCap: 2,
@@ -321,6 +549,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🔥',
+      reqHqLevel: 1,
       cost: { wood: 10, scrap: 12 },
       maxHp: 135,
       cozy: 8,
@@ -337,6 +566,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🔦',
+      reqHqLevel: 1,
       cost: { wood: 6, scrap: 16 },
       requiresPower: true,
       powerIdle: 0.4,
@@ -344,7 +574,7 @@ ZS.DATA = {
       cozy: 7,
       cozyGroup: 'decor_flood',
       lightRadius: 4.8,
-      lightColor: 'rgba(150, 225, 255, 0.52)',
+      lightColor: 'rgba(94, 242, 255, 0.42)',
       aura: { radius: 3.4, rangeMult: 0.15, critChance: 0.18 },
       desc: '[⚡야간 소모] 고광량 서치라이트. 반경 3.4칸 내 초소·포탑의 사거리 +15%, 치명타율 +18%!'
     },
@@ -355,6 +585,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🌳',
+      reqHqLevel: 1,
       cost: { wood: 14, coin: 8 },
       maxHp: 145,
       cozy: 10,
@@ -370,12 +601,13 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🥤',
+      reqHqLevel: 2,
       cost: { scrap: 14, coin: 18 },
       maxHp: 165,
       cozy: 13,
       cozyGroup: 'decor_vending',
       lightRadius: 2.3,
-      lightColor: 'rgba(105, 210, 255, 0.42)',
+      lightColor: 'rgba(255, 208, 148, 0.36)',
       aura: { radius: 2.7, fireRate: 0.15 },
       desc: '[내장 배터리 발광] 시원한 에너지 드링크 보급! 반경 2.7칸 내 연사속도를 +15% 높입니다.'
     },
@@ -386,6 +618,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🔧',
+      reqHqLevel: 2,
       cost: { wood: 10, scrap: 26, coin: 12 },
       maxHp: 210,
       cozy: 8,
@@ -400,6 +633,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '⛱️',
+      reqHqLevel: 3,
       cost: { wood: 18, coin: 14 },
       maxHp: 135,
       cozy: 15,
@@ -413,6 +647,7 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🕹️',
+      reqHqLevel: 4,
       cost: { scrap: 12, coin: 26 },
       requiresPower: true,
       powerIdle: 0.25,
@@ -430,13 +665,14 @@ ZS.DATA = {
       layer: 'struct',
       subType: 'decor',
       icon: '🏆',
+      reqHqLevel: 1,
       cost: { coin: 40 },
       unlockedByBoss: true,
       maxHp: 280,
       cozy: 30,
       cozyGroup: 'decor_trophy',
       lightRadius: 3.4,
-      lightColor: 'rgba(255, 220, 95, 0.5)',
+      lightColor: 'rgba(255, 201, 74, 0.48)',
       aura: { radius: 3.6, mannedDmg: 0.12, fireRate: 0.10 },
       desc: '[보스 격파 해금] 황금빛 전술 홀로그램 트로피. 안락함 +30 및 광역 전투 버프를 부여합니다.'
     }
@@ -453,8 +689,10 @@ ZS.DATA = {
       scrapDrop: [2, 4],
       coinDrop: [1, 2],
       scale: 1.0,
-      coatColor: '#4c5b52',
-      skinColor: '#7ca87c'
+      coatColor: PALETTE.zombieWalkerCoat,
+      skinColor: PALETTE.zombieWalkerSkin,
+      eyeColor: PALETTE.zombieWalkerEye,
+      eyeGlow: 'rgba(255, 77, 109, 0.56)'
     },
     runner: {
       id: 'runner',
@@ -465,9 +703,12 @@ ZS.DATA = {
       attackRate: 1.4,
       scrapDrop: [2, 5],
       coinDrop: [1, 3],
-      scale: 0.9,
-      coatColor: '#7a3338',
-      skinColor: '#98b880'
+      scale: 0.92,
+      coatColor: PALETTE.zombieRunnerCoat,
+      accentColor: PALETTE.zombieRunnerAccent,
+      skinColor: PALETTE.zombieRunnerSkin,
+      eyeColor: PALETTE.zombieRunnerEye,
+      eyeGlow: 'rgba(255, 179, 71, 0.58)'
     },
     brute: {
       id: 'brute',
@@ -479,8 +720,11 @@ ZS.DATA = {
       scrapDrop: [7, 12],
       coinDrop: [4, 7],
       scale: 1.32,
-      coatColor: '#363f4d',
-      skinColor: '#67946d'
+      coatColor: PALETTE.zombieBruteCoat,
+      armorColor: PALETTE.zombieBruteArmor,
+      skinColor: PALETTE.zombieBruteSkin,
+      eyeColor: PALETTE.zombieBruteEye,
+      eyeGlow: 'rgba(255, 77, 109, 0.62)'
     },
     boss: {
       id: 'boss',
@@ -493,8 +737,11 @@ ZS.DATA = {
       coinDrop: [28, 38],
       isBoss: true,
       scale: 1.72,
-      coatColor: '#4b234d',
-      skinColor: '#8ee89e'
+      coatColor: PALETTE.zombieBossCoat,
+      accentColor: PALETTE.zombieBossCrack,
+      skinColor: PALETTE.zombieBossSkin,
+      eyeColor: PALETTE.zombieBossEye,
+      eyeGlow: 'rgba(255, 77, 109, 0.78)'
     }
   },
 
@@ -572,4 +819,5 @@ ZS.DATA = {
       itemId: 'emp_coil'
     }
   ]
-};
+  };
+})();
