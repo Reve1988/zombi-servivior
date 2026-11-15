@@ -78,6 +78,11 @@ ZS.Audio = (function () {
       setTimeout(() => tone(620, 920, 0.11, 'sine', 0.08), 55);
       setTimeout(() => tone(880, 1240, 0.14, 'triangle', 0.08), 115);
     },
+    playPromote() {
+      tone(523, 659, 0.09, 'triangle', 0.09);
+      setTimeout(() => tone(659, 784, 0.10, 'triangle', 0.09), 65);
+      setTimeout(() => tone(784, 1046, 0.16, 'sine', 0.10), 130);
+    },
     playRemove() {
       tone(300, 140, 0.12, 'sawtooth', 0.07);
     },

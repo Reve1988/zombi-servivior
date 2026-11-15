@@ -332,7 +332,7 @@ ZS.Renderer = (function () {
     } else if (uiState.mode === 'move' && uiState.movingSource && !state.structGrid[ty][tx]) {
       const src = state.structGrid[uiState.movingSource.ty][uiState.movingSource.tx];
       if (src) {
-        previewObj = { id: src.id, level: src.level || 1, hp: 100, maxHp: 100, aimAngle: src.aimAngle || 0 };
+        previewObj = { id: src.id, level: src.level || 1, rank: src.rank || 0, hp: 100, maxHp: 100, aimAngle: src.aimAngle || 0 };
       }
     }
 
@@ -1332,6 +1332,19 @@ ZS.Renderer = (function () {
         ctx.restore();
         continue;
       }
+      if (p.kind === 'promo_ring') {
+        const t = 1 - Math.max(0, p.life / (p.maxLife || 0.8));
+        const c = Iso.gridToScreen(p.x, p.y, p.z || 18);
+        ctx.save();
+        ctx.globalAlpha = (1 - t) * 0.92;
+        ctx.strokeStyle = p.color || '#FFD34D';
+        ctx.lineWidth = 2.4 * zScale;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, (10 + t * 24) * zScale, (5.5 + t * 13) * zScale, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
       if (p.kind === 'spark') {
         const p1 = Iso.gridToScreen(p.x1, p.y1, p.z || 10);
         const p2 = Iso.gridToScreen(p.x2, p.y2, p.z || 10);
@@ -1581,6 +1594,11 @@ ZS.Renderer = (function () {
           drawUpgradePips(ctx, tx + 0.5, ty + 0.5, topZ + 9, lv, hasRank, state.isNight, st.upgradeAnimTimer || 0, zScale);
         }
 
+        // Combat Veterancy Rank Badge in Info Layer (Rank 1 Bronze Chevron, Rank 2 Silver 2-Chevron [NO cyan], Rank 3 Gold Star)
+        if (hasRank) {
+          drawRankBadge(ctx, tx + 0.5, ty + 0.5, topZ + 9, st.rank || 0, hasPips, st.promoAnimTimer || 0, zScale);
+        }
+
         if (isUnpowered) {
           const warnZ = isDamaged ? 35 : 29;
           const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, warnZ);
@@ -1685,6 +1703,67 @@ ZS.Renderer = (function () {
       ctx.strokeStyle = stroke;
       ctx.lineWidth = Math.max(1.0, 1.2 * scale);
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawChevronShape(ctx, cx, cy, s, fill, stroke) {
+    ctx.beginPath();
+    ctx.moveTo(cx - 5 * s, cy + 1.5 * s);
+    ctx.lineTo(cx, cy - 2.5 * s);
+    ctx.lineTo(cx + 5 * s, cy + 1.5 * s);
+    ctx.lineTo(cx + 5 * s, cy + 4.0 * s);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx - 5 * s, cy + 4.0 * s);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = Math.max(1.0, 1.2 * s);
+    ctx.stroke();
+  }
+
+  function drawStarShape(ctx, cx, cy, r, fill, stroke, s) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI * 0.5 + (i * Math.PI) / 5;
+      const rr = i % 2 === 1 ? r * 0.45 : r;
+      const px = cx + Math.cos(a) * rr;
+      const py = cy + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = Math.max(1.0, 1.2 * s);
+    ctx.stroke();
+  }
+
+  function drawRankBadge(ctx, gx, gy, zPos, rank, hasPips, promoAnimTimer, zScale) {
+    if (!rank || rank < 1) return;
+    const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
+    const c = Iso.gridToScreen(gx, gy, zPos);
+    const scale = Math.max(0.82, zScale);
+    let popMult = 1.0;
+    if (promoAnimTimer > 0) {
+      popMult = 1.0 + 0.35 * Math.sin(Math.min(1, (0.8 - promoAnimTimer) / 0.8) * Math.PI);
+    }
+    const s = scale * popMult;
+    const cx = c.x - (hasPips ? 16 * scale : 0);
+    const cy = c.y;
+
+    ctx.save();
+    if (rank === 1) {
+      drawChevronShape(ctx, cx, cy, s, P.rankBronze || '#D08A4E', P.rankBronzeStroke || '#5A3317');
+    } else if (rank === 2) {
+      // Silver 2-chevron (NEVER cyan)
+      drawChevronShape(ctx, cx, cy - 2.6 * s, s, P.rankSilver || '#E3E8EE', P.rankSilverStroke || '#4A5563');
+      drawChevronShape(ctx, cx, cy + 2.2 * s, s, P.rankSilver || '#E3E8EE', P.rankSilverStroke || '#4A5563');
+    } else if (rank >= 3) {
+      drawStarShape(ctx, cx, cy, 6.0 * s, P.rankGold || '#FFD34D', P.rankGoldStroke || '#6B4A00', s);
     }
     ctx.restore();
   }

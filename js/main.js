@@ -416,6 +416,27 @@ window.ZS = window.ZS || {};
 
     if (def.subType === 'manned' || def.subType === 'turret') {
       const eff = ZS.Game.getStructureEffectiveStats(obj, tx, ty);
+      const rank = eff.rank || 0;
+      const rInfo = eff.rankInfo || ZS.Game.getVeterancyRankInfo(rank);
+      const xp = obj.xp || 0;
+      const ranks = ZS.DATA.VETERANCY_RANKS || [];
+      const nextR = ranks[rank + 1] || null;
+      const curMin = rInfo.minXp || 0;
+      const pct = nextR
+        ? Math.max(0, Math.min(100, ((xp - curMin) / Math.max(1, nextR.minXp - curMin)) * 100))
+        : 100;
+      const rankSymbol = rank >= 3 ? '★' : rank === 2 ? '︾' : rank === 1 ? '▾' : '•';
+      const remLabel = nextR ? `남은 ${(Math.max(0.1, nextR.minXp - xp)).toFixed(1)} XP` : 'MAX';
+      const rankWidgetHtml = `
+        <span class="detail-rank-box" title="처치 ${obj.kills || 0}기 · 누적 ${xp.toFixed(1)} XP">
+          <span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${rankSymbol}</span>
+          <span class="detail-rank-name" style="color:${rInfo.color};">${rInfo.name}</span>
+          <span class="detail-xp-track"><span class="detail-xp-fill" style="width:${pct.toFixed(1)}%;background:${rInfo.color};"></span></span>
+          <span class="detail-xp-rem">${remLabel}</span>
+        </span>
+      `;
+      actionHtml = rankWidgetHtml + actionHtml;
+
       const pwrInfo = def.requiresPower
         ? `⚡대기 -${eff.powerIdle}/s, 사격 -${eff.powerShot}`
         : `👥요원 ${def.popUse}명`;
@@ -491,7 +512,26 @@ window.ZS = window.ZS || {};
     }
 
     if (uiState.mode === 'remove') {
-      ZS.Game.removeAt(tx, ty);
+      const target = st.structGrid[ty] && st.structGrid[ty][tx];
+      const rank = target && target.id !== 'command_hq' ? (target.rank || 0) : 0;
+      const removed = ZS.Game.removeAt(tx, ty);
+      if (!removed && target && rank >= 1) {
+        const def = ZS.DATA.ITEMS[target.id];
+        const rInfo = ZS.Game.getVeterancyRankInfo(rank);
+        const rankSymbol = rank >= 3 ? '★' : rank === 2 ? '︾' : '▾';
+        setDetailText(
+          `⚠️ [${def ? def.name : target.id}] 철거 확인 — ${rInfo.name} 배지(${Math.floor(target.xp || 0)} XP) 계급이 사라집니다.`,
+          `<span class="detail-rank-box"><span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${rankSymbol}</span><span class="detail-rank-name" style="color:${rInfo.color};">${rInfo.name}</span></span><button id="btn-confirm-demolish" class="detail-demolish-confirm-btn">🗑️ 계급 소멸 감수하고 철거</button>`
+        );
+        const confirmBtn = document.getElementById('btn-confirm-demolish');
+        if (confirmBtn) {
+          confirmBtn.addEventListener('click', () => {
+            if (ZS.Game.removeAt(tx, ty, true)) {
+              setDetailText('🗑️ [철거 완료] 건설·강화 자원의 80%를 회수했습니다.');
+            }
+          });
+        }
+      }
       return;
     }
 

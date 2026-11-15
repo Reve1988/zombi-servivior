@@ -723,6 +723,67 @@ html, body {
   cursor: not-allowed;
 }
 
+.detail-rank-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: rgba(15, 23, 34, 0.85);
+  border: 1px solid rgba(148, 178, 210, 0.24);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.detail-rank-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.detail-rank-name {
+  font-weight: 800;
+}
+
+.detail-xp-track {
+  width: 52px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.detail-xp-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.detail-xp-rem {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.detail-demolish-confirm-btn {
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--col-danger);
+  background: var(--col-danger-bg);
+  color: #ffe4e8;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.detail-demolish-confirm-btn:hover {
+  background: rgba(255, 77, 109, 0.35);
+}
+
 /* ================= MODALS ================= */
 .modal-backdrop {
   position: fixed;
