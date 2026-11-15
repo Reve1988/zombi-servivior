@@ -19,8 +19,8 @@
           <div id="hud-phase-text" class="wave-sub">주간 정비 페이즈</div>
         </div>
       </div>
-      <div class="hq-health-box" title="전술 지휘 본부 내구도">
-        <div class="hq-label">🏛️ 지휘 본부 <span id="hud-hq-hp">800 / 800</span></div>
+      <div class="hq-health-box" id="hud-hq-box" title="전술 지휘 본부 내구도 및 등급 (클릭하여 본부 조회)">
+        <div class="hq-label"><span id="hud-hq-title">🏛️ 본부 Lv.1</span> <span id="hud-hq-hp">800 / 800</span></div>
         <div class="bar-track"><div id="hud-hq-bar" class="bar-fill hp-fill" style="width:100%"></div></div>
       </div>
     </div>
@@ -149,6 +149,7 @@
 
     <div id="detail-bar" class="dock-detail">
       <span id="detail-text">건설할 항목을 선택하거나 기지 시설을 클릭해 상세 능력치와 오라 시너지를 확인하세요. (우클릭 드래그 / WASD: 화면 이동, 휠: 확대·축소)</span>
+      <div id="detail-actions" class="detail-actions"></div>
     </div>
   </section>
 

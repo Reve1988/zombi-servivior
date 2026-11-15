@@ -73,6 +73,11 @@ ZS.Audio = (function () {
       tone(320, 540, 0.09, 'triangle', 0.09);
       setTimeout(() => tone(620, 780, 0.07, 'sine', 0.06), 45);
     },
+    playUpgrade() {
+      tone(380, 620, 0.10, 'triangle', 0.09);
+      setTimeout(() => tone(620, 920, 0.11, 'sine', 0.08), 55);
+      setTimeout(() => tone(880, 1240, 0.14, 'triangle', 0.08), 115);
+    },
     playRemove() {
       tone(300, 140, 0.12, 'sawtooth', 0.07);
     },
@@ -99,7 +104,7 @@ ZS.Audio = (function () {
       } else if (projType === 'shotgun') {
         noise(0.11, 0.10, 750);
         tone(190, 65, 0.09, 'square', 0.06);
-      } else if (projType === 'missile') {
+      } else if (projType === 'missile' || projType === 'hq_aegis') {
         noise(0.16, 0.08, 600);
         tone(280, 130, 0.15, 'triangle', 0.06);
       } else if (projType === 'emp') {

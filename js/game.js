@@ -7,6 +7,7 @@ ZS.Game = (function () {
 
   const state = {
     wave: 1,
+    hqLevel: 1,
     phase: 'day', // 'day' | 'night' | 'gameover'
     isNight: false,
     nightAlpha: 0,
@@ -76,6 +77,29 @@ ZS.Game = (function () {
     if (onWaveBanner) onWaveBanner(title, sub, tone || 'info');
   }
 
+  function getHqLevelInfo(lv) {
+    const targetLv = lv || state.hqLevel || 1;
+    const list = DATA.HQ_LEVELS || [];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].level === targetLv) return list[i];
+    }
+    return (
+      list[0] || {
+        level: 1,
+        name: DATA.HQ_STATS.name,
+        cost: null,
+        maxHp: DATA.HQ_STATS.maxHp,
+        basePowerCap: DATA.HQ_STATS.basePowerCap,
+        baseDayCharge: DATA.HQ_STATS.baseDayCharge,
+        basePopCap: DATA.HQ_STATS.basePopCap,
+        structUpgradeCap: 1,
+        maxZ: 36,
+        hpBarWidth: 38,
+        weapon: null
+      }
+    );
+  }
+
   function createEmptyGrids() {
     state.floorGrid = Array.from({ length: N }, () => Array(N).fill(null));
     state.structGrid = Array.from({ length: N }, () => Array(N).fill(null));
@@ -85,6 +109,7 @@ ZS.Game = (function () {
     createEmptyGrids();
 
     state.wave = 1;
+    state.hqLevel = 1;
     state.phase = 'day';
     state.isNight = false;
     state.nightAlpha = 0;
@@ -96,6 +121,7 @@ ZS.Game = (function () {
     state.scrap = DATA.INITIAL_RESOURCES.scrap;
     state.coin = DATA.INITIAL_RESOURCES.coin;
 
+    const hqInfo = getHqLevelInfo(1);
     state.agents = DATA.HQ_STATS.startingAgents;
     state.freeVouchers = {};
     state.skills.repairCd = 0;
@@ -119,10 +145,12 @@ ZS.Game = (function () {
 
     state.structGrid[hy][hx] = {
       id: 'command_hq',
-      hp: DATA.HQ_STATS.maxHp,
-      maxHp: DATA.HQ_STATS.maxHp,
+      level: 1,
+      hp: hqInfo.maxHp,
+      maxHp: hqInfo.maxHp,
       cooldown: 0,
-      aimAngle: 0
+      aimAngle: 0,
+      upgradeAnimTimer: 0
     };
 
     recalculateBaseStats();
@@ -138,13 +166,24 @@ ZS.Game = (function () {
   }
 
   function recalculateBaseStats() {
-    let powerCap = DATA.HQ_STATS.basePowerCap;
-    let dayCharge = DATA.HQ_STATS.baseDayCharge;
+    const hqInfo = getHqLevelInfo(state.hqLevel);
+    let powerCap = hqInfo.basePowerCap;
+    let dayCharge = hqInfo.baseDayCharge;
     let nightIdleDrain = 0;
-    let popCap = DATA.HQ_STATS.basePopCap;
+    let popCap = hqInfo.basePopCap;
     let popUsed = 0;
     let cozyRaw = 0;
     const uniqueGroups = new Set();
+
+    const hqStruct = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+    if (hqStruct && hqStruct.id === 'command_hq') {
+      hqStruct.level = state.hqLevel || 1;
+      if (hqStruct.maxHp !== hqInfo.maxHp) {
+        const ratio = hqStruct.maxHp > 0 ? hqStruct.hp / hqStruct.maxHp : 1;
+        hqStruct.maxHp = hqInfo.maxHp;
+        hqStruct.hp = Math.min(hqInfo.maxHp, Math.max(1, Math.round(hqInfo.maxHp * ratio)));
+      }
+    }
 
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
@@ -276,6 +315,83 @@ ZS.Game = (function () {
     if (cost.coin) state.coin -= cost.coin;
   }
 
+  function canUpgradeHq() {
+    if (state.phase !== 'day') {
+      return { ok: false, reason: '정비 페이즈(낮)에만 지휘 본부를 증축할 수 있습니다.' };
+    }
+    const maxLv = (DATA.HQ_LEVELS && DATA.HQ_LEVELS.length) || 4;
+    if (state.hqLevel >= maxLv) {
+      return { ok: false, reason: '이미 최고 지휘 본부 등급(Lv.4)에 도달했습니다.' };
+    }
+    const nextInfo = getHqLevelInfo(state.hqLevel + 1);
+    if (!canAffordCost(nextInfo.cost)) {
+      const c = nextInfo.cost || {};
+      return {
+        ok: false,
+        reason: `증축 자원이 부족합니다. (필요: 🪵${c.wood || 0} · 🔩${c.scrap || 0} · 🪙${c.coin || 0})`,
+        nextInfo
+      };
+    }
+    return { ok: true, nextInfo };
+  }
+
+  function upgradeHq() {
+    const check = canUpgradeHq();
+    if (!check.ok) {
+      ZS.Audio.playError();
+      banner('지휘 본부 증축 불가', check.reason, 'warn');
+      return false;
+    }
+
+    const prevInfo = getHqLevelInfo(state.hqLevel);
+    const nextInfo = check.nextInfo;
+    payCost(nextInfo.cost);
+
+    state.hqLevel = nextInfo.level;
+    const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+    const hpGain = Math.max(0, nextInfo.maxHp - prevInfo.maxHp);
+    if (hq && hq.id === 'command_hq') {
+      hq.level = nextInfo.level;
+      hq.maxHp = nextInfo.maxHp;
+      hq.hp = Math.min(nextInfo.maxHp, hq.hp + hpGain);
+      hq.upgradeAnimTimer = 1.2;
+    }
+
+    const prevCap = state.powerCap;
+    const prevPopCap = state.popCap;
+    recalculateBaseStats();
+
+    // Immediately grant the new HQ generator/battery delta & bunk recruit feel
+    const capDelta = Math.max(0, state.powerCap - prevCap);
+    if (capDelta > 0) {
+      state.power = Math.min(state.powerCap, state.power + capDelta);
+    }
+    if (state.popCap > prevPopCap && state.agents < state.popCap) {
+      state.agents += 1;
+    }
+
+    const hx = DATA.HQ_POS.x + 0.5;
+    const hy = DATA.HQ_POS.y + 0.5;
+    spawnBurstParticles(hx, hy, 6, '#C8B898', 16);
+    spawnBurstParticles(hx, hy, 18, DATA.PALETTE.baseLight, 10);
+    addFloatingText(hx, hy, nextInfo.maxZ + 6, `Lv.${nextInfo.level}`, DATA.PALETTE.levelPip, 14, DATA.PALETTE.outlineDark);
+
+    if (ZS.Audio.playUpgrade) ZS.Audio.playUpgrade();
+    else ZS.Audio.playBuild();
+
+    const unlockedNames = Object.values(DATA.ITEMS)
+      .filter((it) => it.reqHqLevel === nextInfo.level && !it.unlockedByBoss)
+      .map((it) => it.name);
+    const wpnLabel = nextInfo.weapon ? `무장 [${nextInfo.weapon.name}] 개방` : '';
+    const unlockLabel = unlockedNames.length > 0 ? `신규 해금: ${unlockedNames.join(', ')}` : '';
+    const subParts = [wpnLabel, unlockLabel].filter(Boolean).join(' · ');
+
+    banner(`지휘 본부 Lv.${nextInfo.level} — ${nextInfo.name}`, subParts || `최대 내구도 ${nextInfo.maxHp} 확장 완료`, 'good');
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
   function canPlaceItem(itemId, tx, ty) {
     if (state.phase !== 'day') {
       return { ok: false, reason: '정비 페이즈(낮)에만 건설할 수 있습니다.' };
@@ -294,6 +410,18 @@ ZS.Game = (function () {
 
     if (def.unlockedByBoss && !state.bossDefeated) {
       return { ok: false, reason: '웨이브 5 보스 변이체를 처치하면 해금됩니다!' };
+    }
+
+    const hasVoucher = (state.freeVouchers[itemId] || 0) > 0;
+    const reqLv = def.reqHqLevel || 1;
+    if (!hasVoucher && state.hqLevel < reqLv) {
+      const reqInfo = getHqLevelInfo(reqLv);
+      return {
+        ok: false,
+        reason: `지휘 본부 Lv.${reqLv}(${reqInfo.name}) 증축 시 해금됩니다.`,
+        lockedByHq: true,
+        reqHqLevel: reqLv
+      };
     }
 
     if (def.layer === 'floor') {
@@ -315,7 +443,6 @@ ZS.Game = (function () {
       }
     }
 
-    const hasVoucher = (state.freeVouchers[itemId] || 0) > 0;
     if (!hasVoucher && !canAffordCost(def.cost)) {
       return { ok: false, reason: '건설 자원이 부족합니다.' };
     }
@@ -327,7 +454,7 @@ ZS.Game = (function () {
     const check = canPlaceItem(itemId, tx, ty);
     if (!check.ok) {
       ZS.Audio.playError();
-      addFloatingText(tx + 0.5, ty + 0.5, 18, check.reason, DATA.PALETTE.danger, 11);
+      banner('건설 불가', check.reason, 'warn');
       return false;
     }
 
@@ -378,7 +505,7 @@ ZS.Game = (function () {
     if (!src || src.id === 'command_hq') return false;
     if (toX <= 0 || toY <= 0 || toX >= N - 1 || toY >= N - 1) {
       ZS.Audio.playError();
-      addFloatingText(toX + 0.5, toY + 0.5, 18, '외곽 진입 구역으로는 이동할 수 없습니다.', DATA.PALETTE.danger, 11);
+      banner('이동 불가', '외곽 진입 구역으로는 시설을 옮길 수 없습니다.', 'warn');
       return false;
     }
     if (state.structGrid[toY][toX]) {
@@ -391,7 +518,7 @@ ZS.Game = (function () {
     recalculateBaseStats();
     recomputeFlow();
     ZS.Audio.playBuild();
-    addFloatingText(toX + 0.5, toY + 0.5, 18, '위치 재배치 완료', DATA.PALETTE.neutralText, 11);
+    spawnBurstParticles(toX + 0.5, toY + 0.5, 8, DATA.PALETTE.neutralText, 5);
     saveGame();
     notifyUi();
     return true;
@@ -405,7 +532,7 @@ ZS.Game = (function () {
     if (st) {
       if (st.id === 'command_hq') {
         ZS.Audio.playError();
-        addFloatingText(tx + 0.5, ty + 0.5, 22, '지휘 본부는 철거할 수 없습니다!', DATA.PALETTE.danger, 12);
+        banner('철거 불가', '지휘 본부는 철거할 수 없습니다!', 'warn');
         return false;
       }
       const def = DATA.ITEMS[st.id];
@@ -702,6 +829,27 @@ ZS.Game = (function () {
     if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
     if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
 
+    // Update HQ / structure upgrade animations
+    const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+    if (hqSt && hqSt.upgradeAnimTimer > 0) {
+      const prevT = hqSt.upgradeAnimTimer;
+      hqSt.upgradeAnimTimer = Math.max(0, hqSt.upgradeAnimTimer - rawDt);
+      if (prevT > 0.8 && hqSt.upgradeAnimTimer <= 0.8) {
+        spawnBurstParticles(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 8, '#D8C8A8', 10);
+      }
+      if (prevT > 0.3 && hqSt.upgradeAnimTimer <= 0.3) {
+        hqSt.hitFlash = 0.85;
+      }
+    }
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const s = state.structGrid[y] && state.structGrid[y][x];
+        if (s && s.hitFlash > 0) {
+          s.hitFlash = Math.max(0, s.hitFlash - rawDt * 5.5);
+        }
+      }
+    }
+
     // Update flares, particles, floating texts
     for (let i = state.flares.length - 1; i >= 0; i--) {
       state.flares[i].life -= dt;
@@ -777,6 +925,53 @@ ZS.Game = (function () {
   }
 
   function updateDefenders(dt) {
+    // 1. HQ Roof Auto-Turret (Lv.2~4, unpowered emergency defense)
+    const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+    const hqInfo = getHqLevelInfo(state.hqLevel);
+    if (hq && hq.id === 'command_hq' && hqInfo.weapon) {
+      if (hq.cooldown > 0) hq.cooldown -= dt;
+      if (hq.cooldown <= 0 && state.zombies.length > 0) {
+        const wpn = hqInfo.weapon;
+        const hcx = DATA.HQ_POS.x + 0.5;
+        const hcy = DATA.HQ_POS.y + 0.5;
+        const fireRate = wpn.fireRate * (1.0 + (state.cozyTier ? state.cozyTier.fireRate : 0));
+        let bestIdx = -1;
+        let bestDist = 1e9;
+        for (let i = 0; i < state.zombies.length; i++) {
+          const z = state.zombies[i];
+          const d = Math.hypot(z.x - hcx, z.y - hcy);
+          if (d <= wpn.range && d < bestDist) {
+            bestDist = d;
+            bestIdx = i;
+          }
+        }
+        if (bestIdx !== -1) {
+          const target = state.zombies[bestIdx];
+          hq.aimAngle = Math.atan2(target.y - hcy, target.x - hcx);
+          hq.cooldown = 1 / Math.max(0.2, fireRate);
+          ZS.Audio.playShoot(wpn.projType);
+          const spd = wpn.speed || 18;
+          state.projectiles.push({
+            kind: 'bullet',
+            x: hcx,
+            y: hcy,
+            z: hqInfo.maxZ - 4,
+            vx: Math.cos(hq.aimAngle) * spd,
+            vy: Math.sin(hq.aimAngle) * spd,
+            damage: wpn.damage,
+            isCrit: false,
+            splash: wpn.splashRadius || 0,
+            splashFlashRadius: wpn.splashRadius || 0,
+            color: wpn.color || '#FFE484',
+            width: wpn.width || 2.0,
+            life: 0.65,
+            isHqShot: true
+          });
+        }
+      }
+    }
+
+    // 2. Manned Posts & Electric Auto-Turrets
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
@@ -944,7 +1139,7 @@ ZS.Game = (function () {
         state.projectiles.splice(i, 1);
         continue;
       }
-      if (p.kind === 'chain') continue;
+      if (p.kind === 'chain' || p.kind === 'ring') continue;
 
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -962,8 +1157,19 @@ ZS.Game = (function () {
       if (hitIdx !== -1) {
         if (p.splash > 0) {
           ZS.Audio.playExplosion();
-          spawnBurstParticles(p.x, p.y, 12, '#ff8a47', 10);
-          state.flares.push({ x: p.x, y: p.y, radius: 2.3, life: 0.22 });
+          spawnBurstParticles(p.x, p.y, 12, '#ff8a47', p.isHqShot ? 8 : 12);
+          state.flares.push({ x: p.x, y: p.y, radius: p.isHqShot ? 1.5 : 2.3, life: 0.20 });
+          if (p.splashFlashRadius > 0) {
+            state.projectiles.push({
+              kind: 'ring',
+              x: p.x,
+              y: p.y,
+              radius: p.splashFlashRadius,
+              color: '#FF9F43',
+              life: 0.20,
+              maxLife: 0.20
+            });
+          }
           for (let k = state.zombies.length - 1; k >= 0; k--) {
             const zk = state.zombies[k];
             const dist = Math.hypot(zk.x - p.x, zk.y - p.y);
@@ -1274,6 +1480,7 @@ ZS.Game = (function () {
     try {
       const payload = {
         wave: state.wave,
+        hqLevel: state.hqLevel,
         bossDefeated: state.bossDefeated,
         wood: state.wood,
         scrap: state.scrap,
@@ -1299,6 +1506,7 @@ ZS.Game = (function () {
       if (!d || !Array.isArray(d.structGrid) || d.structGrid.length !== N) return false;
 
       state.wave = d.wave || 1;
+      state.hqLevel = Math.max(1, Math.min(4, d.hqLevel || 1));
       state.phase = 'day';
       state.isNight = false;
       state.nightAlpha = 0;
@@ -1310,6 +1518,12 @@ ZS.Game = (function () {
       state.freeVouchers = d.freeVouchers || {};
       state.floorGrid = d.floorGrid;
       state.structGrid = d.structGrid;
+
+      const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+      if (hq && hq.id === 'command_hq') {
+        hq.level = state.hqLevel;
+        hq.upgradeAnimTimer = 0;
+      }
 
       recalculateBaseStats();
       state.power = d.power ?? state.powerCap;
@@ -1340,6 +1554,9 @@ ZS.Game = (function () {
     initNewGame,
     loadGame,
     clearSaveAndReset,
+    getHqLevelInfo,
+    canUpgradeHq,
+    upgradeHq,
     recalculateBaseStats,
     getStructureEffectiveStats,
     canPlaceItem,
