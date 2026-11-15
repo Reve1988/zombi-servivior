@@ -136,6 +136,12 @@ ZS.Game = (function () {
     floorGrid: [],
     structGrid: [],
     flow: null,
+    nextWaveIntel: null,
+    previewPaths: [],
+    breachMarkers: [],
+    showReconPaths: true,
+    reconNightFadeTimer: 0,
+    reconFlashTimer: 0,
 
     spawnQueue: [],
     spawnTimer: 0,
@@ -236,6 +242,10 @@ ZS.Game = (function () {
     state.floatingTexts = [];
     state.flares = [];
     state.spawnQueue = [];
+    state.previewPaths = [];
+    state.breachMarkers = [];
+    state.reconNightFadeTimer = 0;
+    state.reconFlashTimer = 0;
 
     // Starter modern tactical plaza around HQ (10,10)
     const hx = DATA.HQ_POS.x;
@@ -259,14 +269,150 @@ ZS.Game = (function () {
     recalculateBaseStats(true);
     state.cozyTierUpTimer = 0;
     state.power = state.powerCap;
-    recomputeFlow();
+    generateWaveIntel(state.wave);
+    recomputeFlow(false);
     refreshTraderOffers(false);
     saveGame();
     notifyUi();
   }
 
-  function recomputeFlow() {
+  function getSideEntryTile(side, idx) {
+    if (side === 0) return { x: idx, y: 0 };
+    if (side === 1) return { x: N - 1, y: idx };
+    if (side === 2) return { x: idx, y: N - 1 };
+    return { x: 0, y: idx };
+  }
+
+  function computeWaveSideProfile(waveNum) {
+    const weights = [0, 0, 0, 0];
+    const kinds = ['none', 'none', 'none', 'none'];
+    let pattern = 'single';
+    let patternLabel = '단일 정면 침공';
+    let bossSide = null;
+
+    if (waveNum >= 10 || waveNum % 5 === 0) {
+      pattern = 'siege';
+      patternLabel = '전방위 포위';
+      const first = Math.floor(Math.random() * 4);
+      const second = (first + 1 + Math.floor(Math.random() * 3)) % 4;
+      for (let s = 0; s < 4; s++) {
+        if (s === first || s === second) {
+          weights[s] = 0.35;
+          kinds[s] = 'main';
+        } else {
+          weights[s] = 0.15;
+          kinds[s] = 'sub';
+        }
+      }
+      if (waveNum % 5 === 0) {
+        bossSide = first;
+        kinds[bossSide] = 'boss';
+      }
+    } else if (waveNum >= 6) {
+      pattern = 'dual';
+      patternLabel = '양면 협공';
+      const first = Math.floor(Math.random() * 4);
+      const second = (first + 1 + Math.floor(Math.random() * 3)) % 4;
+      for (let s = 0; s < 4; s++) {
+        if (s === first || s === second) {
+          weights[s] = 0.45;
+          kinds[s] = 'main';
+        } else {
+          weights[s] = 0.05;
+          kinds[s] = 'min';
+        }
+      }
+    } else if (waveNum >= 3) {
+      pattern = 'flank';
+      patternLabel = '주력 + 측면 견제';
+      const mainSide = Math.floor(Math.random() * 4);
+      const subSide = (mainSide + (Math.random() < 0.5 ? 1 : 3)) % 4;
+      weights[mainSide] = 0.75;
+      kinds[mainSide] = 'main';
+      weights[subSide] = 0.25;
+      kinds[subSide] = 'sub';
+    } else {
+      const mainSide = Math.floor(Math.random() * 4);
+      weights[mainSide] = 1.0;
+      kinds[mainSide] = 'main';
+    }
+
+    return { pattern, patternLabel, sideWeights: weights, sideKinds: kinds, bossSide };
+  }
+
+  function recomputePreviewPaths(isManualEdit) {
+    const intel = state.nextWaveIntel;
+    const flow = state.flow;
+    if (!intel || !flow || !flow.next) {
+      state.previewPaths = [];
+      state.breachMarkers = [];
+      return;
+    }
+
+    const ENTRY_IDX = [5, 11, 16];
+    const paths = [];
+    const breachMap = Object.create(null);
+
+    for (let sd = 0; sd < 4; sd++) {
+      const w = intel.sideWeights ? (intel.sideWeights[sd] || 0) : 0;
+      const kind = intel.sideKinds ? intel.sideKinds[sd] : 'none';
+      if (w <= 0.05 || kind === 'min' || kind === 'none') continue;
+
+      for (let k = 0; k < ENTRY_IDX.length; k++) {
+        const start = getSideEntryTile(sd, ENTRY_IDX[k]);
+        let x = start.x;
+        let y = start.y;
+        const pts = [{ x, y }];
+        let breach = null;
+
+        for (let stepIdx = 0; stepIdx < 48; stepIdx++) {
+          const step = flow.next[y] && flow.next[y][x];
+          if (!step) break;
+          x += step.dx;
+          y += step.dy;
+          if (x < 0 || y < 0 || x >= N || y >= N) break;
+          pts.push({ x, y });
+          if (!breach && ZS.Pathfinding.isBlocking(state.structGrid, x, y)) {
+            breach = { tx: x, ty: y };
+            const bKey = x + ',' + y;
+            breachMap[bKey] = (breachMap[bKey] || 0) + 1;
+          }
+          if (Math.abs(x - DATA.HQ_POS.x) + Math.abs(y - DATA.HQ_POS.y) <= 1) break;
+        }
+        paths.push({ side: sd, kind, pts, breach });
+      }
+    }
+
+    const breaches = [];
+    const bKeys = Object.keys(breachMap);
+    for (let i = 0; i < bKeys.length; i++) {
+      const parts = bKeys[i].split(',');
+      breaches.push({
+        tx: Number(parts[0]),
+        ty: Number(parts[1]),
+        count: breachMap[bKeys[i]]
+      });
+    }
+
+    state.previewPaths = paths;
+    state.breachMarkers = breaches;
+    if (isManualEdit && state.phase === 'day') {
+      state.reconFlashTimer = 0.30;
+    }
+  }
+
+  function recomputeFlow(isManualEdit) {
     state.flow = ZS.Pathfinding.computeFlowField(N, DATA.HQ_POS, state.structGrid);
+    if (state.nextWaveIntel) {
+      recomputePreviewPaths(!!isManualEdit);
+    }
+  }
+
+  function toggleReconPaths() {
+    state.showReconPaths = !state.showReconPaths;
+    saveGame();
+    notifyUi();
+    return state.showReconPaths;
   }
 
   function isCombatVeterancyDef(def) {
@@ -1214,7 +1360,7 @@ ZS.Game = (function () {
     addFloatingText(cx, cy, 28 + extraZ, `Lv.${st.level}`, DATA.PALETTE.levelPip, 14, strokeCol);
 
     if (def.subType === 'wall' || def.subType === 'gate') {
-      recomputeFlow();
+      recomputeFlow(true);
     }
 
     if (st.level === 3 && DATA.LV3_PERK_LABELS && DATA.LV3_PERK_LABELS[def.id]) {
@@ -1414,7 +1560,7 @@ ZS.Game = (function () {
       state.power = Math.min(state.powerCap, state.power + 20);
     }
 
-    recomputeFlow();
+    recomputeFlow(true);
     ZS.Audio.playBuild();
     spawnBuildDustPuffs(tx + 0.5, ty + 0.5, def.layer === 'floor' ? 6 : 10);
     saveGame();
@@ -1468,7 +1614,7 @@ ZS.Game = (function () {
     }
 
     recalculateBaseStats();
-    recomputeFlow();
+    recomputeFlow(true);
     ZS.Audio.playBuild();
     spawnBuildDustPuffs(toX + 0.5, toY + 0.5, 9);
     saveGame();
@@ -1519,7 +1665,7 @@ ZS.Game = (function () {
         refundCost(refundTotal, tx, ty);
         recalculateBaseStats();
         state.power = Math.min(state.power, Math.max(state.powerCap, state.power));
-        recomputeFlow();
+        recomputeFlow(true);
         ZS.Audio.playRemove();
         saveGame();
         notifyUi();
@@ -1567,7 +1713,7 @@ ZS.Game = (function () {
       refundCost(refundTotal, tx, ty);
       recalculateBaseStats();
       state.power = Math.min(state.power, Math.max(state.powerCap, state.power));
-      recomputeFlow();
+      recomputeFlow(true);
       ZS.Audio.playRemove();
       saveGame();
       notifyUi();
@@ -1737,27 +1883,99 @@ ZS.Game = (function () {
   }
 
   // ================= NIGHT WAVE & COMBAT =================
-  function buildWaveQueue(waveNum) {
+  function allocateSidesByWeights(totalCount, weights) {
+    const out = [];
+    if (totalCount <= 0) return out;
+    const wArr = Array.isArray(weights) && weights.length === 4 ? weights : [0.25, 0.25, 0.25, 0.25];
+    const sum = wArr[0] + wArr[1] + wArr[2] + wArr[3];
+    const norm = sum > 0 ? wArr.map((w) => w / sum) : [0.25, 0.25, 0.25, 0.25];
+
+    const quotas = norm.map((p, idx) => {
+      const exact = p * totalCount;
+      const base = Math.floor(exact);
+      return { idx, base, rem: exact - base };
+    });
+    let used = quotas.reduce((acc, q) => acc + q.base, 0);
+    const byRem = quotas.slice().sort((a, b) => b.rem - a.rem);
+    for (let k = 0; used < totalCount && k < byRem.length; k++) {
+      if (norm[byRem[k].idx] > 0) {
+        byRem[k].base += 1;
+        used += 1;
+      }
+    }
+    for (let s = 0; s < quotas.length; s++) {
+      for (let c = 0; c < quotas[s].base; c++) {
+        out.push(quotas[s].idx);
+      }
+    }
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = out[i];
+      out[i] = out[j];
+      out[j] = tmp;
+    }
+    return out;
+  }
+
+  function buildWaveQueue(waveNum, sideWeights, bossSide) {
     const q = [];
     const hpScale = 1 + (waveNum - 1) * 0.16;
     const countBase = 9 + waveNum * 4;
+    const sidePool = allocateSidesByWeights(countBase, sideWeights);
 
     for (let i = 0; i < countBase; i++) {
       const r = Math.random();
+      const side = sidePool[i] != null ? sidePool[i] : Math.floor(Math.random() * 4);
       if (waveNum >= 3 && r < Math.min(0.26, (waveNum - 2) * 0.055)) {
-        q.push({ type: 'brute', hpScale });
+        q.push({ type: 'brute', hpScale, side });
       } else if (waveNum >= 2 && r < Math.min(0.55, 0.22 + waveNum * 0.04)) {
-        q.push({ type: 'runner', hpScale });
+        q.push({ type: 'runner', hpScale, side });
       } else {
-        q.push({ type: 'walker', hpScale });
+        q.push({ type: 'walker', hpScale, side });
       }
     }
 
     if (waveNum % 5 === 0) {
-      q.push({ type: 'boss', hpScale: 1 + (waveNum / 5 - 1) * 0.45 });
+      q.push({
+        type: 'boss',
+        hpScale: 1 + (waveNum / 5 - 1) * 0.45,
+        side: typeof bossSide === 'number' ? bossSide : Math.floor(Math.random() * 4)
+      });
     }
 
     return q;
+  }
+
+  function generateWaveIntel(waveNum) {
+    const w = Math.max(1, waveNum || state.wave || 1);
+    const prof = computeWaveSideProfile(w);
+    const plannedQueue = buildWaveQueue(w, prof.sideWeights, prof.bossSide);
+    const counts = {
+      walker: 0,
+      runner: 0,
+      brute: 0,
+      spitter: 0,
+      leaper: 0,
+      shocker: 0,
+      boss: 0
+    };
+    for (let i = 0; i < plannedQueue.length; i++) {
+      const t = plannedQueue[i].type;
+      if (counts[t] !== undefined) counts[t] += 1;
+    }
+
+    state.nextWaveIntel = {
+      wave: w,
+      pattern: prof.pattern,
+      patternLabel: prof.patternLabel,
+      sideWeights: prof.sideWeights,
+      sideKinds: prof.sideKinds,
+      bossSide: prof.bossSide,
+      counts,
+      totalCount: plannedQueue.length,
+      plannedQueue
+    };
+    return state.nextWaveIntel;
   }
 
   function startNightWave() {
@@ -1765,9 +1983,16 @@ ZS.Game = (function () {
     state.phase = 'night';
     state.isNight = true;
     state.blackoutTriggered = state.power <= 0.01;
+    state.reconNightFadeTimer = 2.0;
 
-    recomputeFlow();
-    state.spawnQueue = buildWaveQueue(state.wave);
+    if (!state.nextWaveIntel || state.nextWaveIntel.wave !== state.wave) {
+      generateWaveIntel(state.wave);
+    }
+    recomputeFlow(false);
+    const planned = state.nextWaveIntel && state.nextWaveIntel.plannedQueue;
+    state.spawnQueue = planned && planned.length > 0
+      ? planned.map((e) => ({ type: e.type, hpScale: e.hpScale, side: e.side }))
+      : buildWaveQueue(state.wave);
     state.waveTotalZombies = state.spawnQueue.length;
     state.waveKilledZombies = 0;
     state.spawnTimer = 0.6;
@@ -1785,7 +2010,7 @@ ZS.Game = (function () {
 
   function spawnZombie(entry) {
     const def = DATA.ZOMBIES[entry.type];
-    const side = Math.floor(Math.random() * 4);
+    const side = typeof entry.side === 'number' ? entry.side : Math.floor(Math.random() * 4);
     const idx = 1 + Math.floor(Math.random() * (N - 2));
     let gx = 0.5;
     let gy = 0.5;
@@ -1974,8 +2199,15 @@ ZS.Game = (function () {
     }
     updateParticles(dt);
     updateFloatingTexts(dt);
+    if (state.reconFlashTimer > 0) {
+      state.reconFlashTimer = Math.max(0, state.reconFlashTimer - rawDt);
+    }
 
     if (state.phase !== 'night') return;
+
+    if (state.reconNightFadeTimer > 0) {
+      state.reconNightFadeTimer = Math.max(0, state.reconNightFadeTimer - dt);
+    }
 
     // 1. Night Power Idle Drain
     if (state.power > 0 && state.nightIdleDrain > 0) {
@@ -2799,6 +3031,9 @@ ZS.Game = (function () {
     }
 
     state.wave += 1;
+    state.reconNightFadeTimer = 0;
+    generateWaveIntel(state.wave);
+    recomputePreviewPaths(false);
     refreshTraderOffers(false);
     ZS.Audio.playWaveClear();
 
@@ -3063,6 +3298,8 @@ ZS.Game = (function () {
         power: state.power,
         agents: state.agents,
         debugBonusPopCap: state.debugBonusPopCap || 0,
+        showReconPaths: state.showReconPaths !== false,
+        nextWaveIntel: state.nextWaveIntel,
         freeVouchers: state.freeVouchers,
         traderOffers: state.traderOffers,
         floorGrid: state.floorGrid,
@@ -3180,7 +3417,15 @@ ZS.Game = (function () {
       recalculateBaseStats(true);
       state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
-      recomputeFlow();
+      state.showReconPaths = d.showReconPaths !== undefined ? !!d.showReconPaths : true;
+      state.reconNightFadeTimer = 0;
+      state.reconFlashTimer = 0;
+      if (d.nextWaveIntel && d.nextWaveIntel.wave === state.wave && Array.isArray(d.nextWaveIntel.plannedQueue)) {
+        state.nextWaveIntel = d.nextWaveIntel;
+      } else {
+        generateWaveIntel(state.wave);
+      }
+      recomputeFlow(false);
       if (Array.isArray(d.traderOffers) && d.traderOffers.length > 0) {
         state.traderOffers = d.traderOffers;
       } else {
@@ -3265,6 +3510,8 @@ ZS.Game = (function () {
     }
     const step = Number(delta) || 1;
     state.wave = Math.max(1, state.wave + step);
+    generateWaveIntel(state.wave);
+    recomputePreviewPaths(false);
     refreshTraderOffers(false);
     ZS.Audio.playBuild();
     banner(`[DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
@@ -3351,6 +3598,9 @@ ZS.Game = (function () {
     refreshTraderOffers,
     buyTraderOffer,
     startNightWave,
+    toggleReconPaths,
+    generateWaveIntel,
+    recomputePreviewPaths,
     triggerNanoRepair,
     triggerAirstrikeAt,
     debugAddResources,

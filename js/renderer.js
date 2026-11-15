@@ -3541,11 +3541,234 @@ ZS.Renderer = (function () {
     ctx.restore();
   }
 
+  function drawReconOverlay(ctx, state, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const DATA = ZS.DATA;
+    const P = DATA.PALETTE;
+    const N = DATA.GRID_SIZE;
+    const intel = state.nextWaveIntel;
+    if (!intel) return;
+
+    const isDay = state.phase === 'day';
+    const fade = isDay ? 1.0 : Math.max(0, Math.min(1, (state.reconNightFadeTimer || 0) / 2.0));
+    if (fade <= 0.01) return;
+
+    const SIDE_POS = {
+      0: (idx) => [idx, 0],
+      1: (idx) => [N - 1, idx],
+      2: (idx) => [idx, N - 1],
+      3: (idx) => [0, idx]
+    };
+    const INWARD = {
+      0: [0, 1],
+      1: [-1, 0],
+      2: [0, -1],
+      3: [1, 0]
+    };
+    const ENTRY_IDX = [5, 11, 16];
+
+    ctx.save();
+
+    // 1. Dijkstra flow preview path lines (z = 1.5, segment deduplicated, flowing toward HQ)
+    if (state.showReconPaths && state.previewPaths && state.previewPaths.length > 0) {
+      const seen = Object.create(null);
+      const screenSegs = [];
+      for (let pi = 0; pi < state.previewPaths.length; pi++) {
+        const pts = state.previewPaths[pi].pts;
+        if (!pts || pts.length < 2) continue;
+        for (let si = 0; si < pts.length - 1; si++) {
+          const a = pts[si];
+          const b = pts[si + 1];
+          const key = `${a.x},${a.y}>${b.x},${b.y}`;
+          if (seen[key]) continue;
+          seen[key] = true;
+          screenSegs.push([
+            Iso.gridToScreen(a.x + 0.5, a.y + 0.5, 1.5),
+            Iso.gridToScreen(b.x + 0.5, b.y + 0.5, 1.5)
+          ]);
+        }
+      }
+
+      if (screenSegs.length > 0) {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+        ctx.strokeStyle = `rgba(27, 36, 48, ${(0.55 * fade).toFixed(3)})`;
+        ctx.lineWidth = Math.max(3.0, 4.0 * zScale);
+        ctx.beginPath();
+        for (let i = 0; i < screenSegs.length; i++) {
+          ctx.moveTo(screenSegs[i][0].x, screenSegs[i][0].y);
+          ctx.lineTo(screenSegs[i][1].x, screenSegs[i][1].y);
+        }
+        ctx.stroke();
+
+        const flash = Math.max(0, Math.min(1, (state.reconFlashTimer || 0) / 0.30));
+        const cr = 255;
+        const cg = Math.round(143 + (255 - 143) * flash);
+        const cb = Math.round(163 + (255 - 163) * flash);
+        const ca = (0.85 + 0.15 * flash) * fade;
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${ca.toFixed(3)})`;
+        ctx.lineWidth = Math.max(2.0, 2.2 * zScale);
+        ctx.setLineDash([6, 5]);
+        ctx.lineDashOffset = -timeSec * 22;
+        ctx.beginPath();
+        for (let i = 0; i < screenSegs.length; i++) {
+          ctx.moveTo(screenSegs[i][0].x, screenSegs[i][0].y);
+          ctx.lineTo(screenSegs[i][1].x, screenSegs[i][1].y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
+      }
+
+      // 2. Siege breach crosshairs (first blocking structure on predicted paths)
+      const breaches = state.breachMarkers || [];
+      for (let bi = 0; bi < breaches.length; bi++) {
+        const bm = breaches[bi];
+        const bSt = state.structGrid[bm.ty] && state.structGrid[bm.ty][bm.tx];
+        if (!bSt) continue;
+        let topZ = getStructVisualTopZ(bSt.id, bSt.level || 1);
+        if (bSt.id === 'barricade_wall' && (bSt.level || 1) >= 2 && bSt.mounted) {
+          topZ = ((bSt.level || 2) >= 3 ? 25.4 : 15.2) + getMountedVisualTopZ(bSt.mounted.id);
+        }
+        const pulse = 1 + 0.12 * Math.sin(timeSec * 5.23);
+        drawIsoCircle(
+          ctx,
+          bm.tx + 0.5,
+          bm.ty + 0.5,
+          0.42 * pulse,
+          `rgba(255, 77, 109, ${(0.9 * fade).toFixed(3)})`,
+          `rgba(255, 77, 109, ${(0.12 * fade).toFixed(3)})`,
+          [],
+          1.6 * Math.max(0.9, zScale)
+        );
+
+        const cp = Iso.gridToScreen(bm.tx + 0.5, bm.ty + 0.5, topZ + 6);
+        const r = 7 * pulse * Math.max(0.9, zScale);
+        ctx.strokeStyle = `rgba(255, 77, 109, ${fade.toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cp.x - r - 4, cp.y);
+        ctx.lineTo(cp.x - r + 3, cp.y);
+        ctx.moveTo(cp.x + r - 3, cp.y);
+        ctx.lineTo(cp.x + r + 4, cp.y);
+        ctx.moveTo(cp.x, cp.y - r - 4);
+        ctx.lineTo(cp.x, cp.y - r + 3);
+        ctx.moveTo(cp.x, cp.y + r - 3);
+        ctx.lineTo(cp.x, cp.y + r + 4);
+        ctx.stroke();
+
+        if (bm.count > 1) {
+          const fontPx = Math.max(12, Math.round(12 * Math.max(1, zScale)));
+          ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.lineWidth = 3;
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = `rgba(8, 12, 18, ${(0.85 * fade).toFixed(3)})`;
+          ctx.strokeText(`×${bm.count}`, cp.x + r + 5, cp.y - 6);
+          ctx.fillStyle = `rgba(255, 255, 255, ${fade.toFixed(3)})`;
+          ctx.fillText(`×${bm.count}`, cp.x + r + 5, cp.y - 6);
+        }
+      }
+    }
+
+    // 3. Outer perimeter entry chevrons (z = 0.8, 1.6s inward pulse, 5% minor sides omitted)
+    const pul = 0.06 * (1 + Math.sin(timeSec * 3.927));
+    for (let sd = 0; sd < 4; sd++) {
+      const kind = intel.sideKinds ? intel.sideKinds[sd] : 'none';
+      if (!kind || kind === 'none' || kind === 'min') continue;
+      const inVec = INWARD[sd];
+      const ix = inVec[0];
+      const iy = inVec[1];
+      const px = -iy;
+      const py = ix;
+      const rgb = kind === 'boss' ? '224, 64, 251' : kind === 'main' ? '255, 77, 109' : '255, 143, 163';
+
+      const drawChev = (gx, gy, off, fill) => {
+        const cx = gx + 0.5 + ix * (off + pul);
+        const cy = gy + 0.5 + iy * (off + pul);
+        const p0 = Iso.gridToScreen(cx + px * 0.32 - ix * 0.14, cy + py * 0.32 - iy * 0.14, 0.8);
+        const p1 = Iso.gridToScreen(cx + ix * 0.18, cy + iy * 0.18, 0.8);
+        const p2 = Iso.gridToScreen(cx - px * 0.32 - ix * 0.14, cy - py * 0.32 - iy * 0.14, 0.8);
+        const p3 = Iso.gridToScreen(cx - ix * 0.02, cy - iy * 0.02, 0.8);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.closePath();
+        if (fill) {
+          ctx.fillStyle = `rgba(${rgb}, ${(0.95 * fade).toFixed(3)})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(27, 36, 48, ${(0.6 * fade).toFixed(3)})`;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = `rgba(${rgb}, ${fade.toFixed(3)})`;
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        }
+      };
+
+      for (let k = 0; k < ENTRY_IDX.length; k++) {
+        const pos = SIDE_POS[sd](ENTRY_IDX[k]);
+        if (kind === 'main' || kind === 'boss') {
+          drawChev(pos[0], pos[1], -0.18, true);
+          drawChev(pos[0], pos[1], 0.16, true);
+        } else {
+          drawChev(pos[0], pos[1], 0, false);
+        }
+      }
+    }
+
+    // 4. Boss spawn direction icon (z = 22 at midpoint idx = 11)
+    if (intel.bossSide != null) {
+      const bPos = SIDE_POS[intel.bossSide](11);
+      const bp = Iso.gridToScreen(bPos[0] + 0.5, bPos[1] + 0.5, 22);
+      const iconScale = Math.max(0.9, zScale);
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = 'rgba(16, 22, 31, 0.78)';
+      ctx.beginPath();
+      ctx.arc(bp.x, bp.y, 14 * iconScale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = P.bossAccent || '#E040FB';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.translate(bp.x - 11 * iconScale, bp.y - 11 * iconScale);
+      ctx.scale((22 / 24) * iconScale, (22 / 24) * iconScale);
+      ctx.strokeStyle = P.bossAccent || '#E040FB';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (typeof Path2D === 'function') {
+        const dList = [
+          'M5 3.5l2.2 5M19 3.5l-2.2 5',
+          'M12 7a6 6 0 0 0-6 6c0 2 1 3.6 2.5 4.6V20.5h7v-2.9c1.5-1 2.5-2.6 2.5-4.6a6 6 0 0 0-6-6z',
+          'M9.3 13h1.6M13.1 13h1.6'
+        ];
+        for (let i = 0; i < dList.length; i++) {
+          ctx.stroke(new Path2D(dList[i]));
+        }
+      }
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
   function drawInfoLayer(ctx, state, uiState, renderList, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
     const P = DATA.PALETTE;
     const N = DATA.GRID_SIZE;
+
+    drawReconOverlay(ctx, state, timeSec, zScale);
 
     ctx.save();
 
