@@ -1,12 +1,54 @@
 window.ZS = window.ZS || {};
 
 ZS.Game = (function () {
-  const SAVE_KEY = 'outpost_zero_save_v1';
+  const PROD_SAVE_KEY = 'outpost_zero_save_v1';
+  const DEV_SAVE_KEY = 'outpost_zero_save_dev';
   const DATA = ZS.DATA;
   const N = DATA.GRID_SIZE;
   let nextZombieUid = 1;
   let nextStructUid = 1;
   let pendingVeteranDemolish = null;
+
+  function getEnvInfo() {
+    const loc = typeof window !== 'undefined' && window.location ? window.location : {};
+    const proto = loc.protocol || '';
+    const host = loc.hostname || '';
+    const search = loc.search || '';
+    const isLocalHost = proto === 'file:' || host === 'localhost' || host === '127.0.0.1';
+    const isDevBuild = typeof window !== 'undefined' && window.ZS_DEV_BUILD === true;
+    const isDevEnvironment = isLocalHost || isDevBuild;
+
+    let hasDebugParam = false;
+    let hasDevParam = false;
+    if (isDevEnvironment && search) {
+      try {
+        const params = new URLSearchParams(search);
+        hasDebugParam = params.get('debug') === '1';
+        hasDevParam = params.get('dev') === '1';
+      } catch (e) {
+        hasDebugParam = /[?&]debug=1(?:&|$)/.test(search);
+        hasDevParam = /[?&]dev=1(?:&|$)/.test(search);
+      }
+    }
+
+    const useDevSave = isDevBuild || (isDevEnvironment && (hasDevParam || hasDebugParam));
+    const saveKey = useDevSave ? DEV_SAVE_KEY : PROD_SAVE_KEY;
+    const commitSha = isDevBuild && typeof window.ZS_COMMIT_SHA === 'string' ? window.ZS_COMMIT_SHA : null;
+
+    return {
+      isLocalHost,
+      isDevBuild,
+      isDevEnvironment,
+      isDebugMode: isDevEnvironment && hasDebugParam,
+      useDevSave,
+      saveKey,
+      commitSha
+    };
+  }
+
+  function getSaveKey() {
+    return getEnvInfo().saveKey;
+  }
 
   const state = {
     wave: 1,
@@ -30,6 +72,7 @@ ZS.Game = (function () {
     agents: DATA.HQ_STATS.startingAgents,
     popCap: DATA.HQ_STATS.basePopCap,
     popUsed: 0,
+    debugBonusPopCap: 0,
 
     cozyScore: 0,
     cozyFloorRaw: 0,
@@ -135,6 +178,7 @@ ZS.Game = (function () {
 
     const hqInfo = getHqLevelInfo(1);
     state.agents = DATA.HQ_STATS.startingAgents;
+    state.debugBonusPopCap = 0;
     state.freeVouchers = {};
     state.skills.repairCd = 0;
     state.skills.airstrikeCd = 0;
@@ -497,7 +541,7 @@ ZS.Game = (function () {
     let powerCap = hqInfo.basePowerCap;
     let dayCharge = hqInfo.baseDayCharge;
     let nightIdleDrain = 0;
-    let popCap = hqInfo.basePopCap;
+    let popCap = hqInfo.basePopCap + (state.debugBonusPopCap || 0);
     let popUsed = 0;
     let floorRaw = 0;
     let synergyScore = 0;
@@ -2286,12 +2330,13 @@ ZS.Game = (function () {
         coin: state.coin,
         power: state.power,
         agents: state.agents,
+        debugBonusPopCap: state.debugBonusPopCap || 0,
         freeVouchers: state.freeVouchers,
         traderOffers: state.traderOffers,
         floorGrid: state.floorGrid,
         structGrid: state.structGrid
       };
-      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+      localStorage.setItem(getSaveKey(), JSON.stringify(payload));
     } catch (e) {
       // Ignore storage quota / privacy mode errors
     }
@@ -2299,7 +2344,7 @@ ZS.Game = (function () {
 
   function loadGame() {
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
+      const raw = localStorage.getItem(getSaveKey());
       if (!raw) return false;
       const d = JSON.parse(raw);
       if (!d || !Array.isArray(d.structGrid) || d.structGrid.length !== N) return false;
@@ -2314,6 +2359,7 @@ ZS.Game = (function () {
       state.scrap = d.scrap ?? DATA.INITIAL_RESOURCES.scrap;
       state.coin = d.coin ?? DATA.INITIAL_RESOURCES.coin;
       state.agents = d.agents ?? DATA.HQ_STATS.startingAgents;
+      state.debugBonusPopCap = d.debugBonusPopCap || 0;
       state.freeVouchers = d.freeVouchers || {};
       state.floorGrid = d.floorGrid;
       state.structGrid = d.structGrid;
@@ -2352,14 +2398,135 @@ ZS.Game = (function () {
 
   function clearSaveAndReset() {
     try {
-      localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(getSaveKey());
     } catch (e) {}
     initNewGame();
     banner('새 전초기지 작전 개시', '방어선과 발전 설비를 구축하고 모던 쉘터를 꾸며보세요!', 'info');
   }
 
+  // ================= DEBUG / STAGING CHEAT ACTIONS (DOUBLE-GATED) =================
+  function isDebugAllowed() {
+    const env = getEnvInfo();
+    return !!(env.isDevEnvironment && env.isDebugMode);
+  }
+
+  function debugAddResources(amount) {
+    if (!isDebugAllowed()) return false;
+    const add = Number(amount) || 500;
+    state.wood += add;
+    state.scrap += add;
+    state.coin += add;
+    ZS.Audio.playTrade();
+    banner(`🛠️ [DEBUG] +${add} 자원 지급`, `목재·고철·코인 각 +${add} 추가 완료`, 'good');
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function debugTogglePower() {
+    if (!isDebugAllowed()) return false;
+    if (state.power > 0.01) {
+      state.power = 0;
+      if (state.isNight) {
+        triggerBlackout();
+      } else {
+        ZS.Audio.playBlackout();
+        banner('🛠️ [DEBUG] 전력 강제 방전 (0⚡)', '블랙아웃 테스트를 위해 배터리를 0으로 방전했습니다.', 'warn');
+      }
+    } else {
+      state.power = Math.max(85, state.powerCap);
+      state.blackoutTriggered = false;
+      ZS.Audio.playBuild();
+      banner(`🛠️ [DEBUG] 전력 즉시 완충 (${state.power}⚡)`, '자동 포탑 및 전기 조명 전원이 복구되었습니다.', 'good');
+    }
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function debugAddAgents(count) {
+    if (!isDebugAllowed()) return false;
+    const n = Number(count) || 2;
+    state.debugBonusPopCap = (state.debugBonusPopCap || 0) + n;
+    recalculateBaseStats(true);
+    state.agents += n;
+    ZS.Audio.playTrade();
+    banner(`🛠️ [DEBUG] 요원 +${n}명 충원`, `가용 요원 ${state.agents}명 · 숙소 수용량 ${state.popCap}명으로 확장`, 'good');
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function debugAdvanceWave(delta) {
+    if (!isDebugAllowed()) return false;
+    if (state.phase !== 'day') {
+      ZS.Audio.playError();
+      banner('🛠️ [DEBUG] 주간 전용 기능', '웨이브 번호 이동은 주간 정비 페이즈에서만 가능합니다.', 'warn');
+      return false;
+    }
+    const step = Number(delta) || 1;
+    state.wave = Math.max(1, state.wave + step);
+    refreshTraderOffers(false);
+    ZS.Audio.playBuild();
+    banner(`🛠️ [DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function debugGrantSelectedXp(tx, ty, rawXp) {
+    if (!isDebugAllowed()) return false;
+    if (tx === undefined || ty === undefined || tx < 0 || ty < 0 || tx >= N || ty >= N) {
+      ZS.Audio.playError();
+      banner('🛠️ [DEBUG] 대상 시설 미선택', '먼저 초소 또는 자동포탑을 클릭해 조회한 뒤 실행하세요.', 'warn');
+      return false;
+    }
+    const s = state.structGrid[ty] && state.structGrid[ty][tx];
+    if (!s || s.id === 'command_hq') {
+      ZS.Audio.playError();
+      banner('🛠️ [DEBUG] 숙련도 부여 불가', '전투원 초소(manned) 또는 자동포탑(turret)을 선택해 주세요.', 'warn');
+      return false;
+    }
+    const def = DATA.ITEMS[s.id];
+    if (!isCombatVeterancyDef(def)) {
+      ZS.Audio.playError();
+      banner('🛠️ [DEBUG] 숙련도 대상 아님', `[${def ? def.name : s.id}] 시설은 전투 숙련도 시스템 대상이 아닙니다.`, 'warn');
+      return false;
+    }
+    const gain = Number(rawXp) || 20;
+    const prevRank = s.rank || computeRankFromXp(s.xp || 0);
+    s.xp = +((s.xp || 0) + gain).toFixed(3);
+    const newRank = computeRankFromXp(s.xp);
+    s.rank = newRank;
+
+    if (newRank > prevRank) {
+      const rInfo = getVeterancyRankInfo(newRank);
+      s.promoAnimTimer = 0.8;
+      if (ZS.Audio.playPromote) ZS.Audio.playPromote();
+      state.projectiles.push({
+        kind: 'promo_ring',
+        x: tx + 0.5,
+        y: ty + 0.5,
+        z: 18,
+        color: rInfo.color,
+        life: 0.8,
+        maxLife: 0.8
+      });
+      addFloatingText(tx + 0.5, ty + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
+      banner(`🎖️ [DEBUG] [${def.name}] ${rInfo.name} 진급!`, `숙련도 +${gain} XP 부여 (누적 ${s.xp.toFixed(1)} XP · Rank ${newRank})`, 'good');
+    } else {
+      ZS.Audio.playBuild();
+      banner(`🛠️ [DEBUG] [${def.name}] +${gain} XP 부여`, `현재 누적 ${s.xp.toFixed(1)} XP (${getVeterancyRankInfo(newRank).name})`, 'good');
+    }
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
   return {
     state,
+    getEnvInfo,
+    getSaveKey,
     setCallbacks,
     initNewGame,
     loadGame,
@@ -2389,6 +2556,11 @@ ZS.Game = (function () {
     startNightWave,
     triggerNanoRepair,
     triggerAirstrikeAt,
+    debugAddResources,
+    debugTogglePower,
+    debugAddAgents,
+    debugAdvanceWave,
+    debugGrantSelectedXp,
     update
   };
 })();

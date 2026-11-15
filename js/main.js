@@ -939,17 +939,83 @@ window.ZS = window.ZS || {};
     root.setProperty('--col-select-bg', P.selectFill);
   }
 
+  function initDebugToolbar(env) {
+    const bar = document.getElementById('debug-toolbar');
+    if (!bar) return;
+
+    // Strictly double-gated: NEVER mount or unhide when isDevEnvironment === false or ?debug=1 is absent
+    if (!env || !env.isDevEnvironment || !env.isDebugMode) {
+      bar.classList.add('hidden');
+      bar.innerHTML = '';
+      return;
+    }
+
+    bar.classList.remove('hidden');
+    bar.innerHTML = `
+      <div class="debug-head">
+        <span class="debug-title">🛠️ DEBUG · ${env.saveKey === 'outpost_zero_save_dev' ? 'DEV SAVE' : 'LOCAL'}</span>
+        <button id="btn-debug-collapse" class="debug-toggle-btn" title="디버그 바 접기/펼치기">접기 ▴</button>
+      </div>
+      <div class="debug-body">
+        <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">+500 자원</button>
+        <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">⚡ 전력 완충/방전</button>
+        <button id="btn-dbg-pop" class="debug-btn" title="가용 요원 및 임시 숙소 수용량 +2">👥 요원 +2</button>
+        <button id="btn-dbg-wave1" class="debug-btn" title="주간 정비 상태에서 웨이브 +1">⏭️ 웨이브 +1</button>
+        <button id="btn-dbg-wave5" class="debug-btn" title="주간 정비 상태에서 웨이브 +5 (보스전 등)">⏭️ +5</button>
+        <button id="btn-dbg-xp" class="debug-btn" title="조회 중인 초소·포탑에 숙련도 +20 XP 즉시 부여">🎖️ 선택 시설 XP +20</button>
+      </div>
+    `;
+
+    const toggleBtn = document.getElementById('btn-debug-collapse');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const collapsed = bar.classList.toggle('collapsed');
+        toggleBtn.textContent = collapsed ? '펼치기 ▾' : '접기 ▴';
+      });
+    }
+
+    const bind = (id, fn) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', fn);
+    };
+    bind('btn-dbg-res', () => ZS.Game.debugAddResources(500));
+    bind('btn-dbg-pwr', () => ZS.Game.debugTogglePower());
+    bind('btn-dbg-pop', () => ZS.Game.debugAddAgents(2));
+    bind('btn-dbg-wave1', () => ZS.Game.debugAdvanceWave(1));
+    bind('btn-dbg-wave5', () => ZS.Game.debugAdvanceWave(5));
+    bind('btn-dbg-xp', () => {
+      const sel = uiState.inspectedTile;
+      if (sel) {
+        ZS.Game.debugGrantSelectedXp(sel.tx, sel.ty, 20);
+      } else {
+        ZS.Game.debugGrantSelectedXp(-1, -1, 20);
+      }
+    });
+  }
+
   function init() {
     syncCssPalette();
     resizeCanvas();
     ZS.Iso.resetCamera();
 
+    const env = ZS.Game.getEnvInfo ? ZS.Game.getEnvInfo() : { isDevBuild: false, isDevEnvironment: false, isDebugMode: false };
     const ver = ZS.DATA.VERSION || 'v0.1.0';
     const hudVer = document.getElementById('hud-version');
     const guideVer = document.getElementById('guide-version');
-    if (hudVer) hudVer.textContent = ver;
+    if (hudVer) {
+      if (env.isDevBuild) {
+        const shaLabel = env.commitSha ? `DEV · #${env.commitSha}` : 'DEV';
+        hudVer.innerHTML = `<span>${ver}</span><span class="dev-build-badge" title="develop 스테이징 빌드 (세이브 격리됨)">${shaLabel}</span>`;
+      } else {
+        hudVer.textContent = ver;
+      }
+    }
     if (guideVer) guideVer.textContent = ver;
-    document.title = `OUTPOST ZERO (${ver}) — 모던 전술 디펜스 & 쉘터 빌더`;
+    document.title = env.isDevBuild
+      ? `[DEV] OUTPOST ZERO (${ver}) — 스테이징 검수 빌드`
+      : `OUTPOST ZERO (${ver}) — 모던 전술 디펜스 & 쉘터 빌더`;
+
+    initDebugToolbar(env);
 
     ZS.Game.setCallbacks({
       onUiChange: updateHud,
