@@ -47,6 +47,8 @@ ZS.DATA = (function () {
     levelPipStroke: '#1B2430',
     levelMax: '#FF9F43',
     levelMaxStroke: '#5C2E00',
+    steelBand: '#8C96A3',
+    thornSpark: '#FF8A3D',
 
     // 3. World Base Tokens (issue-03-palette-tokens.md §3: keep terrain #485E4D/#415646 until #5)
     groundA: '#485E4D',
@@ -207,6 +209,23 @@ ZS.DATA = (function () {
     { id: 'infra',   label: '⚡ 전력·숙소', desc: '주간 충전 발전기, 배터리, 요원 숙소' },
     { id: 'decor',   label: '✨ 모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
+
+  LV3_PERK_LABELS: {
+    hesco_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
+    blast_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
+    razor_pad: '취약화 철조망 (둔화 60% · 받는 사격 피해 +15%)',
+    rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
+    shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
+    sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
+    vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
+    missile_pod: '고폭 확산탄 (폭발 반경 1.75 확대)',
+    emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)',
+    solar_array: '고밀도 발전 셀 (충전·용량 ×1.9)',
+    wind_turbine: '고출력 로터 (충전·용량 ×1.9)',
+    battery_bank: '대용량 ESS 팩 (용량 205⚡ · 충전 +28⚡)',
+    field_tent: '확장형 전술 막사 (수용 +3👥 · 안락함 +12)',
+    shelter_pod: '프리미엄 모듈러 생활관 (수용 +4👥 · 안락함 +26)'
+  },
 
   ITEMS: {
     // ================= FLOORS (layer: 'floor') =================

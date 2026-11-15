@@ -396,16 +396,72 @@ window.ZS = window.ZS || {};
     const def = ZS.DATA.ITEMS[obj.id];
     if (!def) return;
 
+    const lv = obj.level || 1;
+    let actionHtml = '';
+    if (ZS.Game.isUpgradeableDef(def)) {
+      const upCheck = ZS.Game.canUpgradeStructure(tx, ty);
+      if (lv >= 3) {
+        const perk = ZS.DATA.LV3_PERK_LABELS && ZS.DATA.LV3_PERK_LABELS[def.id];
+        actionHtml = `<span class="cost-chip free" title="${perk || ''}">◆◆◆ Lv.3 MAX</span>`;
+      } else {
+        const cost = ZS.Game.getUpgradeCost(def, lv) || {};
+        const costLabel = `🪵${cost.wood || 0} 🔩${cost.scrap || 0} 🪙${cost.coin || 0}`;
+        let btnText = `⬆️ Lv.${lv + 1} 강화 (${costLabel}) [U]`;
+        if (upCheck.hqCapped) {
+          btnText = `🔒 본부 Lv.${upCheck.reqHqLevel} 필요 (${costLabel})`;
+        }
+        actionHtml = `<button id="btn-upgrade-struct" class="detail-upgrade-btn" ${upCheck.ok ? '' : 'disabled'} title="${upCheck.ok ? '단축키 U로 즉시 강화' : upCheck.reason}">${btnText}</button>`;
+      }
+    }
+
     if (def.subType === 'manned' || def.subType === 'turret') {
       const eff = ZS.Game.getStructureEffectiveStats(obj, tx, ty);
       const pwrInfo = def.requiresPower
-        ? `⚡야간 대기 -${def.powerIdle}/s, 사격당 -${def.powerShot}`
-        : `👥요원 ${def.popUse}명 (무전력 사격)`;
+        ? `⚡대기 -${eff.powerIdle}/s, 사격 -${eff.powerShot}`
+        : `👥요원 ${def.popUse}명`;
+      let nextPreview = '';
+      if (lv < 3) {
+        const nextEff = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
+        const perkHint = lv + 1 === 3 && nextEff.perkLabel ? ` · ★${nextEff.perkLabel.split(' (')[0]}` : '';
+        nextPreview = ` → [Lv.${lv + 1}: 화력 ${nextEff.damage.toFixed(1)} · 연사 ${nextEff.fireRate.toFixed(2)}/s${perkHint}]`;
+      } else if (eff.perkLabel) {
+        nextPreview = ` · ★${eff.perkLabel}`;
+      }
       setDetailText(
-        `${def.icon} [${def.name}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${eff.range.toFixed(1)} · 치명타 ${Math.round(eff.critChance * 100)}% (${pwrInfo})`
+        `${def.icon} [${def.name} Lv.${lv}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${eff.range.toFixed(1)} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${nextPreview}`,
+        actionHtml
       );
+    } else if (ZS.Game.isUpgradeableDef(def)) {
+      const prof = ZS.Game.getStructLevelProfile(def, lv);
+      let statSummary = '';
+      if (def.subType === 'wall') {
+        statSummary = prof.perkLabel ? `★${prof.perkLabel}` : `차단 방호벽`;
+      } else if (def.id === 'razor_pad') {
+        statSummary = `지속피해 ${prof.trapDps}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${prof.perkLabel ? ` · ★${prof.perkLabel}` : ''}`;
+      } else if (def.subType === 'power') {
+        statSummary = `주간 충전 +${prof.dayCharge}⚡ · 저장 용량 +${prof.powerCap}⚡`;
+      } else if (def.subType === 'housing') {
+        statSummary = `요원 수용 +${prof.popCap}👥 · 안락함 +${prof.cozy}💛`;
+      }
+      if (lv < 3) {
+        const nextProf = ZS.Game.getStructLevelProfile(def, lv + 1);
+        const fid = st.floorGrid[ty] && st.floorGrid[ty][tx];
+        const fDef = fid ? ZS.DATA.ITEMS[fid] : null;
+        const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
+        const nextMaxHp = Math.round(nextProf.baseMaxHp * hpMult);
+        const perkHint = lv + 1 === 3 && nextProf.perkLabel ? ` · ★${nextProf.perkLabel.split(' (')[0]}` : '';
+        statSummary += ` → [Lv.${lv + 1}: HP ${nextMaxHp}${perkHint}]`;
+      }
+      setDetailText(`${def.icon} [${def.name} Lv.${lv}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
     } else {
       setDetailText(`${def.icon} [${def.name}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${def.desc}`);
+    }
+
+    const upStructBtn = document.getElementById('btn-upgrade-struct');
+    if (upStructBtn) {
+      upStructBtn.addEventListener('click', () => {
+        ZS.Game.upgradeStructure(tx, ty);
+      });
     }
   }
 
@@ -530,6 +586,10 @@ window.ZS = window.ZS || {};
         setToolMode('inspect');
         document.getElementById('trader-modal').classList.add('hidden');
         document.getElementById('guide-modal').classList.add('hidden');
+      } else if (e.code === 'KeyU') {
+        if (uiState.inspectedTile) {
+          ZS.Game.upgradeStructure(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
+        }
       } else if (e.code === 'KeyM') {
         setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
       } else if (e.code === 'KeyX') {
