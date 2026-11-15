@@ -48,6 +48,8 @@
 ```text
 zombi-servivior/
 ├── index.html          # 메인 화면 및 HUD / 건설 도크 / 보급 상인 UI
+├── assets/
+│   └── fonts/          # 번들 웹폰트 (Pretendard-*.subset.woff2) 및 SIL OFL 1.1 전문 (OFL.txt)
 ├── css/
 │   └── style.css       # 모던 택티컬 UI 스타일링
 └── js/
@@ -59,3 +61,9 @@ zombi-servivior/
     ├── game.js         # 자원·전력·전투·안락함·상인·세이브 시뮬레이션
     └── main.js         # 입력 처리 및 메인 루프 컨트롤러
 ```
+
+---
+
+## 오픈소스 라이선스 고지 (Third-Party Licenses)
+
+- **`Pretendard`** — Copyright (c) 2021 Kil Hyung-jin (`https://github.com/orioncactus/pretendard`), licensed under the **SIL Open Font License 1.1** ([`assets/fonts/OFL.txt`](./assets/fonts/OFL.txt)).

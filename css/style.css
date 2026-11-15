@@ -1437,3 +1437,25 @@ button, input, select {
   font-weight: 600;
   color: #d3dfec;
 }
+
+.guide-license {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 178, 210, 0.14);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #9FB0C2;
+}
+
+.guide-license a {
+  color: #BAE6FD;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.guide-license a:hover,
+.guide-license a:focus-visible {
+  color: #E0F2FE;
+  text-decoration: underline;
+}
