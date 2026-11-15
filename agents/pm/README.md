@@ -37,21 +37,22 @@
 
 ---
 
-## 3. 멀티 에이전트 협업 사이클 (`Single Code Writer` 파이프라인)
+## 3. 멀티 에이전트 협업 사이클 (`v0.4.0+` 필수 순차 파이프라인: `기획 → 디자인 → 개발 → 교차 검수`)
 
 ```text
-[1. PM Agent] 코드/밸런스 분석 → 기획서(share/plans/) 및 GitHub 이슈(#N) 등록
+[1. PM Agent] 코드/밸런스 분석 → 구체적 수치·공식 기획서(share/plans/) 및 GitHub 이슈(#N) 등록
+              → share/STATUS.md에 'Design Needed' 상태로 등록하여 디자이너에게 인계
       ↓
-[2. Designer Agent] 디자인 이슈([Art]/[UI]) 등록 또는 기획 이슈 아트 명세 수립
-                    → 시안·SVG·토큰표를 share/design/에 납품 (직접 코드 수정·PR 생성 금지)
-      ↓ (중요 기획·시안 사용자 컨펌)
-[3. Developer Agent] 유일한 코드 작성 및 PR 주체 (Single Code Writer)
-                     → 이슈(#N) + share/plans/ + share/design/ 통합 이식 구현
+[2. Designer Agent] 기획서 기반 프로토타입 시안 HTML/Canvas, 신규 SVG 원본, 아트 수치 명세를
+                    반드시 share/design/에 선행 납품 (직접 코드 수정·PR 생성 금지)
+      ↓ (중요 시안 사용자 컨펌 후 'Dev Ready' 전환 — 시안 미납품 시 개발 착수 금지)
+[3. Developer Agent] 유일한 코드 이식 및 PR 주체 (Single Code Writer · 임의 조형/디자인 금지)
+                     → 확정된 이슈(#N) + share/plans/ + share/design/ 통합 이식·최적화 구현
                      → share/dev/에 전후 비교 캡처 저장 → develop 타겟 PR 생성 ("Closes #N")
       ↓
-[4. Designer / User] Designer 시각 검수 피드백 → User(Owner) 최종 코드 리뷰 & PR 병합
+[4. Designer & PM] Designer 시각 검수(Visual QA) + PM 밸런스·스펙 검수 → User(Owner) 최종 PR 병합
       ↓
-[5. PM Agent] 밸런스 사후 검증, STATUS.md 갱신 및 다음 페이즈 기획 진행
+[5. PM Agent] STATUS.md 갱신 및 다음 페이즈 기획 진행
 ```
 
 ---

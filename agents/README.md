@@ -33,27 +33,30 @@
 
 ---
 
-## 3. 표준 엔드투엔드(End-to-End) 작업 흐름
+## 3. 표준 엔드투엔드(End-to-End) 작업 흐름 (`v0.4.0+` 순차 게이트 필수)
+
+> **필수 원칙 (`v0.4.0`부터 엄격 적용):** 신규 건물·성벽·몬스터·이펙트·UI/SVG가 포함되는 모든 작업은 **반드시 `기획(PM) → 디자인(Designer) → 개발(Developer) → 교차 검수` 순서로 진행**합니다. 디자이너의 `share/design/` 시안·명세 납품 전에는 개발 에이전트가 임의로 조형·SVG·UI를 디자인하여 선행 구현할 수 없습니다. *(예외: 화면 변화가 전혀 없는 순수 내부 로직·세이브 마이그레이션·빌드 스크립트 이슈만 디자인 단계 생략 가능)*
 
 ```text
-[Step 1. 기획 & 이슈화 — PM Agent]
-  • 코드 읽기 전용 분석 → 기획서(share/plans/) 작성 및 GitHub 이슈(#N) 등록
-  • share/STATUS.md에 스프린트 우선순위 배치
+[Gate 1. 기획 & 이슈화 — PM Agent]
+  • 코드 읽기 전용 분석 → 구체적 수치·공식 기획서(share/plans/) 작성 및 GitHub 이슈(#N) 등록
+  • share/STATUS.md에 스프린트 우선순위 배치 및 디자이너 인계(Design Needed 표시)
         │
         ▼
-[Step 2. 아트 명세 & 시안 납품 — Designer Agent] (PR 생성 X)
-  • 자체 디자인 이슈([Art]/[UI]) 등록 또는 기획 이슈에 비주얼 기준 수립
-  • 팔레트 토큰표, 실루엣 시안 HTML, SVG 아이콘 원본, 프리뷰를 share/design/에 저장
-  • 필요 시 GitHub 이슈에 핵심 수치 요약 코멘트(gh issue comment) 등록 후 STATUS.md 갱신
-        │ (중요 시안은 사용자 컨펌)
+[Gate 2. 아트 명세 & 시안 납품 — Designer Agent] (PR 생성 X · 개발 착수 선행 조건)
+  • 기획서(share/plans/) 및 이슈(#N)를 바탕으로 오브젝트 조형 시안 HTML/Canvas, 신규 SVG 원본,
+    레이아웃·컬러·수치 명세를 share/design/에 반드시 선행 납품
+  • 중요 신규 외형·UI 시안은 사용자(Owner) 컨펌을 거친 뒤 share/STATUS.md를 Dev Ready로 전환
+        │
         ▼
-[Step 3. 통합 코드 이식 & PR 생성 — Developer Agent] (유일한 PR 생성 주체)
-  • GitHub 이슈(#N) + share/plans/ + share/design/ 산출물을 함께 참조
-  • .worktrees/feature-{N}-{slug} 독립 워크트리에서 인게임 코드로 이식·최적화 구현
+[Gate 3. 통합 코드 이식 & PR 생성 — Developer Agent] (유일한 PR 생성 주체 · 임의 디자인 금지)
+  • GitHub 이슈(#N) + share/plans/(기획) + share/design/(확정 시안) 산출물이 모두 준비된 후 착수
+  • .worktrees/feature-{N}-{slug} 독립 워크트리에서 시안과 수치를 인게임 코드로 정확히 이식·최적화
   • 구현 전후 비교 캡처를 share/dev/에 저장 → develop 타겟 PR 생성 ("Closes #N") → STATUS.md 갱신
         │
         ▼
-[Step 4. 시각 검수 & 최종 병합 — Designer Agent & User]
-  • (선택) Designer: share/dev/ 캡처를 art-direction.md 및 원본 시안과 대조해 코멘트 피드백
-  • User (Owner): 코드/화면 최종 확인 후 PR Merge 수행
+[Gate 4. 교차 검수 & 최종 병합 — Designer · PM · User]
+  • Designer: share/dev/ 캡처를 원본 시안 및 art-direction.md와 대조해 시각 검수(Visual QA) 수행
+  • PM: 기획 수치·공식·밸런스 무결성 검수 수행
+  • User (Owner): 최종 확인 후 PR Merge 수행
 ```
