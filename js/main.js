@@ -569,6 +569,8 @@ window.ZS = window.ZS || {};
     document.getElementById('night-actions').classList.toggle('hidden', st.phase !== 'night');
     document.getElementById('build-dock').style.opacity = isDay ? '1' : uiState.dockCollapsed ? '0.94' : '0.88';
 
+    renderReconCard(st);
+
     if (isDay) {
       document.getElementById('cta-wave-sub').innerHTML =
         st.wave % 5 === 0
@@ -610,6 +612,127 @@ window.ZS = window.ZS || {};
       renderTraderModal();
     }
     updateCursorTooltip();
+  }
+
+  function renderReconCard(st) {
+    const el = document.getElementById('recon-card');
+    if (!el) return;
+    const intel = st && st.nextWaveIntel;
+    if (!intel || st.phase !== 'day') {
+      el.style.display = 'none';
+      return;
+    }
+
+    el.style.display = 'block';
+    const isBossWave = intel.bossSide != null || (intel.counts && intel.counts.boss > 0);
+    el.classList.toggle('boss', isBossWave);
+
+    const SIDE_NAMES = ['북동', '남동', '남서', '북서'];
+    const SIDE_EDGES = {
+      0: [32, 3, 61, 22, 46.5, 12.5],
+      1: [61, 22, 32, 41, 46.5, 31.5],
+      2: [32, 41, 3, 22, 17.5, 31.5],
+      3: [3, 22, 32, 3, 17.5, 12.5]
+    };
+
+    const kinds = intel.sideKinds || ['none', 'none', 'none', 'none'];
+    const linesSvg = [0, 1, 2, 3]
+      .map((sd) => {
+        const k = kinds[sd];
+        const e = SIDE_EDGES[sd];
+        const strokeAttr =
+          k === 'boss'
+            ? 'stroke="#E040FB" stroke-width="4"'
+            : k === 'main'
+            ? 'stroke="#FF4D6D" stroke-width="4"'
+            : k === 'sub'
+            ? 'stroke="#FF8FA3" stroke-width="2.2"'
+            : k === 'min'
+            ? 'stroke="#FF8FA3" stroke-width="1.6" stroke-dasharray="3 3"'
+            : 'stroke="#46525F" stroke-width="1.6"';
+        return `<line x1="${e[0]}" y1="${e[1]}" x2="${e[2]}" y2="${e[3]}" ${strokeAttr} stroke-linecap="round"/>`;
+      })
+      .join('');
+
+    const bossDot =
+      intel.bossSide != null
+        ? `<circle cx="${SIDE_EDGES[intel.bossSide][4]}" cy="${SIDE_EDGES[intel.bossSide][5]}" r="4" fill="#E040FB"/>`
+        : '';
+
+    const mainSides = [];
+    const subSides = [];
+    for (let sd = 0; sd < 4; sd++) {
+      if (kinds[sd] === 'main' || kinds[sd] === 'boss') mainSides.push(SIDE_NAMES[sd]);
+      else if (kinds[sd] === 'sub') subSides.push(SIDE_NAMES[sd]);
+    }
+
+    let patTitle = intel.patternLabel || '침공 경보';
+    let patDesc = '';
+    if (intel.pattern === 'single') {
+      patTitle = `${mainSides[0] || '북동'} 정면 침공`;
+      patDesc = '1개 방위 100%<br>전면 집중 돌파';
+    } else if (intel.pattern === 'flank') {
+      patTitle = `${mainSides[0] || ''}·${subSides[0] || ''} 측면`;
+      patDesc = `주력 ${mainSides[0] || ''} 75%<br>견제 ${subSides[0] || ''} 25%`;
+    } else if (intel.pattern === 'dual') {
+      patTitle = `${mainSides.join('·')} 협공`;
+      patDesc = '주공 2면 각 45%<br>기습 2면 합 10%';
+    } else {
+      patTitle = '전방위 포위';
+      patDesc = `주공 ${mainSides.join('·')} 35%<br>보조 ${subSides.join('·')} 15%`;
+    }
+
+    const ENEMY_ORDER = [
+      ['walker', '보행자'],
+      ['runner', '러너'],
+      ['brute', '저거너트'],
+      ['spitter', '애시드 스피터'],
+      ['leaper', '스토커 리퍼'],
+      ['shocker', '볼트 쇼커']
+    ];
+    const counts = intel.counts || {};
+    const chipsHtml = ENEMY_ORDER.map(([id, label]) => {
+      const cnt = counts[id] || 0;
+      if (cnt <= 0) return '';
+      const isNew =
+        id === 'spitter' ||
+        id === 'leaper' ||
+        id === 'shocker' ||
+        (id === 'runner' && intel.wave === 2) ||
+        (id === 'brute' && intel.wave === 3);
+      return `<span class="recon-chip${isNew ? ' new' : ''}" title="${escapeHtml(label)} ${cnt}기">${ozIcon(`en-${id}`, 14)}<span>${cnt}</span></span>`;
+    }).join('');
+
+    const bossRowHtml =
+      isBossWave && intel.bossSide != null
+        ? `<div class="recon-boss-row">${ozIcon('en-boss', 15)}<span>알파 타이탄${counts.boss > 1 ? ` ×${counts.boss}` : ''} · ${SIDE_NAMES[intel.bossSide]}</span></div>`
+        : '';
+
+    const showPaths = st.showReconPaths !== false;
+    const pathLen = st.previewPaths ? st.previewPaths.length : 0;
+    const breachLen = st.breachMarkers ? st.breachMarkers.length : 0;
+
+    el.innerHTML = `
+      <div class="recon-head">
+        <span class="recon-title">${ozIcon('recon-compass', 15)}<span>정찰 브리핑 · WAVE ${intel.wave}</span></span>
+        <button id="btn-toggle-recon-paths" type="button" class="recon-toggle${showPaths ? ' on' : ''}" title="${showPaths ? '예상 경로선 숨기기' : '예상 경로선 표시'}">${ozIcon('recon-route', 15)}</button>
+      </div>
+      <div class="recon-body">
+        <svg class="recon-compass" viewBox="0 0 64 44" aria-hidden="true">
+          <polygon points="32,3 61,22 32,41 3,22" fill="rgba(78, 102, 83, 0.35)"/>
+          ${linesSvg}
+          <circle cx="32" cy="22" r="3" fill="#FFD27A"/>
+          ${bossDot}
+        </svg>
+        <div class="recon-pat">${escapeHtml(patTitle)}<small>${patDesc}</small></div>
+      </div>
+      <div class="recon-chips">${chipsHtml}</div>
+      ${bossRowHtml}
+      <div class="recon-foot">
+        <span>총 <strong>${intel.totalCount || 0}기</strong></span>
+        <span>${showPaths ? `경로 ${pathLen} · 공성 ${breachLen}` : '경로선 숨김'}</span>
+      </div>
+    `;
   }
 
   function showWaveBanner(title, sub, tone) {
@@ -1180,6 +1303,16 @@ window.ZS = window.ZS || {};
       setToolMode('inspect');
       ZS.Game.startNightWave();
     });
+
+    const reconCardEl = document.getElementById('recon-card');
+    if (reconCardEl) {
+      reconCardEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('#btn-toggle-recon-paths');
+        if (!btn) return;
+        e.stopPropagation();
+        if (ZS.Game.toggleReconPaths) ZS.Game.toggleReconPaths();
+      });
+    }
 
     const openTrader = () => {
       if (ZS.Game.state.phase !== 'day') {
