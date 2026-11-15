@@ -20,6 +20,7 @@ window.ZS = window.ZS || {};
   let lastPaintKey = '';
   let panStart = { x: 0, y: 0 };
   let bannerTimer = null;
+  let lastCozyPulseSeq = 0;
 
   function resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
@@ -50,13 +51,27 @@ window.ZS = window.ZS || {};
   }
 
   function getCardTagInfo(def) {
-    if (def.layer === 'floor') return { text: `바닥재 · 💛+${def.cozy || 0}`, cls: 'tag-cozy' };
+    const preview = ZS.Game.getPlacementCozyPreview ? ZS.Game.getPlacementCozyPreview(def.id) : null;
+    if (def.layer === 'floor') {
+      if (preview && preview.isFloorCapped) {
+        return { text: `바닥재 · 상한 도달`, cls: 'tag-cozy-dim' };
+      }
+      return { text: `바닥재 · 💛+${def.cozy || 0}`, cls: 'tag-cozy' };
+    }
     if (def.subType === 'manned') return { text: `👥요원 ${def.popUse} · 무전력`, cls: 'tag-manned' };
     if (def.subType === 'turret') return { text: `⚡야간전력 소모`, cls: 'tag-power' };
     if (def.subType === 'power') return { text: `☀️+${def.dayCharge}⚡ / 용량+${def.powerCap}`, cls: 'tag-power' };
-    if (def.subType === 'housing') return { text: `👥수용+${def.popCap} · 💛+${def.cozy}`, cls: 'tag-manned' };
+    if (def.subType === 'housing') {
+      if (preview && preview.isDiminished) {
+        return { text: `👥수용+${def.popCap} · +${preview.gain} (50%)`, cls: 'tag-cozy-dim' };
+      }
+      return { text: `👥수용+${def.popCap} · 💛+${def.cozy}`, cls: 'tag-manned' };
+    }
     if (def.category === 'decor') {
       const pwr = def.requiresPower ? '⚡전등 · ' : '';
+      if (preview && preview.isDiminished) {
+        return { text: `${pwr}+${preview.gain} (50%)`, cls: 'tag-cozy-dim' };
+      }
       return { text: `${pwr}💛안락함 +${def.cozy || 0}`, cls: 'tag-cozy' };
     }
     if (def.subType === 'trap') return { text: '무전력 둔화 함정', cls: '' };
@@ -88,12 +103,15 @@ window.ZS = window.ZS || {};
       const tag = getCardTagInfo(def);
 
       let badgeHtml = '';
+      const floorCapped = def.layer === 'floor' && (st.cozyFloorRaw || 0) >= (ZS.DATA.COZY_FLOOR_CAP || 60);
       if (bossLocked) {
         badgeHtml = `<span class="card-lock-badge">🔒 보스</span>`;
       } else if (voucherBypass) {
         badgeHtml = `<span class="card-voucher-badge">보급권 ${voucherCount}</span>`;
       } else if (hqLockedRaw) {
         badgeHtml = `<span class="card-lock-badge">🔒 본부 Lv.${reqHq}</span>`;
+      } else if (floorCapped) {
+        badgeHtml = `<span class="card-cap-badge">상한 도달</span>`;
       }
 
       let costHtml = '';
@@ -160,7 +178,14 @@ window.ZS = window.ZS || {};
       uiState.inspectedTile = null;
       const def = ZS.DATA.ITEMS[itemId];
       if (def) {
-        setDetailText(`${def.icon} [${def.name}] — ${def.desc}`);
+        const prev = ZS.Game.getPlacementCozyPreview ? ZS.Game.getPlacementCozyPreview(def.id) : null;
+        let cozyHint = '';
+        if (prev && prev.isFloorCapped) {
+          cozyHint = ' (바닥재 안락함 60점 상한 도달)';
+        } else if (prev && prev.isDiminished) {
+          cozyHint = ` [도배 감쇠 적용: 안락함 +${prev.gain} (50%)]`;
+        }
+        setDetailText(`${def.icon} [${def.name}] — ${def.desc}${cozyHint}`);
       }
     } else {
       uiState.selectedItemId = null;
@@ -237,22 +262,90 @@ window.ZS = window.ZS || {};
     // Population display
     document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
 
-    // Cozy Morale display & tooltip
+    // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip
     const tier = st.cozyTier;
-    document.getElementById('res-cozy').textContent = `Lv.${tier.level} (${st.cozyScore})`;
-    const nextTier = ZS.DATA.COZY_TIERS.find((t) => t.level === tier.level + 1);
+    const tiers = ZS.DATA.COZY_TIERS || [];
+    document.getElementById('res-cozy').textContent = `Lv.${tier.level}`;
+
+    const heartPath = document.getElementById('res-cozy-heart-path');
+    if (heartPath) {
+      const strokeW = (1.5 + ((tier.level - 1) / 7) * 1.0).toFixed(2);
+      heartPath.setAttribute('stroke-width', strokeW);
+    }
+
+    const nextTier = tiers.find((t) => t.level === tier.level + 1);
+    const segWrap = document.getElementById('res-cozy-segments');
+    if (segWrap) {
+      const curProgress = nextTier
+        ? Math.max(0, Math.min(1, (st.cozyScore - tier.min) / Math.max(1, nextTier.min - tier.min)))
+        : 1;
+      let segHtml = '';
+      for (let idx = 1; idx <= 8; idx++) {
+        let fillPct = 0;
+        if (idx < tier.level) {
+          fillPct = 100;
+        } else if (idx === tier.level) {
+          fillPct = nextTier ? Math.max(18, Math.round(curProgress * 100)) : 100;
+        }
+        segHtml += `<span class="cozy-seg"><span class="cozy-seg-fill" style="width:${fillPct}%"></span></span>`;
+      }
+      segWrap.innerHTML = segHtml;
+    }
+
+    const cozyPillEl = document.getElementById('cozy-pill');
+    if (cozyPillEl && st.cozyPulseSeq && st.cozyPulseSeq !== lastCozyPulseSeq) {
+      lastCozyPulseSeq = st.cozyPulseSeq;
+      cozyPillEl.classList.remove('tier-up-pulse');
+      if (cozyPillEl.offsetWidth !== undefined) {
+        // Trigger reflow when running in browser DOM
+      }
+      cozyPillEl.classList.add('tier-up-pulse');
+    }
+
+    const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
+    const rowsHtml = tiers
+      .map(
+        (t) => `
+        <tr class="${t.level === tier.level ? 'current-tier' : ''}">
+          <td>Lv.${t.level}</td>
+          <td>${t.title}</td>
+          <td>${t.min}</td>
+          <td>+${Math.round(t.agentDmg * 100)}%</td>
+          <td>+${Math.round(t.fireRate * 100)}%</td>
+          <td>+${Math.round(t.coinBonus * 100)}%</td>
+          <td>+${Math.round((t.xpBonus || 0) * 100)}%</td>
+          <td>${Math.round(t.freeRepair * 100)}%</td>
+        </tr>`
+      )
+      .join('');
+
     document.getElementById('cozy-tooltip').innerHTML = `
-      <div style="font-weight:800;color:${P.gold};margin-bottom:4px;">💛 ${tier.title} (Lv.${tier.level})</div>
-      <div>총 안락함 점수: <b>${st.cozyScore}점</b> <span style="color:${P.gold}">(다양성 시너지 +${st.cozyDiversityBonus})</span></div>
-      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12);margin:6px 0;" />
-      <div>• 무전력 전투원 공격력: <b style="color:${P.health}">+${Math.round(tier.agentDmg * 100)}%</b></div>
-      <div>• 전체 화기 연사속도: <b style="color:${P.health}">+${Math.round(tier.fireRate * 100)}%</b></div>
-      <div>• 웨이브 코인 배당금: <b style="color:${P.gold}">+${Math.round(tier.coinBonus * 100)}%</b></div>
-      <div>• 아침 무료 자동수리: <b style="color:${P.health}">+${Math.round(tier.freeRepair * 100)}%</b></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+        <span style="font-weight:800;color:${P.gold};">💛 ${tier.title} (Lv.${tier.level})</span>
+        <span style="font-size:11px;color:#e2e8f0;">총 <b>${st.cozyScore}점</b></span>
+      </div>
+      <div style="font-size:10.5px;color:#94a3b8;margin-bottom:4px;">
+        바닥재 ${st.cozyFloorScore || 0}/${floorCap}점${(st.cozyFloorRaw || 0) >= floorCap ? ' (상한)' : ''} · 구조물 ${st.cozyStructScore || 0}점${st.cozySynergyScore ? ` · 라운지 +${st.cozySynergyScore}` : ''} · 다양성 <span style="color:${P.gold}">+${st.cozyDiversityBonus}</span>
+      </div>
+      <table class="cozy-table">
+        <thead>
+          <tr>
+            <th>등급</th>
+            <th>타이틀</th>
+            <th>요구</th>
+            <th>요원화력</th>
+            <th>연사</th>
+            <th>코인</th>
+            <th>숙련XP</th>
+            <th>수리</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
       ${
         nextTier
           ? `<div style="margin-top:6px;color:#94a3b8;font-size:11px;">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
-          : `<div style="margin-top:6px;color:${P.gold};font-size:11px;">최고 안락함 등급 달성!</div>`
+          : `<div style="margin-top:6px;color:${P.gold};font-size:11px;">★ 최고 안락함 등급(Lv.8) 달성!</div>`
       }
     `;
 

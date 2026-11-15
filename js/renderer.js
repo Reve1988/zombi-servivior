@@ -181,6 +181,25 @@ ZS.Renderer = (function () {
     drawProjectiles(ctx, state.projectiles, zScale);
     drawParticles(ctx, state.particles, zScale);
 
+    // Warm central base glow on Cozy Tier-Up (radius 3 tiles, 0.8s)
+    if (state.cozyTierUpTimer && state.cozyTierUpTimer > 0) {
+      const progress = 1 - Math.max(0, Math.min(1, state.cozyTierUpTimer / 0.8));
+      const alpha = Math.sin(progress * Math.PI) * 0.55;
+      const center = Iso.gridToScreen(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 10);
+      const rPx = (1.6 + progress * 1.4) * 38 * zScale;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const grad = ctx.createRadialGradient(center.x, center.y, 4, center.x, center.y, rPx);
+      grad.addColorStop(0, `rgba(255, 201, 74, ${alpha.toFixed(3)})`);
+      grad.addColorStop(0.55, `rgba(255, 210, 122, ${(alpha * 0.45).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(255, 201, 74, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // 8. Nighttime Tactical Darkness & Dynamic Glow Layer
     if (state.nightAlpha > 0.02) {
       drawNightLighting(ctx, w, h, state, powered, timeSec, zScale);
@@ -1526,6 +1545,31 @@ ZS.Renderer = (function () {
     ctx.save();
 
     // 1. Selected / Inspected Tile Border (crisp above night darkness without cutting through 3D structures)
+    if (state.phase === 'day' && uiState.mode === 'build' && uiState.selectedItemId && uiState.hoverTile && ZS.Game.getPlacementCozyPreview) {
+      const htx = uiState.hoverTile.tx;
+      const hty = uiState.hoverTile.ty;
+      if (htx >= 0 && hty >= 0 && htx < N && hty < N) {
+        const cPrev = ZS.Game.getPlacementCozyPreview(uiState.selectedItemId, htx, hty);
+        if (cPrev && (cPrev.isDiminished || cPrev.isFloorCapped || cPrev.gain > 0)) {
+          const p = Iso.gridToScreen(htx + 0.5, hty + 0.5, 26);
+          const label = cPrev.isFloorCapped
+            ? '상한 도달'
+            : cPrev.isDiminished
+            ? `+${cPrev.gain} (50%)`
+            : `💛+${cPrev.gain}`;
+          const col = cPrev.isFloorCapped ? '#A9BCCF' : cPrev.isDiminished ? '#94A3B8' : P.gold;
+          const fontPx = Math.max(11, Math.round(12 * zScale));
+          ctx.font = `700 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.strokeStyle = P.outlineDark || '#1B2430';
+          ctx.lineWidth = 3;
+          ctx.strokeText(label, p.x, p.y);
+          ctx.fillStyle = col;
+          ctx.fillText(label, p.x, p.y);
+        }
+      }
+    }
+
     if (uiState.inspectedTile) {
       const { tx, ty } = uiState.inspectedTile;
       if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
