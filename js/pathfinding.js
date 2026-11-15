@@ -25,6 +25,7 @@ ZS.Pathfinding = (function () {
     if (!s || s.id === 'command_hq') return 0;
     const def = ZS.DATA.ITEMS[s.id];
     if (def && def.passable) return 0.15;
+    if (def && def.subType === 'gate') return 4.5 + (s.hp || 100) / 140;
     return 11.5 + (s.hp || 100) / 34;
   }
 

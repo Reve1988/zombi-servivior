@@ -117,6 +117,8 @@ window.ZS = window.ZS || {};
       return { html: `${pwrPrefix}${ozIcon('res-cozy', 13, 'icon-coin')}<span>안락함 +${def.cozy || 0}</span>`, cls: 'tag-cozy' };
     }
     if (def.subType === 'trap') return { html: `<span>무전력 둔화 함정</span>`, cls: '' };
+    if (def.subType === 'gate') return { html: `<span>전술 관문 · 둔화 25%</span>`, cls: '' };
+    if (def.id === 'barricade_wall') return { html: `<span>3단 진화 · 반사 15%</span>`, cls: '' };
     return { html: `<span>방호벽 · HP ${def.maxHp}</span>`, cls: '' };
   }
 
@@ -727,9 +729,20 @@ window.ZS = window.ZS || {};
       );
     } else if (ZS.Game.isUpgradeableDef(def)) {
       const prof = ZS.Game.getStructLevelProfile(def, lv);
+      const dispName = ZS.Game.getStructureDisplayName(obj);
       let statSummary = '';
       if (def.subType === 'wall') {
-        statSummary = prof.perkLabel ? `★${escapeHtml(prof.perkLabel)}` : '차단 방호벽';
+        const parts = [];
+        if (prof.thornsRatio > 0) {
+          parts.push(`피해 반사 ${Math.round(prof.thornsRatio * 100)}% (최소 ${prof.thornsMin || 0})`);
+        } else {
+          parts.push('차단 방호벽 · 상부 거치 해금');
+        }
+        if (prof.perkLabel) parts.push(`★${escapeHtml(prof.perkLabel)}`);
+        statSummary = parts.join(' · ');
+      } else if (def.subType === 'gate') {
+        const slowPct = Math.round((1 - (prof.gateSlowFactor || 0.75)) * 100);
+        statSummary = `전술 관문 · 주변 둔화 ${slowPct}%${prof.thornsRatio > 0 ? ` · 반사 ${Math.round(prof.thornsRatio * 100)}%` : ''}${prof.perkLabel ? ` · ★${escapeHtml(prof.perkLabel)}` : ''}`;
       } else if (def.id === 'razor_pad') {
         statSummary = `지속피해 ${prof.trapDps}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${prof.perkLabel ? ` · ★${escapeHtml(prof.perkLabel)}` : ''}`;
       } else if (def.subType === 'power') {
@@ -739,16 +752,21 @@ window.ZS = window.ZS || {};
       }
       if (lv < 3) {
         const nextProf = ZS.Game.getStructLevelProfile(def, lv + 1);
+        const nextDispName = ZS.Game.getStructureDisplayName({ id: def.id, level: lv + 1 });
         const fid2 = st.floorGrid[ty] && st.floorGrid[ty][tx];
         const fDef2 = fid2 ? ZS.DATA.ITEMS[fid2] : null;
         const hpMult = 1 + (fDef2 && fDef2.hpMultBonus ? fDef2.hpMultBonus : 0);
         const nextMaxHp = Math.round(nextProf.baseMaxHp * hpMult);
-        const perkHint = lv + 1 === 3 && nextProf.perkLabel ? ` · ★${escapeHtml(nextProf.perkLabel.split(' (')[0])}` : '';
-        statSummary += ` → [Lv.${lv + 1}: HP ${nextMaxHp}${perkHint}]`;
+        const nextLabel = def.id === 'barricade_wall' ? `${escapeHtml(nextDispName)} Lv.${lv + 1}` : `Lv.${lv + 1}`;
+        const perkHint = lv + 1 === 3 && nextProf.perkLabel
+          ? ` · ★${escapeHtml(nextProf.perkLabel.split(' (')[0])}`
+          : (def.id === 'barricade_wall' && lv + 1 === 2 ? ' · 상부 거치 해금' : '');
+        statSummary += ` → [${nextLabel}: HP ${nextMaxHp}${perkHint}]`;
       }
-      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
+      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(dispName)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
     } else {
-      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${escapeHtml(def.desc)}`);
+      const dispName = ZS.Game.getStructureDisplayName(obj);
+      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(dispName)}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${escapeHtml(def.desc)}`);
     }
 
     const upStructBtn = document.getElementById('btn-upgrade-struct');
@@ -792,7 +810,7 @@ window.ZS = window.ZS || {};
         const def = ZS.DATA.ITEMS[target.id];
         const rInfo = ZS.Game.getVeterancyRankInfo(rank);
         setDetailHtml(
-          `${ozIcon('state-alert', 14, 'icon-danger')} <b>[${escapeHtml(def ? def.name : target.id)}]</b> 철거 확인 — ${escapeHtml(rInfo.name)} 배지(${Math.floor(target.xp || 0)} XP) 계급이 사라집니다.`,
+          `${ozIcon('state-alert', 14, 'icon-danger')} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(target))}]</b> 철거 확인 — ${escapeHtml(rInfo.name)} 배지(${Math.floor(target.xp || 0)} XP) 계급이 사라집니다.`,
           `<span class="detail-rank-box"><span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span><span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span></span><button id="btn-confirm-demolish" class="detail-demolish-confirm-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>계급 소멸 감수하고 철거</span></button>`
         );
         const confirmBtn = document.getElementById('btn-confirm-demolish');
@@ -813,8 +831,7 @@ window.ZS = window.ZS || {};
         const src = st.structGrid[ty] && st.structGrid[ty][tx];
         if (src && src.id !== 'command_hq') {
           uiState.movingSource = { tx, ty };
-          const def = ZS.DATA.ITEMS[src.id];
-          setDetailHtml(`${ozIcon('tool-move', 14)} <b>[${escapeHtml(def ? def.name : src.id)}]</b> 선택됨 — 이동할 빈 타일을 클릭하세요.`);
+          setDetailHtml(`${ozIcon('tool-move', 14)} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(src))}]</b> 선택됨 — 이동할 빈 타일을 클릭하세요.`);
         } else {
           ZS.Audio.playError();
         }

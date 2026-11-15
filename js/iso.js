@@ -192,6 +192,7 @@ ZS.Iso = (function () {
 
   function resolveFaceColor(rawColor, shadeFactor, isEmissive, boxFlash) {
     if (!rawColor) return null;
+    if (window.ZS_SILHOUETTE_MODE) return '#151A20';
     let col = shadeFactor === 1 ? rawColor : shadeHex(rawColor, shadeFactor);
 
     // Apply global day/night ambient tint to matte surfaces only
@@ -274,7 +275,7 @@ ZS.Iso = (function () {
       ctx.fill();
     }
 
-    if (c.stroke && !c.noTop) {
+    if (c.stroke && !c.noTop && !window.ZS_SILHOUETTE_MODE) {
       ctx.strokeStyle = effectiveFlash > 0.5 ? '#FFFFFF' : c.stroke;
       ctx.lineWidth = Math.max(0.75, 1 * cam.zoom);
       ctx.beginPath();
