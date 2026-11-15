@@ -389,6 +389,12 @@ html, body {
   border-color: var(--col-select);
 }
 
+.sys-btn.toggle-off {
+  background: rgba(20, 29, 41, 0.72);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
 .version-badge {
   padding: 5px 9px;
   background: rgba(15, 23, 34, 0.9);

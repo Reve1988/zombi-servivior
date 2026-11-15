@@ -150,6 +150,18 @@ ZS.Renderer = (function () {
     return stamp;
   }
 
+  function computeBlackoutElectricPowered(state, timeSec) {
+    if (!state.isNight) return true;
+    if (state.power > 0.01) return true;
+    const flk = state.blackoutFlickerTimer || 0;
+    if (flk > 0) {
+      // Rapid fluorescent stutter over 0.5s before plunging into full blackout (#8)
+      const wave = Math.sin(timeSec * 62) + 0.55 * Math.cos(timeSec * 97);
+      return wave > -0.15 + (0.5 - flk) * 0.9;
+    }
+    return false;
+  }
+
   function render(ctx, w, h, state, uiState, timeSec) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
@@ -168,6 +180,20 @@ ZS.Renderer = (function () {
     }
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
+
+    // Optional mild camera shake ONLY on Airstrike, Boss spawn, and HQ hit (#8 + accessibility toggle)
+    const shakeActive =
+      (!ZS.Game || !ZS.Game.isScreenShakeEnabled || ZS.Game.isScreenShakeEnabled()) &&
+      state.shakeTimer > 0 &&
+      state.shakeAmp > 0;
+    if (shakeActive) {
+      const decay = Math.min(1, state.shakeTimer / (state.shakeDuration || 0.28));
+      const amp = state.shakeAmp * decay;
+      const sx = Math.sin(timeSec * 67) * amp + Math.cos(timeSec * 41) * amp * 0.35;
+      const sy = Math.cos(timeSec * 59) * amp * 0.78;
+      ctx.save();
+      ctx.translate(sx, sy);
+    }
 
     // Apply day warm-afternoon vs night cool-moonlight ambient tint to matte voxel surfaces
     if (state.nightAlpha > 0.02) {
@@ -230,6 +256,11 @@ ZS.Renderer = (function () {
 
     // Crisp inner quarantine boundary & directional danger chevrons separating 1-tile outer spawn zone
     drawQuarantineBorder(ctx, N, P, showEditGrid, zScale);
+
+    // Fading zombie death ground stains (#8: drawn flat on ground above tiles/floors, below structures)
+    if (state.groundDecals && state.groundDecals.length > 0) {
+      drawGroundStains(ctx, state.groundDecals, zScale);
+    }
 
     // Subtle warm afternoon sunlight wash over the inner base during daytime
     if (state.nightAlpha < 0.95) {
@@ -320,9 +351,21 @@ ZS.Renderer = (function () {
       });
     }
 
+    if (state.dyingZombies) {
+      for (let i = 0; i < state.dyingZombies.length; i++) {
+        const dz = state.dyingZombies[i];
+        renderList.push({
+          kind: 'dying_zombie',
+          depth: dz.x + dz.y + 0.04,
+          dz
+        });
+      }
+    }
+
     renderList.sort((a, b) => a.depth - b.depth);
 
-    const powered = !state.isNight || state.power > 0.01;
+    const powered = computeBlackoutElectricPowered(state, timeSec);
+    const statusPowered = !state.isNight || state.power > 0.01;
 
     for (let i = 0; i < renderList.length; i++) {
       const item = renderList[i];
@@ -332,6 +375,8 @@ ZS.Renderer = (function () {
         drawPerimeterProp(ctx, item.ep, zScale);
       } else if (item.kind === 'zombie') {
         drawZombie(ctx, item.z, timeSec, zScale);
+      } else if (item.kind === 'dying_zombie') {
+        drawDyingZombie(ctx, item.dz, zScale);
       }
     }
 
@@ -348,7 +393,10 @@ ZS.Renderer = (function () {
 
     Iso.resetRenderModifiers();
 
-    // 7. Projectiles & Lightning Arcs (World Space)
+    // 7. Muzzle Flashes, Projectiles & Voxel Debris / Dust Particles (World Space)
+    if (state.muzzleFlashes && state.muzzleFlashes.length > 0) {
+      drawMuzzleFlashes(ctx, state.muzzleFlashes, zScale);
+    }
     drawProjectiles(ctx, state.projectiles, zScale);
     drawParticles(ctx, state.particles, zScale);
 
@@ -378,10 +426,14 @@ ZS.Renderer = (function () {
 
     // ── Info Layer (Drawn above darkness: identical daytime brightness & contrast) ──
     // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout ⚡OFF Warnings
-    drawInfoLayer(ctx, state, uiState, renderList, powered, timeSec, zScale);
+    drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale);
 
     // 10. Floating Texts (Damage, Loot, Buff Callouts)
     drawFloatingTexts(ctx, state.floatingTexts, zScale);
+
+    if (shakeActive) {
+      ctx.restore();
+    }
   }
 
   function drawIslandSlab(ctx, N, P, zScale) {
@@ -844,6 +896,32 @@ ZS.Renderer = (function () {
       ctx.beginPath();
       ctx.ellipse(sc.x, sc.y, 20 * zScale, 10 * zScale, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Build placement drop + elastic squash-and-stretch rebound (#8)
+    let hasBuildTransform = false;
+    if (st.buildAnimTimer && st.buildAnimTimer > 0) {
+      const progress = 1 - Math.max(0, Math.min(1, st.buildAnimTimer / 0.34));
+      const pivot = Iso.gridToScreen(tx + 0.5, ty + 0.5, 1);
+      let scaleX = 1;
+      let scaleY = 1;
+      let dropY = 0;
+      if (progress < 0.28) {
+        const u = progress / 0.28;
+        dropY = -(1 - u * u) * 20 * zScale;
+        scaleX = 0.91 + 0.09 * u;
+        scaleY = 1.12 - 0.12 * u;
+      } else {
+        const u = (progress - 0.28) / 0.72;
+        const squash = Math.sin(u * Math.PI * 2.1) * Math.exp(-u * 3.8);
+        scaleX = 1 + squash * 0.22;
+        scaleY = 1 - squash * 0.26;
+      }
+      ctx.save();
+      ctx.translate(pivot.x, pivot.y + dropY);
+      ctx.scale(scaleX, scaleY);
+      ctx.translate(-pivot.x, -pivot.y);
+      hasBuildTransform = true;
     }
 
     Iso.setEntityFlash(st.hitFlash || 0);
@@ -1360,6 +1438,9 @@ ZS.Renderer = (function () {
     }
 
     Iso.setEntityFlash(0);
+    if (hasBuildTransform) {
+      ctx.restore();
+    }
 
     // 0.6s Facility Upgrade white scanline sweep VFX
     if (id !== 'command_hq' && st.upgradeAnimTimer > 0) {
@@ -2127,18 +2208,177 @@ ZS.Renderer = (function () {
     }
   }
 
+  function drawGroundStains(ctx, stains, zScale) {
+    const Iso = ZS.Iso;
+    ctx.save();
+    for (let i = 0; i < stains.length; i++) {
+      const stn = stains[i];
+      const fade = Math.min(1, stn.life / Math.min(2.2, stn.maxLife || 7.5));
+      const p = Iso.gridToScreen(stn.x, stn.y, 1.05);
+      const rx = stn.radius * 30 * zScale;
+      const ry = stn.radius * 15 * zScale;
+
+      ctx.globalAlpha = fade * 0.56;
+      ctx.fillStyle = stn.color || '#4E1224';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, rx, ry, (stn.seed || 0) * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Two small irregular satellite splatter droplets
+      const a1 = (stn.seed || 1) * 1.9;
+      const a2 = a1 + 2.3;
+      ctx.globalAlpha = fade * 0.46;
+      ctx.fillStyle = stn.subColor || '#7A1A32';
+      ctx.beginPath();
+      ctx.ellipse(p.x + Math.cos(a1) * rx * 0.85, p.y + Math.sin(a1) * ry * 0.85, rx * 0.36, ry * 0.36, 0, 0, Math.PI * 2);
+      ctx.ellipse(p.x + Math.cos(a2) * rx * 0.72, p.y + Math.sin(a2) * ry * 0.72, rx * 0.28, ry * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawDyingZombie(ctx, dz, zScale) {
+    const Iso = ZS.Iso;
+    const t = Math.max(0, Math.min(1, dz.timer / (dz.duration || 0.32)));
+    const ease = t * t;
+    const sc = dz.scale || 1.0;
+    const fallAngle = (dz.facingAngle || 0) + (dz.fallDir || 1) * 1.15;
+    const fx = Math.cos(fallAngle);
+    const fy = Math.sin(fallAngle);
+
+    const alpha = Math.max(0, 1 - Math.max(0, (t - 0.58) / 0.42));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    const shadowP = Iso.gridToScreen(dz.x + fx * ease * 0.20 * sc, dz.y + fy * ease * 0.20 * sc, 1);
+    ctx.fillStyle = 'rgba(8, 10, 16, 0.38)';
+    ctx.beginPath();
+    ctx.ellipse(shadowP.x, shadowP.y, (9 + ease * 5) * sc * zScale, (4.8 + ease * 2.2) * sc * zScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Brief initial white flash on first 18% of death fall
+    Iso.setEntityFlash(t < 0.18 ? 1.0 : 0);
+
+    const torsoX = dz.x + fx * ease * 0.16 * sc;
+    const torsoY = dz.y + fy * ease * 0.16 * sc;
+    const torsoZ = 1 + (1 - ease) * 4.2 * sc;
+    const torsoW = (0.28 + ease * 0.08) * sc;
+    const torsoH = Math.max(2.6 * sc, (8.2 - ease * 5.2) * sc);
+
+    const headX = dz.x + fx * (0.06 + ease * 0.36) * sc;
+    const headY = dz.y + fy * (0.06 + ease * 0.36) * sc;
+    const headZ = 1 + (1 - ease) * 12.2 * sc;
+    const headW = 0.28 * sc;
+    const headH = Math.max(3.2 * sc, (8.6 - ease * 4.2) * sc);
+
+    const parts = [];
+    pushOrientedPart(parts, torsoX, torsoY, torsoZ, torsoW, torsoW, torsoH, {
+      base: dz.coatColor,
+      stroke: 'rgba(27, 36, 48, 0.38)'
+    });
+    if (dz.accentColor) {
+      pushOrientedPart(parts, torsoX + fx * 0.05 * sc, torsoY + fy * 0.05 * sc, torsoZ + torsoH * 0.35, torsoW * 0.92, torsoW * 0.92, torsoH * 0.45, {
+        base: dz.accentColor,
+        emissive: !!dz.isBoss
+      });
+    }
+    pushOrientedPart(parts, headX, headY, headZ, headW, headW, headH, {
+      base: dz.skinColor,
+      stroke: 'rgba(27, 36, 48, 0.38)'
+    });
+    flushOrientedParts(ctx, parts);
+
+    Iso.setEntityFlash(0);
+    ctx.restore();
+  }
+
+  function drawMuzzleFlashes(ctx, flashes, zScale) {
+    const Iso = ZS.Iso;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < flashes.length; i++) {
+      const mf = flashes[i];
+      const alpha = Math.max(0, Math.min(1, mf.life / (mf.maxLife || 0.055)));
+      const sc = (mf.scale || 1.0) * zScale;
+      const origin = Iso.gridToScreen(mf.x, mf.y, mf.z);
+
+      if (mf.kind === 'emp') {
+        ctx.globalAlpha = alpha * 0.9;
+        ctx.fillStyle = mf.color || '#5EF2FF';
+        ctx.beginPath();
+        ctx.arc(origin.x, origin.y, 9.5 * sc, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(origin.x, origin.y, 4.5 * sc, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+
+      const tip = Iso.gridToScreen(
+        mf.x + Math.cos(mf.angle) * 0.34 * (mf.scale || 1.0),
+        mf.y + Math.sin(mf.angle) * 0.34 * (mf.scale || 1.0),
+        mf.z
+      );
+      const dx = tip.x - origin.x;
+      const dy = tip.y - origin.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const wing = 4.6 * sc;
+
+      // Outer warm muzzle flame cone
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.fillStyle = mf.color || '#FFE484';
+      ctx.beginPath();
+      ctx.moveTo(origin.x + nx * wing, origin.y + ny * wing);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(origin.x - nx * wing, origin.y - ny * wing);
+      ctx.closePath();
+      ctx.fill();
+
+      // Hot white core spark at barrel tip
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.arc(origin.x + dx * 0.22, origin.y + dy * 0.22, 3.4 * sc, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawParticles(ctx, particles, zScale) {
     const Iso = ZS.Iso;
     for (let i = 0; i < particles.length; i++) {
       const pt = particles[i];
+      const alpha = Math.max(0, pt.life / (pt.maxLife || 0.5));
+      if (pt.kind === 'cube') {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, alpha * 1.25);
+        const w = pt.w || 0.10;
+        Iso.drawVoxelBox(ctx, pt.x - w * 0.5, pt.y - w * 0.5, pt.z, w, w, pt.h || 3.0, {
+          base: pt.color || '#94A3B8',
+          stroke: 'rgba(27, 36, 48, 0.38)'
+        });
+        ctx.restore();
+        continue;
+      }
       const sc = Iso.gridToScreen(pt.x, pt.y, pt.z);
-      const alpha = Math.max(0, pt.life / pt.maxLife);
       ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = pt.color;
-      ctx.beginPath();
-      ctx.arc(sc.x, sc.y, pt.size * zScale, 0, Math.PI * 2);
-      ctx.fill();
+      if (pt.kind === 'dust') {
+        const grow = 1 + (1 - alpha) * 0.65;
+        ctx.globalAlpha = alpha * 0.52;
+        ctx.fillStyle = pt.color || '#DDD2BE';
+        ctx.beginPath();
+        ctx.arc(sc.x, sc.y, pt.size * grow * zScale, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(sc.x, sc.y, pt.size * zScale, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -2241,6 +2481,22 @@ ZS.Renderer = (function () {
         r: fl.radius * 0.9,
         color: 'rgba(255, 195, 120, 0.25)'
       });
+    }
+
+    // Brief weapon muzzle flashes punch micro tactical illumination holes at night (#8)
+    if (state.muzzleFlashes) {
+      for (let i = 0; i < state.muzzleFlashes.length; i++) {
+        const mf = state.muzzleFlashes[i];
+        const strength = 0.62 * Math.max(0, Math.min(1, mf.life / (mf.maxLife || 0.055)));
+        punchHole(mf.x, mf.y, mf.z || 14, 1.15 * (mf.scale || 1.0), strength);
+        colorGlows.push({
+          gx: mf.x,
+          gy: mf.y,
+          z: mf.z || 14,
+          r: 0.95 * (mf.scale || 1.0),
+          color: mf.kind === 'emp' ? 'rgba(94, 242, 255, 0.32)' : 'rgba(255, 214, 130, 0.32)'
+        });
+      }
     }
 
     ctx.drawImage(lightCanvas, 0, 0);

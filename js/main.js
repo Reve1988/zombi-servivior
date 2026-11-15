@@ -788,6 +788,25 @@ window.ZS = window.ZS || {};
       document.getElementById('btn-sound').textContent = muted ? '🔇' : '🔊';
     });
 
+    const shakeBtn = document.getElementById('btn-shake');
+    if (shakeBtn && ZS.Game.isScreenShakeEnabled) {
+      const syncShakeBtn = () => {
+        const on = ZS.Game.isScreenShakeEnabled();
+        shakeBtn.textContent = on ? '📳 흔들림 ON' : '📴 흔들림 OFF';
+        shakeBtn.classList.toggle('toggle-off', !on);
+      };
+      syncShakeBtn();
+      shakeBtn.addEventListener('click', () => {
+        const on = ZS.Game.toggleScreenShake();
+        syncShakeBtn();
+        showWaveBanner(
+          on ? '📳 화면 흔들림 켜짐' : '📴 화면 흔들림 꺼짐',
+          on ? '폭격·보스 등장·본부 피격 시 미세한 진동 피드백이 재생됩니다.' : '카메라 화면 흔들림 연출이 비활성화되었습니다.',
+          'info'
+        );
+      });
+    }
+
     const hqBoxEl = document.getElementById('hud-hq-box');
     if (hqBoxEl) {
       hqBoxEl.addEventListener('click', () => {
