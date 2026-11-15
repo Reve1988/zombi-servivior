@@ -476,7 +476,7 @@ ZS.Renderer = (function () {
     });
 
     // Protruding bedrock cliff blocks along visible front-left (y = N) and front-right (x = N) faces
-    const rockOffsets = [2.2, 6.4, 11.1, 14.8];
+    const rockOffsets = N >= 22 ? [2.2, 6.4, 11.1, 14.8, 18.9] : [2.2, 6.4, 11.1, 14.8];
     for (let i = 0; i < rockOffsets.length; i++) {
       const k = rockOffsets[i];
       Iso.drawVoxelBox(ctx, k, N - 0.16, -20.5 + (i % 2) * 1.5, 1.5, 0.24, 6.5, {
@@ -495,7 +495,7 @@ ZS.Renderer = (function () {
     });
 
     // Embedded cliff stones in soil layer
-    const stoneOffsets = [1.4, 4.7, 8.3, 12.6, 15.9];
+    const stoneOffsets = N >= 22 ? [1.4, 4.7, 8.3, 12.6, 15.9, 19.3] : [1.4, 4.7, 8.3, 12.6, 15.9];
     for (let i = 0; i < stoneOffsets.length; i++) {
       const k = stoneOffsets[i];
       Iso.drawVoxelBox(ctx, k, N - 0.06, -9.2 + (i % 2) * 1.8, 0.55, 0.11, 2.6, {
@@ -691,7 +691,8 @@ ZS.Renderer = (function () {
         ? `rgba(255, 77, 109, ${(0.045 * nightAlpha).toFixed(3)})`
         : 'rgba(120, 96, 104, 0.05)';
 
-    for (let i = 0; i < 16; i++) {
+    const wispCount = N >= 22 ? 20 : 16;
+    for (let i = 0; i < wispCount; i++) {
       const side = i % 4;
       const t = ((i * 0.23 + timeSec * 0.018) % 1) * (N - 1) + 0.5;
       let gx = 0.35;

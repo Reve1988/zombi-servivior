@@ -237,7 +237,7 @@ ZS.Game = (function () {
     state.flares = [];
     state.spawnQueue = [];
 
-    // Starter modern tactical plaza around HQ (8,8)
+    // Starter modern tactical plaza around HQ (10,10)
     const hx = DATA.HQ_POS.x;
     const hy = DATA.HQ_POS.y;
     for (let dy = -1; dy <= 1; dy++) {
@@ -2669,7 +2669,29 @@ ZS.Game = (function () {
       const raw = localStorage.getItem(getSaveKey());
       if (!raw) return false;
       const d = JSON.parse(raw);
-      if (!d || !Array.isArray(d.structGrid) || d.structGrid.length !== N) return false;
+      const LEGACY_GRID_SIZE = 18;
+      if (!d || !Array.isArray(d.structGrid)) return false;
+      const savedN = d.structGrid.length;
+      if (savedN !== N && savedN !== LEGACY_GRID_SIZE) return false;
+      if (!Array.isArray(d.floorGrid) || d.floorGrid.length !== savedN) return false;
+      for (let ry = 0; ry < savedN; ry++) {
+        if (!Array.isArray(d.structGrid[ry]) || d.structGrid[ry].length !== savedN) return false;
+        if (!Array.isArray(d.floorGrid[ry]) || d.floorGrid[ry].length !== savedN) return false;
+      }
+
+      const nextFloorGrid = Array.from({ length: N }, () => Array(N).fill(null));
+      const nextStructGrid = Array.from({ length: N }, () => Array(N).fill(null));
+      const offset = savedN === LEGACY_GRID_SIZE && N === 22 ? (N - LEGACY_GRID_SIZE) / 2 : 0;
+
+      for (let oy = 0; oy < savedN; oy++) {
+        for (let ox = 0; ox < savedN; ox++) {
+          nextFloorGrid[oy + offset][ox + offset] = d.floorGrid[oy][ox] || null;
+          nextStructGrid[oy + offset][ox + offset] = d.structGrid[oy][ox] || null;
+        }
+      }
+
+      const hqLoaded = nextStructGrid[DATA.HQ_POS.y] && nextStructGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+      if (!hqLoaded || hqLoaded.id !== 'command_hq') return false;
 
       state.wave = d.wave || 1;
       state.hqLevel = Math.max(1, Math.min(4, d.hqLevel || 1));
@@ -2690,8 +2712,8 @@ ZS.Game = (function () {
       state.agents = d.agents ?? DATA.HQ_STATS.startingAgents;
       state.debugBonusPopCap = d.debugBonusPopCap || 0;
       state.freeVouchers = d.freeVouchers || {};
-      state.floorGrid = d.floorGrid;
-      state.structGrid = d.structGrid;
+      state.floorGrid = nextFloorGrid;
+      state.structGrid = nextStructGrid;
 
       for (let y = 0; y < N; y++) {
         for (let x = 0; x < N; x++) {
@@ -2721,6 +2743,7 @@ ZS.Game = (function () {
       } else {
         refreshTraderOffers(false);
       }
+      if (offset > 0) saveGame();
       notifyUi();
       return true;
     } catch (e) {
