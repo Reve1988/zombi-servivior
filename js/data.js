@@ -50,22 +50,26 @@ ZS.DATA = (function () {
     steelBand: '#8C96A3',
     thornSpark: '#FF8A3D',
 
-    // 3. World Base Tokens (issue-03-palette-tokens.md §3: keep terrain #485E4D/#415646 until #5)
-    groundA: '#485E4D',
-    groundB: '#415646',
+    // 3. World Base Tokens (#5: narrowed checker delta, desaturated gray-brown perimeter, 3-layer diorama strata)
+    groundA: '#4E6653',
+    groundB: '#4B6250',
     groundEdge: '#4A4F48',
-    terrainA: '#485E4D',
-    terrainB: '#415646',
-    terrainEdgeA: '#3C4B42',
-    terrainEdgeB: '#36443B',
+    terrainA: '#4E6653',
+    terrainB: '#4B6250',
+    terrainEdgeA: '#4A4F48',
+    terrainEdgeB: '#454A43',
+    slabTurfLeft: '#3E4C3B',
+    slabTurfRight: '#2F3A2D',
     slabSideLeft: '#3A3027',
     slabSideRight: '#2C241D',
+    slabRockLeft: '#2B3038',
+    slabRockRight: '#1E2229',
     baseLight: '#FFD27A',
     nightOverlay: 'rgb(7, 13, 25)',
     outlineDark: '#1B2430',
     resWood: '#D49A5A',
     resScrap: '#AEB8C4',
-    warmGlow: 'rgba(255, 210, 122, 0.42)',
+    warmGlow: 'rgba(255, 206, 112, 0.48)',
 
     // 4. Enemy (Zombie) Complementary Palette (share/design/issue-03-palette-tokens.md §4 approved)
     zombieWalkerCoat: '#6E1E3E',
@@ -89,7 +93,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.2.0',
+  VERSION: 'v0.3.0',
   GRID_SIZE: 18,
   HQ_POS: { x: 8, y: 8 },
   PALETTE,
@@ -209,9 +213,9 @@ ZS.DATA = (function () {
   COZY_FLOOR_CAP: 60,
 
   CATEGORIES: [
-    { id: 'defense', label: '🛡️ 방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
-    { id: 'infra',   label: '⚡ 전력·숙소', desc: '주간 충전 발전기, 배터리, 요원 숙소' },
-    { id: 'decor',   label: '✨ 모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
+    { id: 'defense', iconId: 'cat-defense', label: '방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
+    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 충전 발전기, 배터리, 요원 숙소' },
+    { id: 'decor',   iconId: 'cat-decor',   label: '모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
 
   LV3_PERK_LABELS: {
@@ -226,9 +230,9 @@ ZS.DATA = (function () {
     emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)',
     solar_array: '고밀도 발전 셀 (충전·용량 ×1.9)',
     wind_turbine: '고출력 로터 (충전·용량 ×1.9)',
-    battery_bank: '대용량 ESS 팩 (용량 205⚡ · 충전 +28⚡)',
-    field_tent: '확장형 전술 막사 (수용 +3👥 · 안락함 +12)',
-    shelter_pod: '프리미엄 모듈러 생활관 (수용 +4👥 · 안락함 +26)'
+    battery_bank: '대용량 ESS 팩 (용량 205 · 충전 +28)',
+    field_tent: '확장형 전술 막사 (수용 +3명 · 안락함 +12)',
+    shelter_pod: '프리미엄 모듈러 생활관 (수용 +4명 · 안락함 +26)'
   },
 
   VETERANCY_RANKS: [
@@ -253,7 +257,6 @@ ZS.DATA = (function () {
       name: '전술 아스팔트',
       category: 'decor',
       layer: 'floor',
-      icon: '🛣️',
       reqHqLevel: 1,
       cost: { wood: 4 },
       cozy: 1,
@@ -265,7 +268,6 @@ ZS.DATA = (function () {
       name: '스틸 체커 데크',
       category: 'decor',
       layer: 'floor',
-      icon: '🔩',
       reqHqLevel: 1,
       cost: { scrap: 5 },
       cozy: 2,
@@ -278,7 +280,6 @@ ZS.DATA = (function () {
       name: '모던 테라스 타일',
       category: 'decor',
       layer: 'floor',
-      icon: '⬜',
       reqHqLevel: 2,
       cost: { wood: 5, coin: 4 },
       cozy: 4,
@@ -291,7 +292,6 @@ ZS.DATA = (function () {
       name: '전술 해저드 패드',
       category: 'decor',
       layer: 'floor',
-      icon: '⚠️',
       reqHqLevel: 3,
       cost: { scrap: 4, coin: 5 },
       cozy: 3,
@@ -307,7 +307,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'wall',
-      icon: '🧱',
       reqHqLevel: 1,
       cost: { wood: 10, scrap: 4 },
       maxHp: 260,
@@ -319,7 +318,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'wall',
-      icon: '🛡️',
       reqHqLevel: 3,
       cost: { wood: 6, scrap: 18 },
       maxHp: 560,
@@ -332,7 +330,6 @@ ZS.DATA = (function () {
       layer: 'struct',
       subType: 'trap',
       passable: true,
-      icon: '🕸️',
       reqHqLevel: 1,
       cost: { wood: 6, scrap: 10 },
       maxHp: 180,
@@ -348,7 +345,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'manned',
-      icon: '🪖',
       reqHqLevel: 1,
       cost: { wood: 24, scrap: 10 },
       popUse: 1,
@@ -357,7 +353,7 @@ ZS.DATA = (function () {
       damage: 19,
       fireRate: 2.5,
       projType: 'rifle',
-      desc: '[👥요원 1명 · 무전력] 돌격소총 사수가 배치된 엄폐호. 정전 시에도 멈추지 않고 사격합니다.'
+      desc: '[요원 1명 · 무전력] 돌격소총 사수가 배치된 엄폐호. 정전 시에도 멈추지 않고 사격합니다.'
     },
     shotgun_post: {
       id: 'shotgun_post',
@@ -365,7 +361,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'manned',
-      icon: '💥',
       reqHqLevel: 1,
       cost: { wood: 22, scrap: 15 },
       popUse: 1,
@@ -376,7 +371,7 @@ ZS.DATA = (function () {
       spread: 0.34,
       fireRate: 1.1,
       projType: 'shotgun',
-      desc: '[👥요원 1명 · 무전력] 근접 저지용 전술 산탄 사수. 한 번에 4발의 산탄을 발사합니다.'
+      desc: '[요원 1명 · 무전력] 근접 저지용 전술 산탄 사수. 한 번에 4발의 산탄을 발사합니다.'
     },
     sniper_tower: {
       id: 'sniper_tower',
@@ -384,7 +379,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'manned',
-      icon: '🎯',
       reqHqLevel: 2,
       cost: { wood: 30, scrap: 24 },
       popUse: 1,
@@ -394,7 +388,7 @@ ZS.DATA = (function () {
       fireRate: 0.65,
       targetMode: 'strongest',
       projType: 'sniper',
-      desc: '[👥요원 1명 · 무전력] 철골 감시탑 위 저격수가 장거리에서 고체력 표적을 우선 저격합니다.'
+      desc: '[요원 1명 · 무전력] 철골 감시탑 위 저격수가 장거리에서 고체력 표적을 우선 저격합니다.'
     },
 
     // ================= DEFENSE: AUTO TURRETS (Pop: 0, Night Power Drain) =================
@@ -404,7 +398,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
-      icon: '🔫',
       reqHqLevel: 2,
       cost: { wood: 8, scrap: 36 },
       requiresPower: true,
@@ -415,7 +408,7 @@ ZS.DATA = (function () {
       damage: 13,
       fireRate: 5.6,
       projType: 'vulcan',
-      desc: '[⚡전력 소모] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
+      desc: '[전력 소모] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
     },
     missile_pod: {
       id: 'missile_pod',
@@ -423,7 +416,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
-      icon: '🚀',
       reqHqLevel: 3,
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
@@ -435,7 +427,7 @@ ZS.DATA = (function () {
       splashRadius: 1.35,
       fireRate: 0.78,
       projType: 'missile',
-      desc: '[⚡전력 소모] 몰려오는 좀비 무리에 고폭 마이크로 유탄을 발사해 광역 피해를 입힙니다.'
+      desc: '[전력 소모] 몰려오는 좀비 무리에 고폭 마이크로 유탄을 발사해 광역 피해를 입힙니다.'
     },
     emp_coil: {
       id: 'emp_coil',
@@ -443,7 +435,6 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
-      icon: '⚡',
       reqHqLevel: 4,
       cost: { wood: 10, scrap: 52, coin: 15 },
       requiresPower: true,
@@ -456,7 +447,7 @@ ZS.DATA = (function () {
       slowDuration: 1.6,
       fireRate: 0.95,
       projType: 'emp',
-      desc: '[⚡전력 소모] 최대 3기 좀비에게 연쇄 고압 전격을 날리고 이동속도를 크게 둔화시킵니다.'
+      desc: '[전력 소모] 최대 3기 좀비에게 연쇄 고압 전격을 날리고 이동속도를 크게 둔화시킵니다.'
     },
 
     // ================= INFRASTRUCTURE: POWER & HOUSING =================
@@ -466,7 +457,6 @@ ZS.DATA = (function () {
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      icon: '☀️',
       reqHqLevel: 1,
       cost: { wood: 10, scrap: 22 },
       maxHp: 155,
@@ -474,7 +464,7 @@ ZS.DATA = (function () {
       powerCap: 15,
       cozy: 2,
       cozyGroup: 'infra_solar',
-      desc: '낮 전환 시 배터리를 +36⚡ 충전하며 최대 저장 용량도 +15⚡ 늘려줍니다.'
+      desc: '낮 전환 시 배터리를 +36 충전하며 최대 저장 용량도 +15 늘려줍니다.'
     },
     wind_turbine: {
       id: 'wind_turbine',
@@ -482,7 +472,6 @@ ZS.DATA = (function () {
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      icon: '🌬️',
       reqHqLevel: 3,
       cost: { wood: 14, scrap: 38 },
       maxHp: 175,
@@ -490,7 +479,7 @@ ZS.DATA = (function () {
       powerCap: 25,
       cozy: 4,
       cozyGroup: 'infra_wind',
-      desc: '매끈하게 회전하는 현대식 터빈. 낮마다 +68⚡ 대량 충전 및 용량 +25⚡를 제공합니다.'
+      desc: '매끈하게 회전하는 현대식 터빈. 낮마다 +68 대량 충전 및 용량 +25를 제공합니다.'
     },
     battery_bank: {
       id: 'battery_bank',
@@ -498,7 +487,6 @@ ZS.DATA = (function () {
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      icon: '🔋',
       reqHqLevel: 2,
       cost: { wood: 8, scrap: 28 },
       maxHp: 215,
@@ -506,7 +494,7 @@ ZS.DATA = (function () {
       powerCap: 95,
       cozy: 2,
       cozyGroup: 'infra_ess',
-      desc: '대용량 에너지 저장 장치. 최대 전력 저장량을 +95⚡ 확장하고 +12⚡ 보조 충전합니다.'
+      desc: '대용량 에너지 저장 장치. 최대 전력 저장량을 +95 확장하고 +12 보조 충전합니다.'
     },
     field_tent: {
       id: 'field_tent',
@@ -514,14 +502,13 @@ ZS.DATA = (function () {
       category: 'infra',
       layer: 'struct',
       subType: 'housing',
-      icon: '⛺',
       reqHqLevel: 1,
       cost: { wood: 26, scrap: 8 },
       maxHp: 165,
       popCap: 1,
       cozy: 5,
       cozyGroup: 'housing_tent',
-      desc: '최대 요원 수용량 +1👥 확장 (빈자리가 있으면 매일 아침 신규 요원이 합류합니다).'
+      desc: '최대 요원 수용량 +1명 확장 (빈자리가 있으면 매일 아침 신규 요원이 합류합니다).'
     },
     shelter_pod: {
       id: 'shelter_pod',
@@ -529,7 +516,6 @@ ZS.DATA = (function () {
       category: 'infra',
       layer: 'struct',
       subType: 'housing',
-      icon: '🏢',
       reqHqLevel: 3,
       cost: { wood: 32, scrap: 26, coin: 15 },
       maxHp: 245,
@@ -538,7 +524,7 @@ ZS.DATA = (function () {
       cozyGroup: 'housing_pod',
       lightRadius: 2.2,
       lightColor: 'rgba(255, 214, 145, 0.35)',
-      desc: '냉난방이 완비된 모던 모듈러 생활관. 수용량 +2👥 및 높은 안락함(+12)을 제공합니다.'
+      desc: '냉난방이 완비된 모던 모듈러 생활관. 수용량 +2명 및 높은 안락함(+12)을 제공합니다.'
     },
 
     // ================= MODERN DECOR & TACTICAL SUPPORT =================
@@ -548,7 +534,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🔥',
       reqHqLevel: 1,
       cost: { wood: 10, scrap: 12 },
       maxHp: 135,
@@ -565,7 +550,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🔦',
       reqHqLevel: 1,
       cost: { wood: 6, scrap: 16 },
       requiresPower: true,
@@ -576,7 +560,7 @@ ZS.DATA = (function () {
       lightRadius: 4.8,
       lightColor: 'rgba(94, 242, 255, 0.42)',
       aura: { radius: 3.4, rangeMult: 0.15, critChance: 0.18 },
-      desc: '[⚡야간 소모] 고광량 서치라이트. 반경 3.4칸 내 초소·포탑의 사거리 +15%, 치명타율 +18%!'
+      desc: '[야간 전력 소모] 고광량 서치라이트. 반경 3.4칸 내 초소·포탑의 사거리 +15%, 치명타율 +18%!'
     },
     urban_planter: {
       id: 'urban_planter',
@@ -584,7 +568,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🌳',
       reqHqLevel: 1,
       cost: { wood: 14, coin: 8 },
       maxHp: 145,
@@ -600,7 +583,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🥤',
       reqHqLevel: 2,
       cost: { scrap: 14, coin: 18 },
       maxHp: 165,
@@ -617,7 +599,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🔧',
       reqHqLevel: 2,
       cost: { wood: 10, scrap: 26, coin: 12 },
       maxHp: 210,
@@ -632,7 +613,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '⛱️',
       reqHqLevel: 3,
       cost: { wood: 18, coin: 14 },
       maxHp: 135,
@@ -646,7 +626,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🕹️',
       reqHqLevel: 4,
       cost: { scrap: 12, coin: 26 },
       requiresPower: true,
@@ -656,7 +635,7 @@ ZS.DATA = (function () {
       cozyGroup: 'decor_arcade',
       lightRadius: 3.0,
       lightColor: 'rgba(235, 105, 255, 0.46)',
-      desc: '[⚡미세 전력] 감성적인 사이버 네온 보드와 아케이드 게임기. 안락함을 무려 +20 높여줍니다.'
+      desc: '[미세 전력 소모] 감성적인 사이버 네온 보드와 아케이드 게임기. 안락함을 무려 +20 높여줍니다.'
     },
     boss_trophy: {
       id: 'boss_trophy',
@@ -664,7 +643,6 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      icon: '🏆',
       reqHqLevel: 1,
       cost: { coin: 40 },
       unlockedByBoss: true,
@@ -749,7 +727,8 @@ ZS.DATA = (function () {
     {
       id: 'wood_pack',
       name: '구조용 가공 목재 번들',
-      icon: '🪵',
+      svgIcon: 'res-wood',
+      svgColorCls: 'icon-wood',
       desc: '외부 벌목 기지에서 공수한 규격 목재 +65개를 즉시 수령합니다.',
       coinCost: 22,
       type: 'resource',
@@ -758,7 +737,8 @@ ZS.DATA = (function () {
     {
       id: 'scrap_pack',
       name: '군용 합금 고철 컨테이너',
-      icon: '🔩',
+      svgIcon: 'res-scrap',
+      svgColorCls: 'icon-scrap',
       desc: '포탑과 장갑벽 제작을 위한 고순도 고철 +55개를 즉시 수령합니다.',
       coinCost: 26,
       type: 'resource',
@@ -767,8 +747,9 @@ ZS.DATA = (function () {
     {
       id: 'power_cell',
       name: '과충전 급속 파워셀',
-      icon: '⚡',
-      desc: '기지 배터리를 즉시 +70⚡ 충전합니다 (최대 저장량의 130%까지 과충전 가능!).',
+      svgIcon: 'res-power',
+      svgColorCls: 'icon-power',
+      desc: '기지 배터리를 즉시 +70 충전합니다 (최대 저장량의 130%까지 과충전 가능!).',
       coinCost: 20,
       type: 'power_boost',
       amount: 70
@@ -776,7 +757,8 @@ ZS.DATA = (function () {
     {
       id: 'hire_agent',
       name: '베테랑 전술 요원 스카우트',
-      icon: '🪖',
+      svgIcon: 'res-agent',
+      svgColorCls: '',
       desc: '숙소 빈자리에 즉시 작전 요원 +1명을 영입합니다 (빈 숙소 수용량 필요).',
       coinCost: 28,
       type: 'agent',
@@ -785,7 +767,6 @@ ZS.DATA = (function () {
     {
       id: 'crate_vending',
       name: '보급품: 스마트 음료 자판기',
-      icon: '🥤',
       desc: '고철 소비 없이 코인만으로 무료 설치권 1개를 확보합니다 (연사속도 오라!).',
       coinCost: 24,
       type: 'free_item',
@@ -794,7 +775,6 @@ ZS.DATA = (function () {
     {
       id: 'crate_arcade',
       name: '보급품: 네온 아케이드 스테이션',
-      icon: '🕹️',
       desc: '안락함 +20 최고급 네온 아케이드 무료 설치권 1개를 확보합니다.',
       coinCost: 28,
       type: 'free_item',
@@ -803,7 +783,6 @@ ZS.DATA = (function () {
     {
       id: 'crate_pod',
       name: '프리팹: 모듈러 컨테이너 숙소',
-      icon: '🏢',
       desc: '목재·고철 없이 모듈러 2인 숙소 무료 설치권 1개를 확보합니다.',
       coinCost: 36,
       type: 'free_item',
@@ -812,7 +791,6 @@ ZS.DATA = (function () {
     {
       id: 'crate_emp',
       name: '특수병기: 테슬라 EMP 파일런',
-      icon: '⚡',
       desc: '고철 소비 없이 첨단 연쇄 전격 포탑 무료 설치권 1개를 확보합니다.',
       coinCost: 44,
       type: 'free_item',

@@ -3,11 +3,44 @@ window.ZS = window.ZS || {};
 ZS.Game = (function () {
   const PROD_SAVE_KEY = 'outpost_zero_save_v1';
   const DEV_SAVE_KEY = 'outpost_zero_save_dev';
+  const SETTINGS_KEY = 'outpost_zero_settings_v1';
   const DATA = ZS.DATA;
   const N = DATA.GRID_SIZE;
   let nextZombieUid = 1;
   let nextStructUid = 1;
   let pendingVeteranDemolish = null;
+  let screenShakeEnabled = true;
+
+  try {
+    const rawSettings = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
+    if (rawSettings) {
+      const parsedSettings = JSON.parse(rawSettings);
+      if (parsedSettings && typeof parsedSettings.screenShake === 'boolean') {
+        screenShakeEnabled = parsedSettings.screenShake;
+      }
+    }
+  } catch (e) {}
+
+  function isScreenShakeEnabled() {
+    return screenShakeEnabled;
+  }
+
+  function setScreenShakeEnabled(flag) {
+    screenShakeEnabled = !!flag;
+    if (!screenShakeEnabled) {
+      state.shakeTimer = 0;
+      state.shakeAmp = 0;
+    }
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ screenShake: screenShakeEnabled }));
+    } catch (e) {}
+    notifyUi();
+    return screenShakeEnabled;
+  }
+
+  function toggleScreenShake() {
+    return setScreenShakeEnabled(!screenShakeEnabled);
+  }
 
   function getEnvInfo() {
     const loc = typeof window !== 'undefined' && window.location ? window.location : {};
@@ -57,6 +90,10 @@ ZS.Game = (function () {
     isNight: false,
     nightAlpha: 0,
     blackoutTriggered: false,
+    blackoutFlickerTimer: 0,
+    shakeTimer: 0,
+    shakeDuration: 0.25,
+    shakeAmp: 0,
     bossDefeated: false,
     gameSpeed: 1,
 
@@ -106,6 +143,9 @@ ZS.Game = (function () {
     waveKilledZombies: 0,
 
     zombies: [],
+    dyingZombies: [],
+    groundDecals: [],
+    muzzleFlashes: [],
     projectiles: [],
     burstQueue: [],
     particles: [],
@@ -169,6 +209,9 @@ ZS.Game = (function () {
     state.isNight = false;
     state.nightAlpha = 0;
     state.blackoutTriggered = false;
+    state.blackoutFlickerTimer = 0;
+    state.shakeTimer = 0;
+    state.shakeAmp = 0;
     state.bossDefeated = false;
     state.gameSpeed = 1;
 
@@ -184,6 +227,9 @@ ZS.Game = (function () {
     state.skills.airstrikeCd = 0;
 
     state.zombies = [];
+    state.dyingZombies = [];
+    state.groundDecals = [];
+    state.muzzleFlashes = [];
     state.projectiles = [];
     state.burstQueue = [];
     state.particles = [];
@@ -288,7 +334,7 @@ ZS.Game = (function () {
         maxLife: 0.8
       });
       addFloatingText(tx + 0.5, ty + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
-      banner(`🎖️ [${def.name}] ${rInfo.name} 진급!`, `전투 숙련도 Rank ${newRank} 달성 — 공격력 +${Math.round(rInfo.dmgBonus * 100)}% · 연사 +${Math.round(rInfo.rateBonus * 100)}%`, 'good');
+      banner(`[${def.name}] ${rInfo.name} 진급!`, `전투 숙련도 Rank ${newRank} 달성 — 공격력 +${Math.round(rInfo.dmgBonus * 100)}% · 연사 +${Math.round(rInfo.rateBonus * 100)}%`, 'good');
     }
   }
 
@@ -802,7 +848,7 @@ ZS.Game = (function () {
       const c = nextInfo.cost || {};
       return {
         ok: false,
-        reason: `증축 자원이 부족합니다. (필요: 🪵${c.wood || 0} · 🔩${c.scrap || 0} · 🪙${c.coin || 0})`,
+        reason: `증축 자원이 부족합니다. (필요: 목재 ${c.wood || 0} · 고철 ${c.scrap || 0} · 코인 ${c.coin || 0})`,
         nextInfo
       };
     }
@@ -987,7 +1033,7 @@ ZS.Game = (function () {
     if (!canAffordCost(cost)) {
       return {
         ok: false,
-        reason: `강화 자원이 부족합니다. (필요: 🪵${cost.wood || 0} · 🔩${cost.scrap || 0} · 🪙${cost.coin || 0})`,
+        reason: `강화 자원이 부족합니다. (필요: 목재 ${cost.wood || 0} · 고철 ${cost.scrap || 0} · 코인 ${cost.coin || 0})`,
         cost
       };
     }
@@ -1060,7 +1106,7 @@ ZS.Game = (function () {
     addFloatingText(cx, cy, 28, `Lv.${st.level}`, DATA.PALETTE.levelPip, 14, strokeCol);
 
     if (st.level === 3 && DATA.LV3_PERK_LABELS && DATA.LV3_PERK_LABELS[def.id]) {
-      banner(`⚡ [${def.name}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
+      banner(`[${def.name}] Lv.3 개조 완료`, `특수 효과 개방: ${DATA.LV3_PERK_LABELS[def.id]}`, 'good');
     }
 
     saveGame();
@@ -1110,6 +1156,7 @@ ZS.Game = (function () {
         maxHp,
         cooldown: 0,
         aimAngle: 0,
+        buildAnimTimer: 0.34,
         upgradeAnimTimer: 0,
         promoAnimTimer: 0
       };
@@ -1127,7 +1174,7 @@ ZS.Game = (function () {
 
     recomputeFlow();
     ZS.Audio.playBuild();
-    spawnBurstParticles(tx + 0.5, ty + 0.5, 8, DATA.PALETTE.health, 7);
+    spawnBuildDustPuffs(tx + 0.5, ty + 0.5, def.layer === 'floor' ? 6 : 10);
     saveGame();
     notifyUi();
     return true;
@@ -1147,12 +1194,13 @@ ZS.Game = (function () {
       return false;
     }
 
+    src.buildAnimTimer = 0.34;
     state.structGrid[toY][toX] = src;
     state.structGrid[fromY][fromX] = null;
     recalculateBaseStats();
     recomputeFlow();
     ZS.Audio.playBuild();
-    spawnBurstParticles(toX + 0.5, toY + 0.5, 8, DATA.PALETTE.neutralText, 5);
+    spawnBuildDustPuffs(toX + 0.5, toY + 0.5, 9);
     saveGame();
     notifyUi();
     return true;
@@ -1186,7 +1234,7 @@ ZS.Game = (function () {
           const rInfo = getVeterancyRankInfo(rank);
           ZS.Audio.playError();
           banner(
-            `⚠️ [${rInfo.name}] ${def ? def.name : st.id} — 계급이 사라집니다`,
+            `[${rInfo.name}] ${def ? def.name : st.id} — 계급이 사라집니다`,
             `철거하면 누적 숙련도(${Math.floor(st.xp || 0)} XP)와 계급 배지가 영구 소멸합니다. 4초 내 한 번 더 클릭하면 철거됩니다.`,
             'warn'
           );
@@ -1197,6 +1245,7 @@ ZS.Game = (function () {
       pendingVeteranDemolish = null;
       const refundTotal = getCumulativeRefundCost(st, def);
       state.structGrid[ty][tx] = null;
+      spawnStructureDebris(tx + 0.5, ty + 0.5, st.id, 9);
       if (rank >= 1) {
         spawnBadgeShatterVfx(tx + 0.5, ty + 0.5, rank);
       }
@@ -1227,24 +1276,33 @@ ZS.Game = (function () {
 
   function refundCost(cost, tx, ty) {
     if (!cost) return;
-    const parts = [];
+    const entries = [];
     if (cost.wood) {
       const rw = Math.max(1, Math.round(cost.wood * 0.8));
       state.wood += rw;
-      parts.push(`+${rw}🪵`);
+      entries.push({ val: `+${rw}`, col: DATA.PALETTE.resWood || '#D49A5A' });
     }
     if (cost.scrap) {
       const rs = Math.max(1, Math.round(cost.scrap * 0.8));
       state.scrap += rs;
-      parts.push(`+${rs}🔩`);
+      entries.push({ val: `+${rs}`, col: DATA.PALETTE.resScrap || '#AEB8C4' });
     }
     if (cost.coin) {
       const rc = Math.max(1, Math.round(cost.coin * 0.8));
       state.coin += rc;
-      parts.push(`+${rc}🪙`);
+      entries.push({ val: `+${rc}`, col: DATA.PALETTE.coin || '#FFC94A' });
     }
-    if (parts.length > 0) {
-      addFloatingText(tx + 0.5, ty + 0.5, 16, `환급 ${parts.join(' ')}`, DATA.PALETTE.gold, 11);
+    for (let i = 0; i < entries.length; i++) {
+      const offsetX = (i - (entries.length - 1) * 0.5) * 0.22;
+      addFloatingText(
+        tx + 0.5 + offsetX,
+        ty + 0.5,
+        16 + i * 4,
+        entries[i].val,
+        entries[i].col,
+        12,
+        DATA.PALETTE.outlineDark
+      );
     }
   }
 
@@ -1272,7 +1330,7 @@ ZS.Game = (function () {
     if (!info.needed) return false;
     if (state.wood < info.woodCost || state.scrap < info.scrapCost) {
       ZS.Audio.playError();
-      banner('수리 자재 부족', `전체 수리에 🪵${info.woodCost}, 🔩${info.scrapCost}이 필요합니다.`, 'warn');
+      banner('수리 자재 부족', `전체 수리에 목재 ${info.woodCost}, 고철 ${info.scrapCost}이 필요합니다.`, 'warn');
       return false;
     }
     state.wood -= info.woodCost;
@@ -1327,14 +1385,14 @@ ZS.Game = (function () {
     if (offer.type === 'agent') {
       if (state.agents >= state.popCap) {
         ZS.Audio.playError();
-        banner('숙소 수용량 부족!', '먼저 [⚡전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
+        banner('숙소 수용량 부족!', '먼저 [전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
         return false;
       }
       state.coin -= offer.coinCost;
       state.agents += offer.amount;
       offer.sold = true;
       ZS.Audio.playTrade();
-      banner('베테랑 요원 합류!', `작전 요원이 기지에 배치되었습니다. (현재 요원 👥 ${state.agents}/${state.popCap})`, 'good');
+      banner('베테랑 요원 합류!', `작전 요원이 기지에 배치되었습니다. (현재 요원 ${state.agents}/${state.popCap})`, 'good');
       saveGame();
       notifyUi();
       return true;
@@ -1396,8 +1454,8 @@ ZS.Game = (function () {
     ZS.Audio.playWaveStart();
     const isBossWave = state.wave % 5 === 0;
     banner(
-      isBossWave ? `⚠️ WAVE ${state.wave} — 알파 변이체 경보!` : `🌙 WAVE ${state.wave} 야간 방어 개시`,
-      `충전 전력 ⚡${Math.round(state.power)} · 적 개체 ${state.waveTotalZombies}기 접근 중`,
+      isBossWave ? `WAVE ${state.wave} — 알파 변이체 경보!` : `WAVE ${state.wave} 야간 방어 개시`,
+      `충전 전력 ${Math.round(state.power)} · 적 개체 ${state.waveTotalZombies}기 접근 중`,
       isBossWave ? 'warn' : 'info'
     );
     notifyUi();
@@ -1430,10 +1488,16 @@ ZS.Game = (function () {
       attackRate: def.attackRate,
       atkCooldown: 0,
       slowTimer: 0,
+      hitFlash: 0,
+      hitFlashTimer: 0,
       vulnOnPad: false,
       facingAngle: Math.atan2(hqCy - gy, hqCx - gx),
       seed: Math.random() * 10
     });
+
+    if (def.isBoss) {
+      triggerScreenShake(5.5, 0.36);
+    }
   }
 
   // ================= ACTIVE TACTICAL SKILLS =================
@@ -1453,7 +1517,12 @@ ZS.Game = (function () {
       }
     }
     ZS.Audio.playBuild();
-    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `🛠️ 나노 수리 드론 가동! (${count}개 시설 회복)`, DATA.PALETTE.health, 13);
+    addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, '+95 HP', DATA.PALETTE.heal || DATA.PALETTE.health, 14, DATA.PALETTE.outlineDark);
+    banner(
+      '긴급 나노 수리 드론 가동',
+      count > 0 ? `${count}개 시설의 내구도를 +95 회복했습니다.` : '모든 시설 내구도가 이미 최대입니다.',
+      'good'
+    );
     notifyUi();
     return true;
   }
@@ -1465,6 +1534,8 @@ ZS.Game = (function () {
     state.flares.push({ x: gx, y: gy, radius: 4.5, life: 4.5 });
     spawnBurstParticles(gx, gy, 10, '#ffae42', 22);
     spawnBurstParticles(gx, gy, 14, DATA.PALETTE.danger, 16);
+    spawnStructureDebris(gx, gy, 'hesco_wall', 8);
+    triggerScreenShake(7.5, 0.42);
     ZS.Audio.playExplosion();
 
     const strikeDmg = 120 + state.wave * 18;
@@ -1475,7 +1546,7 @@ ZS.Game = (function () {
         damageZombie(i, strikeDmg * (1 - d * 0.18), '#ff9f43');
       }
     }
-    addFloatingText(gx, gy, 24, '🚀 전술 조명탄 & 폭격!', '#ffb142', 13);
+    banner('전술 조명탄 & 폭격 투하', '지정 구역 광역 타격 및 야간 조명이 전개되었습니다.', 'info');
     notifyUi();
     return true;
   }
@@ -1494,9 +1565,16 @@ ZS.Game = (function () {
     if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
     if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
 
-    // Update HQ / structure / cozy tier-up animations
+    // Update HQ / structure / cozy tier-up / screen shake / blackout flicker animations
     if (state.cozyTierUpTimer > 0) {
       state.cozyTierUpTimer = Math.max(0, state.cozyTierUpTimer - rawDt);
+    }
+    if (state.shakeTimer > 0) {
+      state.shakeTimer = Math.max(0, state.shakeTimer - rawDt);
+      if (state.shakeTimer <= 0) state.shakeAmp = 0;
+    }
+    if (state.blackoutFlickerTimer > 0) {
+      state.blackoutFlickerTimer = Math.max(0, state.blackoutFlickerTimer - rawDt);
     }
     const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
     if (hqSt && hqSt.upgradeAnimTimer > 0) {
@@ -1506,15 +1584,22 @@ ZS.Game = (function () {
         spawnBurstParticles(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 8, '#D8C8A8', 10);
       }
       if (prevT > 0.3 && hqSt.upgradeAnimTimer <= 0.3) {
-        hqSt.hitFlash = 0.85;
+        hqSt.hitFlashTimer = 0.06;
+        hqSt.hitFlash = 1.0;
       }
     }
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const s = state.structGrid[y] && state.structGrid[y][x];
         if (!s) continue;
-        if (s.hitFlash > 0) {
-          s.hitFlash = Math.max(0, s.hitFlash - rawDt * 5.5);
+        if (s.hitFlashTimer > 0) {
+          s.hitFlashTimer = Math.max(0, s.hitFlashTimer - rawDt);
+          s.hitFlash = s.hitFlashTimer > 0 ? 1.0 : 0;
+        } else if (s.hitFlash > 0) {
+          s.hitFlash = Math.max(0, s.hitFlash - rawDt * 18);
+        }
+        if (s.buildAnimTimer > 0) {
+          s.buildAnimTimer = Math.max(0, s.buildAnimTimer - rawDt);
         }
         if (s.id !== 'command_hq' && s.upgradeAnimTimer > 0) {
           s.upgradeAnimTimer = Math.max(0, s.upgradeAnimTimer - rawDt);
@@ -1524,11 +1609,34 @@ ZS.Game = (function () {
         }
       }
     }
+    for (let i = 0; i < state.zombies.length; i++) {
+      const z = state.zombies[i];
+      if (z.hitFlashTimer > 0) {
+        z.hitFlashTimer = Math.max(0, z.hitFlashTimer - rawDt);
+        z.hitFlash = z.hitFlashTimer > 0 ? 1.0 : 0;
+      } else if (z.hitFlash > 0) {
+        z.hitFlash = Math.max(0, z.hitFlash - rawDt * 22);
+      }
+    }
 
-    // Update flares, particles, floating texts
+    // Update flares, muzzle flashes, dying zombies, ground decals, particles, floating texts
+    for (let i = state.muzzleFlashes.length - 1; i >= 0; i--) {
+      state.muzzleFlashes[i].life -= rawDt;
+      if (state.muzzleFlashes[i].life <= 0) state.muzzleFlashes.splice(i, 1);
+    }
     for (let i = state.flares.length - 1; i >= 0; i--) {
       state.flares[i].life -= dt;
       if (state.flares[i].life <= 0) state.flares.splice(i, 1);
+    }
+    for (let i = state.dyingZombies.length - 1; i >= 0; i--) {
+      state.dyingZombies[i].timer += rawDt;
+      if (state.dyingZombies[i].timer >= state.dyingZombies[i].duration) {
+        state.dyingZombies.splice(i, 1);
+      }
+    }
+    for (let i = state.groundDecals.length - 1; i >= 0; i--) {
+      state.groundDecals[i].life -= dt;
+      if (state.groundDecals[i].life <= 0) state.groundDecals.splice(i, 1);
     }
     updateParticles(dt);
     updateFloatingTexts(dt);
@@ -1574,9 +1682,10 @@ ZS.Game = (function () {
 
   function triggerBlackout() {
     state.blackoutTriggered = true;
+    state.blackoutFlickerTimer = 0.50;
     state.power = 0;
     ZS.Audio.playBlackout();
-    banner('⚡ 배터리 방전 — 블랙아웃!', '자동 포탑과 전기 투광등이 정지했습니다! 무전력 전투원이 방어를 지속합니다.', 'warn');
+    banner('배터리 방전 — 블랙아웃!', '자동 포탑과 전기 투광등이 정지했습니다! 무전력 전투원이 방어를 지속합니다.', 'warn');
   }
 
   function updateRepairBays(dt) {
@@ -1626,6 +1735,19 @@ ZS.Game = (function () {
           hq.aimAngle = Math.atan2(target.y - hcy, target.x - hcx);
           hq.cooldown = 1 / Math.max(0.2, fireRate);
           ZS.Audio.playShoot(wpn.projType);
+          const hqLvNow = state.hqLevel || 2;
+          const hqMountX = hqLvNow >= 4 ? DATA.HQ_POS.x + 0.50 : DATA.HQ_POS.x + 0.62;
+          const hqMountY = hqLvNow >= 4 ? DATA.HQ_POS.y + 0.50 : DATA.HQ_POS.y + 0.62;
+          const hqLenTiles = hqLvNow >= 4 ? 0.48 : hqLvNow === 3 ? 0.38 : 0.32;
+          const hqMuzzleZ = hqLvNow >= 4 ? 41 : hqLvNow === 3 ? 34.5 : 25;
+          spawnMuzzleFlash(
+            hqMountX + Math.cos(hq.aimAngle) * hqLenTiles,
+            hqMountY + Math.sin(hq.aimAngle) * hqLenTiles,
+            hqMuzzleZ,
+            hq.aimAngle,
+            wpn.color || '#FFE484',
+            hqLvNow >= 4 ? 1.35 : 1.05
+          );
           const spd = wpn.speed || 18;
           state.projectiles.push({
             kind: 'bullet',
@@ -1715,12 +1837,20 @@ ZS.Game = (function () {
         const a = b.angle + (Math.random() - 0.5) * 0.08;
         const spd = 18;
         ZS.Audio.playShoot('rifle');
+        spawnMuzzleFlash(
+          b.cx + Math.cos(a) * 0.53,
+          b.cy + Math.sin(a) * 0.53,
+          9.0,
+          a,
+          '#FFE484',
+          0.88
+        );
         state.projectiles.push({
           kind: 'bullet',
           sourceUid: b.sourceUid || null,
           x: b.cx,
           y: b.cy,
-          z: 13,
+          z: 9.0,
           vx: Math.cos(a) * spd,
           vy: Math.sin(a) * spd,
           damage: b.damage,
@@ -1756,6 +1886,23 @@ ZS.Game = (function () {
     const angle = Math.atan2(target.y - cy, target.x - cx);
 
     ZS.Audio.playShoot(def.projType);
+
+    const lvNow = (st && st.level) || 1;
+    if (def.projType === 'emp') {
+      spawnMuzzleFlash(cx, cy, 30.0, angle, DATA.PALETTE.power, 1.35, 'emp');
+    } else if (def.id === 'sniper_tower') {
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.68, cy + Math.sin(angle) * 0.68, 34.3, angle, '#FFFFFF', 1.3);
+    } else if (def.id === 'shotgun_post') {
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.53, cy - 0.06 + Math.sin(angle) * 0.53, 8.6, angle, '#FFB347', 1.25);
+    } else if (def.id === 'rifle_bunker') {
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.53, cy + Math.sin(angle) * 0.53, 9.0, angle, '#FFE484', 0.95);
+    } else if (def.id === 'vulcan_turret') {
+      const vDist = lvNow >= 3 ? 0.62 : 0.50;
+      const vZ = (lvNow >= 2 ? 10.1 : 7.5) + 5.0;
+      spawnMuzzleFlash(cx + Math.cos(angle) * vDist, cy + Math.sin(angle) * vDist, vZ, angle, '#FFE8B6', 1.0);
+    } else if (def.id === 'missile_pod') {
+      spawnMuzzleFlash(cx + Math.cos(angle) * 0.22, cy + 0.22 + Math.sin(angle) * 0.14, 14.5, angle, '#FF8A47', 1.3);
+    }
 
     if (def.projType === 'emp') {
       // Instant chain lightning across up to eff.chainCount zombies (Lv.3 = 5)
@@ -1816,8 +1963,8 @@ ZS.Game = (function () {
           kind: 'bullet',
           sourceUid,
           x: cx,
-          y: cy,
-          z: 13,
+          y: cy - 0.06,
+          z: 9.0,
           vx: Math.cos(a) * spd,
           vy: Math.sin(a) * spd,
           damage: finalDmg,
@@ -1866,7 +2013,7 @@ ZS.Game = (function () {
       y: cy,
       startX: cx,
       startY: cy,
-      z: def.id === 'sniper_tower' ? 24 : 14,
+      z: def.id === 'sniper_tower' ? 34.0 : def.id === 'rifle_bunker' ? 9.0 : 14.0,
       vx: Math.cos(angle) * spd,
       vy: Math.sin(angle) * spd,
       damage: finalDmg,
@@ -1998,6 +2145,8 @@ ZS.Game = (function () {
     if (!z) return;
     const dmg = Math.max(1, Math.round(amount));
     z.hp -= dmg;
+    z.hitFlashTimer = 0.045;
+    z.hitFlash = 1.0;
     spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, 3);
 
     if (dmg >= 15 || isCrit) {
@@ -2007,7 +2156,7 @@ ZS.Game = (function () {
         18,
         isCrit ? `${dmg}!` : `${dmg}`,
         isCrit ? DATA.PALETTE.critText : textColor || '#fff',
-        isCrit ? 13 : 11,
+        isCrit ? 13 : 12,
         isCrit ? DATA.PALETTE.critStroke : null
       );
     }
@@ -2022,13 +2171,15 @@ ZS.Game = (function () {
 
       awardKillXpBySourceUid(sourceUid, z.type, !!def.isBoss);
 
-      spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, 9);
+      spawnBurstParticles(z.x, z.y, 10, DATA.PALETTE.danger, def.isBoss ? 16 : 9);
+      spawnZombieDeathVfx(z, def);
       if (def.isBoss) {
         state.bossDefeated = true;
-        addFloatingText(z.x, z.y, 24, `+${scrapGain}🔩 +${coinGain}🪙`, DATA.PALETTE.gold, 13);
-        banner('🏆 알파 보스 격파!', `+${scrapGain}🔩 +${coinGain}🪙 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
+        addFloatingText(z.x - 0.18, z.y, 24, `+${scrapGain}`, DATA.PALETTE.resScrap, 13, DATA.PALETTE.outlineDark);
+        addFloatingText(z.x + 0.18, z.y, 26, `+${coinGain}`, DATA.PALETTE.coin, 13, DATA.PALETTE.outlineDark);
+        banner('알파 보스 격파!', `고철 +${scrapGain} · 코인 +${coinGain} 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
       } else if (Math.random() < 0.35 || z.type === 'brute') {
-        addFloatingText(z.x, z.y, 16, `+${scrapGain}🔩`, '#cbd5e1', 10);
+        addFloatingText(z.x, z.y, 16, `+${scrapGain}`, DATA.PALETTE.resScrap, 12, DATA.PALETTE.outlineDark);
       }
 
       state.zombies.splice(index, 1);
@@ -2062,6 +2213,7 @@ ZS.Game = (function () {
         under.hp -= rProf.trapWear * dt;
         if (under.hp <= 0) {
           state.structGrid[ty][tx] = null;
+          spawnStructureDebris(tx + 0.5, ty + 0.5, 'razor_pad', 7);
           structureDestroyed = true;
         }
         if (z.hp <= 0) {
@@ -2083,11 +2235,16 @@ ZS.Game = (function () {
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
           hqStruct.hp -= z.damage;
+          hqStruct.hitFlashTimer = 0.05;
+          hqStruct.hitFlash = 1.0;
+          triggerScreenShake(5.0, 0.28);
           spawnBurstParticles(hqCx, hqCy, 14, DATA.PALETTE.danger, 5);
           addFloatingText(hqCx, hqCy, 28, `-${z.damage}`, DATA.PALETTE.danger, 12);
           notifyUi();
           if (hqStruct.hp <= 0) {
             hqStruct.hp = 0;
+            spawnStructureDebris(hqCx, hqCy, 'command_hq', 18);
+            triggerScreenShake(8.0, 0.45);
             triggerGameOver();
             return;
           }
@@ -2140,7 +2297,8 @@ ZS.Game = (function () {
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
           blockingTarget.hp -= z.damage;
-          blockingTarget.hitFlash = 0.55;
+          blockingTarget.hitFlashTimer = 0.045;
+          blockingTarget.hitFlash = 1.0;
           spawnBurstParticles(btx + 0.5, bty + 0.5, 10, '#cbd5e1', 4);
 
           const bDef = DATA.ITEMS[blockingTarget.id];
@@ -2148,12 +2306,14 @@ ZS.Game = (function () {
 
           if (blockingTarget.hp <= 0) {
             const lostRank = blockingTarget.rank || computeRankFromXp(blockingTarget.xp || 0);
+            const destroyedId = blockingTarget.id;
             state.structGrid[bty][btx] = null;
-            spawnBurstParticles(btx + 0.5, bty + 0.5, 10, DATA.PALETTE.danger, 10);
+            spawnStructureDebris(btx + 0.5, bty + 0.5, destroyedId, 14);
+            spawnBurstParticles(btx + 0.5, bty + 0.5, 10, DATA.PALETTE.danger, 8);
             if (lostRank >= 1) {
               spawnBadgeShatterVfx(btx + 0.5, bty + 0.5, lostRank);
               const rInfo = getVeterancyRankInfo(lostRank);
-              banner(`⚠️ [${rInfo.name}] ${bDef ? bDef.name : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
+              banner(`[${rInfo.name}] ${bDef ? bDef.name : '방어 거점'} 파괴!`, '전투 중 파괴되어 누적 숙련도와 계급 배지가 소실되었습니다.', 'danger');
             }
             structureDestroyed = true;
           }
@@ -2193,6 +2353,8 @@ ZS.Game = (function () {
     const clearedWave = state.wave;
     state.phase = 'day';
     state.isNight = false;
+    state.blackoutFlickerTimer = 0;
+    state.muzzleFlashes = [];
     state.projectiles = [];
     state.burstQueue = [];
 
@@ -2237,10 +2399,10 @@ ZS.Game = (function () {
     refreshTraderOffers(false);
     ZS.Audio.playWaveClear();
 
-    const agentMsg = arrivedAgent > 0 ? ` · 신규 요원 +1👥 합류!` : '';
+    const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : '';
     banner(
-      `☀️ WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
-      `보상 +${woodReward}🪵 +${scrapReward}🔩 +${totalCoin}🪙 · 주간 충전 +${gainedPower}⚡${agentMsg}`,
+      `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
+      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 주간 충전 전력 +${gainedPower}${agentMsg}`,
       'good'
     );
 
@@ -2251,11 +2413,148 @@ ZS.Game = (function () {
   function triggerGameOver() {
     state.phase = 'gameover';
     ZS.Audio.playBlackout();
-    banner('🚨 지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
+    banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
     notifyUi();
   }
 
   // ================= VFX HELPERS =================
+  function triggerScreenShake(ampPx, durationSec) {
+    if (!screenShakeEnabled) return;
+    const dur = durationSec || 0.28;
+    if (ampPx >= (state.shakeAmp || 0) || state.shakeTimer <= 0.05) {
+      state.shakeAmp = ampPx;
+      state.shakeDuration = dur;
+      state.shakeTimer = dur;
+    }
+  }
+
+  function spawnMuzzleFlash(gx, gy, zPx, angle, color, scale, kind) {
+    state.muzzleFlashes.push({
+      x: gx,
+      y: gy,
+      z: zPx,
+      angle: angle || 0,
+      color: color || '#FFF3C4',
+      scale: scale || 1.0,
+      kind: kind || 'cone',
+      life: 0.055,
+      maxLife: 0.055
+    });
+  }
+
+  function spawnZombieDeathVfx(z, zDef) {
+    const sc = (zDef && zDef.scale) || 1.0;
+    // 1. ~0.3s collapsing/toppling zombie corpse animation
+    state.dyingZombies.push({
+      type: z.type,
+      x: z.x,
+      y: z.y,
+      facingAngle: typeof z.facingAngle === 'number' ? z.facingAngle : 0,
+      fallDir: Math.random() < 0.5 ? 1 : -1,
+      scale: sc,
+      coatColor: (zDef && zDef.coatColor) || '#6E1E3E',
+      skinColor: (zDef && zDef.skinColor) || '#F2CCD0',
+      accentColor: (zDef && (zDef.armorColor || zDef.accentColor)) || null,
+      isBoss: !!(zDef && zDef.isBoss),
+      timer: 0,
+      duration: 0.32
+    });
+
+    // 2. Fading dark crimson/ichor ground stain (capped at 45 for clean frame budget)
+    if (state.groundDecals.length >= 45) {
+      state.groundDecals.shift();
+    }
+    const stainLife = zDef && zDef.isBoss ? 11.0 : 7.5;
+    state.groundDecals.push({
+      x: z.x,
+      y: z.y,
+      radius: (zDef && zDef.isBoss ? 0.52 : z.type === 'brute' ? 0.36 : 0.26),
+      color: zDef && zDef.isBoss ? '#4A1048' : '#4E1224',
+      subColor: zDef && zDef.isBoss ? '#8E24AA' : '#7A1A32',
+      seed: z.seed || Math.random() * 10,
+      life: stainLife,
+      maxLife: stainLife
+    });
+  }
+
+  function spawnBuildDustPuffs(gx, gy, count) {
+    const n = count || 8;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+      const spd = 0.85 + Math.random() * 0.95;
+      const life = 0.28 + Math.random() * 0.14;
+      state.particles.push({
+        kind: 'dust',
+        x: gx + Math.cos(a) * 0.24,
+        y: gy + Math.sin(a) * 0.24,
+        z: 2 + Math.random() * 2.5,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        vz: 7 + Math.random() * 8,
+        color: i % 2 === 0 ? '#DDD2BE' : '#C2B7A3',
+        size: 3.4 + Math.random() * 2.4,
+        life,
+        maxLife: life
+      });
+    }
+  }
+
+  function getStructureDebrisPalette(itemId) {
+    switch (itemId) {
+      case 'hesco_wall': return ['#C9B48A', '#9E8758', '#8C96A3'];
+      case 'blast_wall': return ['#6B7686', '#F0BD35', '#8C96A3'];
+      case 'razor_pad': return ['#4A525C', '#C9D3DE', '#596574'];
+      case 'rifle_bunker': return ['#B5A27A', '#55684F', '#8C96A3'];
+      case 'shotgun_post': return ['#B5A27A', '#3A4654', '#EBA834'];
+      case 'sniper_tower': return ['#7C8B99', '#4F5D4B', '#5B6875'];
+      case 'vulcan_turret': return ['#E8EEF4', '#4E5A68', '#5EF2FF'];
+      case 'missile_pod': return ['#6C7D65', '#4C574A', '#E0603A'];
+      case 'emp_coil': return ['#60748A', '#B87333', '#5EF2FF'];
+      case 'solar_array': return ['#2466B5', '#A9B6C4', '#7B8996'];
+      case 'wind_turbine': return ['#EEF3F8', '#D0DBE6', '#758594'];
+      case 'battery_bank': return ['#DDE5EC', '#9AA8B6', '#5EF2FF'];
+      case 'field_tent': return ['#6E8466', '#2E3A2B', '#FFD27A'];
+      case 'shelter_pod': return ['#DCE5ED', '#EA6A3B', '#556370'];
+      case 'gas_heater': return ['#D5DEE7', '#9AA6B2', '#FFB347'];
+      case 'led_floodlight': return ['#EBA834', '#59636E', '#FFF6DA'];
+      case 'urban_planter': return ['#B8C0C7', '#5DBB63', '#6B4A33'];
+      case 'vending_machine': return ['#2E86DE', '#FFF3D6', '#1B4F86'];
+      case 'repair_bay': return ['#475361', '#F0A93A', '#4ADE80'];
+      case 'lounge_set': return ['#F4E6C8', '#E8A04A', '#E8EEF5'];
+      case 'arcade_neon': return ['#3A2C54', '#FF5CE1', '#52E8FF'];
+      case 'boss_trophy': return ['#2E3744', '#D4AF37', '#FFE066'];
+      case 'command_hq': return ['#5B6B7C', '#DCE4EC', '#FFD27A'];
+      default: return ['#94A3B8', '#64748B', '#D49A5A'];
+    }
+  }
+
+  function spawnStructureDebris(gx, gy, itemId, count) {
+    const cols = getStructureDebrisPalette(itemId);
+    const n = count || 12;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = 1.1 + Math.random() * 2.5;
+      const w = 0.085 + Math.random() * 0.065;
+      const life = 0.52 + Math.random() * 0.28;
+      state.particles.push({
+        kind: 'cube',
+        x: gx + (Math.random() - 0.5) * 0.36,
+        y: gy + (Math.random() - 0.5) * 0.36,
+        z: 4 + Math.random() * 12,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        vz: 24 + Math.random() * 34,
+        w,
+        h: 2.6 + Math.random() * 2.6,
+        color: cols[i % cols.length],
+        bounced: false,
+        life,
+        maxLife: life
+      });
+    }
+    spawnBuildDustPuffs(gx, gy, 6);
+  }
+
   function spawnBurstParticles(gx, gy, zPx, color, count) {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -2285,8 +2584,31 @@ ZS.Game = (function () {
       }
       pt.x += pt.vx * dt;
       pt.y += pt.vy * dt;
-      pt.z = Math.max(1, pt.z + pt.vz * dt);
-      pt.vz -= 65 * dt;
+      if (pt.kind === 'dust') {
+        pt.vx *= Math.max(0, 1 - dt * 3.5);
+        pt.vy *= Math.max(0, 1 - dt * 3.5);
+        pt.z += pt.vz * dt;
+        pt.vz = Math.max(1.5, pt.vz - 18 * dt);
+      } else if (pt.kind === 'cube') {
+        pt.z += pt.vz * dt;
+        pt.vz -= 105 * dt;
+        if (pt.z <= 1) {
+          pt.z = 1;
+          if (!pt.bounced && Math.abs(pt.vz) > 10) {
+            pt.vz = -pt.vz * 0.38;
+            pt.vx *= 0.62;
+            pt.vy *= 0.62;
+            pt.bounced = true;
+          } else {
+            pt.vz = 0;
+            pt.vx *= Math.max(0, 1 - dt * 8);
+            pt.vy *= Math.max(0, 1 - dt * 8);
+          }
+        }
+      } else {
+        pt.z = Math.max(1, pt.z + pt.vz * dt);
+        pt.vz -= 65 * dt;
+      }
     }
   }
 
@@ -2354,6 +2676,13 @@ ZS.Game = (function () {
       state.phase = 'day';
       state.isNight = false;
       state.nightAlpha = 0;
+      state.blackoutTriggered = false;
+      state.blackoutFlickerTimer = 0;
+      state.shakeTimer = 0;
+      state.shakeAmp = 0;
+      state.dyingZombies = [];
+      state.groundDecals = [];
+      state.muzzleFlashes = [];
       state.bossDefeated = !!d.bossDefeated;
       state.wood = d.wood ?? DATA.INITIAL_RESOURCES.wood;
       state.scrap = d.scrap ?? DATA.INITIAL_RESOURCES.scrap;
@@ -2375,6 +2704,9 @@ ZS.Game = (function () {
             s.xp = s.xp || 0;
             s.rank = computeRankFromXp(s.xp);
           }
+          s.buildAnimTimer = 0;
+          s.hitFlashTimer = 0;
+          s.hitFlash = 0;
           s.upgradeAnimTimer = 0;
           s.promoAnimTimer = 0;
         }
@@ -2417,7 +2749,7 @@ ZS.Game = (function () {
     state.scrap += add;
     state.coin += add;
     ZS.Audio.playTrade();
-    banner(`🛠️ [DEBUG] +${add} 자원 지급`, `목재·고철·코인 각 +${add} 추가 완료`, 'good');
+    banner(`[DEBUG] +${add} 자원 지급`, `목재·고철·코인 각 +${add} 추가 완료`, 'good');
     saveGame();
     notifyUi();
     return true;
@@ -2431,13 +2763,14 @@ ZS.Game = (function () {
         triggerBlackout();
       } else {
         ZS.Audio.playBlackout();
-        banner('🛠️ [DEBUG] 전력 강제 방전 (0⚡)', '블랙아웃 테스트를 위해 배터리를 0으로 방전했습니다.', 'warn');
+        banner('[DEBUG] 전력 강제 방전 (0)', '블랙아웃 테스트를 위해 배터리를 0으로 방전했습니다.', 'warn');
       }
     } else {
       state.power = Math.max(85, state.powerCap);
       state.blackoutTriggered = false;
+      state.blackoutFlickerTimer = 0;
       ZS.Audio.playBuild();
-      banner(`🛠️ [DEBUG] 전력 즉시 완충 (${state.power}⚡)`, '자동 포탑 및 전기 조명 전원이 복구되었습니다.', 'good');
+      banner(`[DEBUG] 전력 즉시 완충 (${state.power})`, '자동 포탑 및 전기 조명 전원이 복구되었습니다.', 'good');
     }
     saveGame();
     notifyUi();
@@ -2451,7 +2784,7 @@ ZS.Game = (function () {
     recalculateBaseStats(true);
     state.agents += n;
     ZS.Audio.playTrade();
-    banner(`🛠️ [DEBUG] 요원 +${n}명 충원`, `가용 요원 ${state.agents}명 · 숙소 수용량 ${state.popCap}명으로 확장`, 'good');
+    banner(`[DEBUG] 요원 +${n}명 충원`, `가용 요원 ${state.agents}명 · 숙소 수용량 ${state.popCap}명으로 확장`, 'good');
     saveGame();
     notifyUi();
     return true;
@@ -2461,14 +2794,14 @@ ZS.Game = (function () {
     if (!isDebugAllowed()) return false;
     if (state.phase !== 'day') {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 주간 전용 기능', '웨이브 번호 이동은 주간 정비 페이즈에서만 가능합니다.', 'warn');
+      banner('[DEBUG] 주간 전용 기능', '웨이브 번호 이동은 주간 정비 페이즈에서만 가능합니다.', 'warn');
       return false;
     }
     const step = Number(delta) || 1;
     state.wave = Math.max(1, state.wave + step);
     refreshTraderOffers(false);
     ZS.Audio.playBuild();
-    banner(`🛠️ [DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
+    banner(`[DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
     saveGame();
     notifyUi();
     return true;
@@ -2478,19 +2811,19 @@ ZS.Game = (function () {
     if (!isDebugAllowed()) return false;
     if (tx === undefined || ty === undefined || tx < 0 || ty < 0 || tx >= N || ty >= N) {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 대상 시설 미선택', '먼저 초소 또는 자동포탑을 클릭해 조회한 뒤 실행하세요.', 'warn');
+      banner('[DEBUG] 대상 시설 미선택', '먼저 초소 또는 자동포탑을 클릭해 조회한 뒤 실행하세요.', 'warn');
       return false;
     }
     const s = state.structGrid[ty] && state.structGrid[ty][tx];
     if (!s || s.id === 'command_hq') {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 숙련도 부여 불가', '전투원 초소(manned) 또는 자동포탑(turret)을 선택해 주세요.', 'warn');
+      banner('[DEBUG] 숙련도 부여 불가', '전투원 초소(manned) 또는 자동포탑(turret)을 선택해 주세요.', 'warn');
       return false;
     }
     const def = DATA.ITEMS[s.id];
     if (!isCombatVeterancyDef(def)) {
       ZS.Audio.playError();
-      banner('🛠️ [DEBUG] 숙련도 대상 아님', `[${def ? def.name : s.id}] 시설은 전투 숙련도 시스템 대상이 아닙니다.`, 'warn');
+      banner('[DEBUG] 숙련도 대상 아님', `[${def ? def.name : s.id}] 시설은 전투 숙련도 시스템 대상이 아닙니다.`, 'warn');
       return false;
     }
     const gain = Number(rawXp) || 20;
@@ -2513,10 +2846,10 @@ ZS.Game = (function () {
         maxLife: 0.8
       });
       addFloatingText(tx + 0.5, ty + 0.5, 30, '★ UP', rInfo.color, 14, rInfo.stroke);
-      banner(`🎖️ [DEBUG] [${def.name}] ${rInfo.name} 진급!`, `숙련도 +${gain} XP 부여 (누적 ${s.xp.toFixed(1)} XP · Rank ${newRank})`, 'good');
+      banner(`[DEBUG] [${def.name}] ${rInfo.name} 진급!`, `숙련도 +${gain} XP 부여 (누적 ${s.xp.toFixed(1)} XP · Rank ${newRank})`, 'good');
     } else {
       ZS.Audio.playBuild();
-      banner(`🛠️ [DEBUG] [${def.name}] +${gain} XP 부여`, `현재 누적 ${s.xp.toFixed(1)} XP (${getVeterancyRankInfo(newRank).name})`, 'good');
+      banner(`[DEBUG] [${def.name}] +${gain} XP 부여`, `현재 누적 ${s.xp.toFixed(1)} XP (${getVeterancyRankInfo(newRank).name})`, 'good');
     }
     saveGame();
     notifyUi();
@@ -2527,6 +2860,9 @@ ZS.Game = (function () {
     state,
     getEnvInfo,
     getSaveKey,
+    isScreenShakeEnabled,
+    setScreenShakeEnabled,
+    toggleScreenShake,
     setCallbacks,
     initNewGame,
     loadGame,

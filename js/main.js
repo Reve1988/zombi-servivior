@@ -11,7 +11,11 @@ window.ZS = window.ZS || {};
     hoverTile: null,
     inspectedTile: null,
     movingSource: null,
-    activeSkill: null // null | 'airstrike'
+    activeSkill: null, // null | 'airstrike'
+    dockCollapsed: false,
+    hudResCompact: false,
+    lastPhase: null,
+    pointerClient: { x: 0, y: 0, inside: false }
   };
 
   const keys = {};
@@ -21,6 +25,31 @@ window.ZS = window.ZS || {};
   let panStart = { x: 0, y: 0 };
   let bannerTimer = null;
   let lastCozyPulseSeq = 0;
+
+  function ozIcon(name, size, cls, inlineStyle) {
+    const sz = size || 16;
+    const clsAttr = cls ? `oz-icon ${cls}` : 'oz-icon';
+    const styleAttr = inlineStyle ? ` style="${inlineStyle}"` : '';
+    return `<svg class="${clsAttr}" width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-hidden="true"${styleAttr}><use href="#oz-${name}"></use></svg>`;
+  }
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatInlineCostHtml(cost, iconSize) {
+    const c = cost || {};
+    const sz = iconSize || 14;
+    const parts = [];
+    if (c.wood) parts.push(`<span class="inline-icon-text">${ozIcon('res-wood', sz, 'icon-wood')}${c.wood}</span>`);
+    if (c.scrap) parts.push(`<span class="inline-icon-text">${ozIcon('res-scrap', sz, 'icon-scrap')}${c.scrap}</span>`);
+    if (c.coin) parts.push(`<span class="inline-icon-text">${ozIcon('res-coin', sz, 'icon-coin')}${c.coin}</span>`);
+    return parts.join(' ');
+  }
 
   function resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
@@ -39,7 +68,8 @@ window.ZS = window.ZS || {};
     ZS.DATA.CATEGORIES.forEach((cat) => {
       const btn = document.createElement('button');
       btn.className = 'tab-btn' + (uiState.activeCategory === cat.id ? ' active' : '');
-      btn.textContent = cat.label;
+      const iconId = cat.iconId || (cat.id === 'defense' ? 'cat-defense' : cat.id === 'infra' ? 'cat-infra' : 'cat-decor');
+      btn.innerHTML = `${ozIcon(iconId, 16)}<span>${escapeHtml(cat.label)}</span>`;
       btn.title = cat.desc;
       btn.addEventListener('click', () => {
         uiState.activeCategory = cat.id;
@@ -54,28 +84,40 @@ window.ZS = window.ZS || {};
     const preview = ZS.Game.getPlacementCozyPreview ? ZS.Game.getPlacementCozyPreview(def.id) : null;
     if (def.layer === 'floor') {
       if (preview && preview.isFloorCapped) {
-        return { text: `바닥재 · 상한 도달`, cls: 'tag-cozy-dim' };
+        return { html: `<span>바닥재 · 상한 도달</span>`, cls: 'tag-cozy-dim' };
       }
-      return { text: `바닥재 · 💛+${def.cozy || 0}`, cls: 'tag-cozy' };
+      return { html: `<span>바닥재 ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`, cls: 'tag-cozy' };
     }
-    if (def.subType === 'manned') return { text: `👥요원 ${def.popUse} · 무전력`, cls: 'tag-manned' };
-    if (def.subType === 'turret') return { text: `⚡야간전력 소모`, cls: 'tag-power' };
-    if (def.subType === 'power') return { text: `☀️+${def.dayCharge}⚡ / 용량+${def.powerCap}`, cls: 'tag-power' };
+    if (def.subType === 'manned') {
+      return { html: `${ozIcon('res-agent', 13)}<span>요원 ${def.popUse} · 무전력</span>`, cls: 'tag-manned' };
+    }
+    if (def.subType === 'turret') {
+      return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>야간전력 소모</span>`, cls: 'tag-power' };
+    }
+    if (def.subType === 'power') {
+      return {
+        html: `${ozIcon('phase-day', 13, 'icon-coin')}<span>+${def.dayCharge}</span>${ozIcon('res-power', 13, 'icon-power')}<span>/ 용량+${def.powerCap}</span>`,
+        cls: 'tag-power'
+      };
+    }
     if (def.subType === 'housing') {
       if (preview && preview.isDiminished) {
-        return { text: `👥수용+${def.popCap} · +${preview.gain} (50%)`, cls: 'tag-cozy-dim' };
+        return { html: `${ozIcon('res-agent', 13)}<span>수용+${def.popCap} · +${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
       }
-      return { text: `👥수용+${def.popCap} · 💛+${def.cozy}`, cls: 'tag-manned' };
+      return {
+        html: `${ozIcon('res-agent', 13)}<span>수용+${def.popCap} ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy}</span>`,
+        cls: 'tag-manned'
+      };
     }
     if (def.category === 'decor') {
-      const pwr = def.requiresPower ? '⚡전등 · ' : '';
+      const pwrPrefix = def.requiresPower ? `${ozIcon('res-power', 13, 'icon-power')}<span>전등 ·</span>` : '';
       if (preview && preview.isDiminished) {
-        return { text: `${pwr}+${preview.gain} (50%)`, cls: 'tag-cozy-dim' };
+        return { html: `${pwrPrefix}<span>+${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
       }
-      return { text: `${pwr}💛안락함 +${def.cozy || 0}`, cls: 'tag-cozy' };
+      return { html: `${pwrPrefix}${ozIcon('res-cozy', 13, 'icon-coin')}<span>안락함 +${def.cozy || 0}</span>`, cls: 'tag-cozy' };
     }
-    if (def.subType === 'trap') return { text: '무전력 둔화 함정', cls: '' };
-    return { text: `방호벽 · HP ${def.maxHp}`, cls: '' };
+    if (def.subType === 'trap') return { html: `<span>무전력 둔화 함정</span>`, cls: '' };
+    return { html: `<span>방호벽 · HP ${def.maxHp}</span>`, cls: '' };
   }
 
   function renderItemCards() {
@@ -105,42 +147,47 @@ window.ZS = window.ZS || {};
       let badgeHtml = '';
       const floorCapped = def.layer === 'floor' && (st.cozyFloorRaw || 0) >= (ZS.DATA.COZY_FLOOR_CAP || 60);
       if (bossLocked) {
-        badgeHtml = `<span class="card-lock-badge">🔒 보스</span>`;
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 14, 'icon-muted')}<span>보스</span></span>`;
       } else if (voucherBypass) {
-        badgeHtml = `<span class="card-voucher-badge">보급권 ${voucherCount}</span>`;
+        badgeHtml = `<span class="card-voucher-badge">${ozIcon('state-voucher', 14, 'icon-coin')}<span>보급권 ${voucherCount}</span></span>`;
       } else if (hqLockedRaw) {
-        badgeHtml = `<span class="card-lock-badge">🔒 본부 Lv.${reqHq}</span>`;
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
       } else if (floorCapped) {
         badgeHtml = `<span class="card-cap-badge">상한 도달</span>`;
       }
 
       let costHtml = '';
       if (bossLocked) {
-        costHtml = `<span class="cost-chip short">🔒 보스 처치 해금</span>`;
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 14, 'icon-muted')}<span>보스 처치 해금</span></span>`;
       } else if (voucherCount > 0) {
-        costHtml = `<span class="cost-chip free">🎁 보급권 ${voucherCount}</span>`;
+        costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 14, 'icon-heal')}<span>보급권 ${voucherCount}</span></span>`;
       } else if (hqLockedRaw) {
-        costHtml = `<span class="cost-chip short">🔒 본부 Lv.${reqHq} 필요</span>`;
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
       } else {
         const c = def.cost || {};
         if (c.wood) {
-          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">🪵${c.wood}</span>`;
+          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', 14, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
         }
         if (c.scrap) {
-          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">🔩${c.scrap}</span>`;
+          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">${ozIcon('res-scrap', 14, st.scrap < c.scrap ? 'icon-danger' : 'icon-scrap')}<span>${c.scrap}</span></span>`;
         }
         if (c.coin) {
-          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">🪙${c.coin}</span>`;
+          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">${ozIcon('res-coin', 14, st.coin < c.coin ? 'icon-danger' : 'icon-coin')}<span>${c.coin}</span></span>`;
         }
       }
+
+      const thumbUrl = ZS.Renderer.renderItemThumbnail ? ZS.Renderer.renderItemThumbnail(def.id, 40) : '';
+      const thumbHtml = thumbUrl
+        ? `<img class="card-thumb" src="${thumbUrl}" width="38" height="38" alt="" />`
+        : `<span class="card-thumb icon-slot">${ozIcon('cat-defense', 20)}</span>`;
 
       card.innerHTML = `
         ${badgeHtml}
         <div class="card-top">
-          <span class="card-icon">${def.icon}</span>
-          <span class="card-title">${def.name}</span>
+          ${thumbHtml}
+          <span class="card-title">${escapeHtml(def.name)}</span>
         </div>
-        <span class="card-tag ${tag.cls}">${tag.text}</span>
+        <span class="card-tag ${tag.cls}">${tag.html}</span>
         <div class="card-costs">${costHtml}</div>
       `;
 
@@ -185,16 +232,17 @@ window.ZS = window.ZS || {};
         } else if (prev && prev.isDiminished) {
           cozyHint = ` [도배 감쇠 적용: 안락함 +${prev.gain} (50%)]`;
         }
-        setDetailText(`${def.icon} [${def.name}] — ${def.desc}${cozyHint}`);
+        const catIcon = def.category === 'defense' ? 'cat-defense' : def.category === 'infra' ? 'cat-infra' : 'cat-decor';
+        setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + cozyHint)}`);
       }
     } else {
       uiState.selectedItemId = null;
       if (mode === 'move') {
-        setDetailText('🔄 [무료 이동 모드] 옮길 시설을 클릭한 뒤, 이동할 빈 타일을 클릭하세요. (낮 전용)');
+        setDetailHtml(`${ozIcon('tool-move', 14)} <b>[무료 이동 모드]</b> 옮길 시설을 클릭한 뒤, 이동할 빈 타일을 클릭하세요. (낮 전용)`);
       } else if (mode === 'remove') {
-        setDetailText('🗑️ [철거 모드] 철거할 시설 또는 바닥 타일을 클릭하면 건설 자원의 80%를 돌려받습니다.');
+        setDetailHtml(`${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 모드]</b> 철거할 시설 또는 바닥 타일을 클릭하면 건설 자원의 80%를 돌려받습니다.`);
       } else {
-        setDetailText('기지 내 시설을 클릭하면 현재 적용 중인 안락함·오라 버프와 상세 스탯을 확인할 수 있습니다.');
+        setDetailHtml(`${ozIcon('tool-inspect', 14)} 기지 내 시설을 클릭하면 현재 적용 중인 안락함·오라 버프와 상세 스탯을 확인할 수 있습니다.`);
       }
     }
 
@@ -202,10 +250,84 @@ window.ZS = window.ZS || {};
     document.getElementById('tool-move').classList.toggle('active', mode === 'move');
     document.getElementById('tool-remove').classList.toggle('active', mode === 'remove');
     renderItemCards();
+    updateCursorTooltip();
   }
 
-  function setDetailText(msg, actionsHtml) {
-    document.getElementById('detail-text').textContent = msg;
+  function syncDockAndHudState() {
+    const dockEl = document.getElementById('build-dock');
+    if (dockEl) {
+      dockEl.classList.toggle('collapsed', !!uiState.dockCollapsed);
+    }
+    const topHudEl = document.getElementById('top-hud');
+    if (topHudEl) {
+      topHudEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
+    }
+    const hudResBtn = document.getElementById('btn-toggle-hud-res');
+    if (hudResBtn) {
+      hudResBtn.innerHTML = ozIcon(uiState.hudResCompact ? 'ui-chevron-down' : 'ui-chevron-up', 15);
+      hudResBtn.title = uiState.hudResCompact ? '보조 자원 라벨 펼치기' : '보조 자원 간소화';
+    }
+  }
+
+  function setDockCollapsed(flag) {
+    uiState.dockCollapsed = !!flag;
+    syncDockAndHudState();
+  }
+
+  function updateCursorTooltip() {
+    const tipEl = document.getElementById('cursor-tooltip');
+    if (!tipEl) return;
+    const st = ZS.Game.state;
+    if (!uiState.pointerClient.inside || !uiState.hoverTile || st.phase !== 'day') {
+      tipEl.classList.add('hidden');
+      return;
+    }
+
+    const { tx, ty } = uiState.hoverTile;
+    const N = ZS.DATA.GRID_SIZE;
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) {
+      tipEl.classList.add('hidden');
+      return;
+    }
+
+    let errReason = null;
+    if (uiState.mode === 'build' && uiState.selectedItemId && ZS.Game.canPlaceItem) {
+      const check = ZS.Game.canPlaceItem(uiState.selectedItemId, tx, ty);
+      if (check && !check.ok && check.reason) {
+        errReason = check.reason;
+      }
+    } else if (uiState.mode === 'move' && uiState.movingSource) {
+      if (tx <= 0 || ty <= 0 || tx >= N - 1 || ty >= N - 1) {
+        errReason = '외곽 진입 구역으로는 시설을 옮길 수 없습니다.';
+      } else if (
+        !(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) &&
+        st.structGrid[ty] &&
+        st.structGrid[ty][tx]
+      ) {
+        errReason = '이미 다른 시설이 설치된 타일입니다.';
+      }
+    }
+
+    if (!errReason) {
+      tipEl.classList.add('hidden');
+      return;
+    }
+
+    tipEl.innerHTML = `${ozIcon('state-alert', 14, 'icon-danger')}<span>${escapeHtml(errReason)}</span>`;
+    tipEl.classList.remove('hidden');
+
+    const vw = window.innerWidth || 1600;
+    const vh = window.innerHeight || 900;
+    const tipW = tipEl.offsetWidth || 240;
+    const tipH = tipEl.offsetHeight || 32;
+    const x = Math.max(12, Math.min(vw - tipW - 14, uiState.pointerClient.x + 16));
+    const y = Math.max(70, Math.min(vh - tipH - 14, uiState.pointerClient.y + 16));
+    tipEl.style.left = `${x}px`;
+    tipEl.style.top = `${y}px`;
+  }
+
+  function setDetailHtml(html, actionsHtml) {
+    document.getElementById('detail-text').innerHTML = html;
     const actEl = document.getElementById('detail-actions');
     if (actEl) {
       actEl.innerHTML = actionsHtml || '';
@@ -215,23 +337,28 @@ window.ZS = window.ZS || {};
   function updateHud() {
     const st = ZS.Game.state;
     const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
+    const phaseIconEl = document.getElementById('hud-phase-icon');
 
     document.getElementById('hud-wave-num').textContent = `WAVE ${st.wave}`;
     if (st.phase === 'day') {
-      document.getElementById('hud-phase-icon').textContent = '☀️';
+      phaseIconEl.className = 'icon-slot icon-coin';
+      phaseIconEl.innerHTML = ozIcon('phase-day', 20);
       document.getElementById('hud-phase-text').textContent = '주간 정비 · 건설 페이즈';
     } else if (st.phase === 'night') {
-      document.getElementById('hud-phase-icon').textContent = '🌙';
-      document.getElementById('hud-phase-text').textContent = st.power <= 0.01 ? '⚡ 블랙아웃 교전 중!' : '야간 방어 교전 중';
+      const isBlackout = st.power <= 0.01;
+      phaseIconEl.className = isBlackout ? 'icon-slot icon-danger' : 'icon-slot';
+      phaseIconEl.innerHTML = ozIcon(isBlackout ? 'state-power-off' : 'phase-night', 20);
+      document.getElementById('hud-phase-text').textContent = isBlackout ? '블랙아웃 교전 중!' : '야간 방어 교전 중';
     } else {
-      document.getElementById('hud-phase-icon').textContent = '🚨';
+      phaseIconEl.className = 'icon-slot icon-danger';
+      phaseIconEl.innerHTML = ozIcon('state-alert', 20);
       document.getElementById('hud-phase-text').textContent = '작전 실패';
     }
 
     const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
     const hqTitleEl = document.getElementById('hud-hq-title');
     if (hqTitleEl) {
-      hqTitleEl.textContent = `🏛️ 본부 Lv.${st.hqLevel}`;
+      hqTitleEl.innerHTML = `${ozIcon('hud-hq', 14)}<span>본부 Lv.${st.hqLevel}</span>`;
     }
     const hqHp = hq ? Math.ceil(hq.hp) : 0;
     const hqMax = hq ? hq.maxHp : hqInfo.maxHp;
@@ -242,8 +369,9 @@ window.ZS = window.ZS || {};
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
 
-    // Power display
+    // Power display & blackout icon state (#9)
     const pwrVal = Math.round(st.power);
+    const isNightBlackout = st.isNight && st.power <= 0.01;
     document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
     const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
     const pwrBar = document.getElementById('res-power-bar');
@@ -256,8 +384,16 @@ window.ZS = window.ZS || {};
         ? P.healthMid
         : P.danger;
 
-    document.querySelector('.power-pill').classList.toggle('blackout', st.isNight && st.power <= 0.01);
-    document.getElementById('res-power-sub').textContent = `낮 충전 +${st.dayCharge}⚡ · 대기 -${st.nightIdleDrain.toFixed(1)}/s`;
+    const pwrIconEl = document.getElementById('res-power-icon');
+    if (pwrIconEl) {
+      pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
+      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
+    }
+
+    document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
+    document.getElementById('res-power-sub').textContent = isNightBlackout
+      ? '배터리 방전 (자동포탑 정지)'
+      : `낮 충전 +${st.dayCharge} · 대기 -${st.nightIdleDrain.toFixed(1)}/s`;
 
     // Population display
     document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
@@ -308,7 +444,7 @@ window.ZS = window.ZS || {};
         (t) => `
         <tr class="${t.level === tier.level ? 'current-tier' : ''}">
           <td>Lv.${t.level}</td>
-          <td>${t.title}</td>
+          <td>${escapeHtml(t.title)}</td>
           <td>${t.min}</td>
           <td>+${Math.round(t.agentDmg * 100)}%</td>
           <td>+${Math.round(t.fireRate * 100)}%</td>
@@ -320,11 +456,11 @@ window.ZS = window.ZS || {};
       .join('');
 
     document.getElementById('cozy-tooltip').innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-        <span style="font-weight:800;color:${P.gold};">💛 ${tier.title} (Lv.${tier.level})</span>
-        <span style="font-size:11px;color:#e2e8f0;">총 <b>${st.cozyScore}점</b></span>
+      <div class="cozy-popover-head">
+        <span class="inline-icon-text" style="font-weight:800;color:${P.gold};">${ozIcon('res-cozy', 15, 'icon-coin')}<span>${escapeHtml(tier.title)} (Lv.${tier.level})</span></span>
+        <span style="font-size:12px;color:#e6eef7;">총 <b>${st.cozyScore}점</b></span>
       </div>
-      <div style="font-size:10.5px;color:#94a3b8;margin-bottom:4px;">
+      <div class="cozy-popover-meta">
         바닥재 ${st.cozyFloorScore || 0}/${floorCap}점${(st.cozyFloorRaw || 0) >= floorCap ? ' (상한)' : ''} · 구조물 ${st.cozyStructScore || 0}점${st.cozySynergyScore ? ` · 라운지 +${st.cozySynergyScore}` : ''} · 다양성 <span style="color:${P.gold}">+${st.cozyDiversityBonus}</span>
       </div>
       <table class="cozy-table">
@@ -344,27 +480,42 @@ window.ZS = window.ZS || {};
       </table>
       ${
         nextTier
-          ? `<div style="margin-top:6px;color:#94a3b8;font-size:11px;">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
-          : `<div style="margin-top:6px;color:${P.gold};font-size:11px;">★ 최고 안락함 등급(Lv.8) 달성!</div>`
+          ? `<div class="cozy-popover-foot">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
+          : `<div class="cozy-popover-foot" style="color:${P.gold};">★ 최고 안락함 등급(Lv.8) 달성!</div>`
       }
     `;
+
+    // Auto-collapse build dock & compact secondary HUD at Night start; auto-expand at Dawn (#10)
+    if (st.phase !== uiState.lastPhase) {
+      if (st.phase === 'night') {
+        uiState.dockCollapsed = true;
+        uiState.hudResCompact = true;
+      } else if (st.phase === 'day') {
+        uiState.dockCollapsed = false;
+        uiState.hudResCompact = false;
+      }
+      uiState.lastPhase = st.phase;
+    }
+    syncDockAndHudState();
 
     // Toggle Day vs Night right-side action stacks
     const isDay = st.phase === 'day';
     document.getElementById('day-actions').classList.toggle('hidden', !isDay);
     document.getElementById('night-actions').classList.toggle('hidden', st.phase !== 'night');
-    document.getElementById('build-dock').style.opacity = isDay ? '1' : '0.75';
+    document.getElementById('build-dock').style.opacity = isDay ? '1' : uiState.dockCollapsed ? '0.94' : '0.88';
 
     if (isDay) {
-      document.getElementById('cta-wave-sub').textContent =
-        st.wave % 5 === 0 ? `⚠️ WAVE ${st.wave} 보스전 개시` : `WAVE ${st.wave} 야간 방어 돌입`;
+      document.getElementById('cta-wave-sub').innerHTML =
+        st.wave % 5 === 0
+          ? `${ozIcon('state-alert', 14, 'icon-danger')}<span>WAVE ${st.wave} 보스전 개시</span>`
+          : `<span>WAVE ${st.wave} 야간 방어 돌입</span>`;
 
       const rep = ZS.Game.getRepairAllInfo();
       const repBtn = document.getElementById('btn-repair-all');
       const repLbl = document.getElementById('repair-cost-label');
       repBtn.disabled = !rep.needed;
-      repLbl.textContent = rep.needed
-        ? `비용: 🪵${rep.woodCost} · 🔩${rep.scrapCost}`
+      repLbl.innerHTML = rep.needed
+        ? `<span>비용:</span>${ozIcon('res-wood', 13, 'icon-wood')}<span>${rep.woodCost}</span><span>·</span>${ozIcon('res-scrap', 13, 'icon-scrap')}<span>${rep.scrapCost}</span>`
         : '모든 시설 내구도 100%';
     } else if (st.phase === 'night') {
       const left = st.spawnQueue.length + st.zombies.length;
@@ -378,11 +529,11 @@ window.ZS = window.ZS || {};
 
       const sBtn = document.getElementById('btn-skill-airstrike');
       sBtn.disabled = st.skills.airstrikeCd > 0;
-      document.getElementById('skill-strike-cd').textContent =
+      document.getElementById('skill-strike-cd').innerHTML =
         st.skills.airstrikeCd > 0
           ? `재장전 중 (${Math.ceil(st.skills.airstrikeCd)}초)`
           : uiState.activeSkill === 'airstrike'
-          ? '🎯 타격할 타일을 클릭하세요!'
+          ? `${ozIcon('sys-center', 13, 'icon-danger')}<span>타격할 타일을 클릭하세요!</span>`
           : '지정 위치 광역 폭격 + 조명';
     }
 
@@ -393,6 +544,7 @@ window.ZS = window.ZS || {};
     if (!document.getElementById('trader-modal').classList.contains('hidden')) {
       renderTraderModal();
     }
+    updateCursorTooltip();
   }
 
   function showWaveBanner(title, sub, tone) {
@@ -410,7 +562,7 @@ window.ZS = window.ZS || {};
 
   function renderTraderModal() {
     const st = ZS.Game.state;
-    document.getElementById('trader-coin-val').textContent = `${Math.floor(st.coin)} 🪙`;
+    document.getElementById('trader-coin-val').innerHTML = `${ozIcon('res-coin', 16, 'icon-coin')}<span>${Math.floor(st.coin)}</span>`;
     const grid = document.getElementById('trader-grid');
     grid.innerHTML = '';
 
@@ -418,16 +570,44 @@ window.ZS = window.ZS || {};
       const card = document.createElement('div');
       card.className = 'offer-card';
       const canBuy = !offer.sold && st.coin >= offer.coinCost && st.phase === 'day';
+
+      let iconVisualHtml = '';
+      if (offer.type === 'free_item' && offer.itemId && ZS.Renderer.renderItemThumbnail) {
+        const thumbSrc = ZS.Renderer.renderItemThumbnail(offer.itemId, 44);
+        iconVisualHtml = `<span class="offer-icon-box"><img class="offer-thumb" src="${thumbSrc}" width="40" height="40" alt="" /></span>`;
+      } else {
+        const svgId =
+          offer.svgIcon ||
+          (offer.id === 'wood_pack'
+            ? 'res-wood'
+            : offer.id === 'scrap_pack'
+            ? 'res-scrap'
+            : offer.type === 'power_boost'
+            ? 'res-power'
+            : 'res-agent');
+        const svgCls =
+          offer.svgColorCls !== undefined
+            ? offer.svgColorCls
+            : svgId === 'res-wood'
+            ? 'icon-wood'
+            : svgId === 'res-scrap'
+            ? 'icon-scrap'
+            : svgId === 'res-power'
+            ? 'icon-power'
+            : '';
+        iconVisualHtml = `<span class="offer-icon-box">${ozIcon(svgId, 24, svgCls)}</span>`;
+      }
+
       card.innerHTML = `
         <div>
           <div class="offer-head">
-            <span class="offer-icon">${offer.icon}</span>
-            <span>${offer.name}</span>
+            ${iconVisualHtml}
+            <span>${escapeHtml(offer.name)}</span>
           </div>
-          <p class="offer-desc" style="margin-top:6px;">${offer.desc}</p>
+          <p class="offer-desc" style="margin-top:8px;">${escapeHtml(offer.desc)}</p>
         </div>
         <button class="buy-offer-btn" ${canBuy ? '' : 'disabled'}>
-          ${offer.sold ? '✔ 보급 완료' : `🪙 ${offer.coinCost} 코인으로 구매`}
+          ${offer.sold ? '<span>보급 완료</span>' : `${ozIcon('res-coin', 15, 'icon-coin')}<span>${offer.coinCost} 코인으로 구매</span>`}
         </button>
       `;
       card.querySelector('button').addEventListener('click', () => {
@@ -448,9 +628,9 @@ window.ZS = window.ZS || {};
 
     if (!obj) {
       if (fDef) {
-        setDetailText(`${fDef.icon} [${fDef.name}] 시공됨 — ${fDef.desc}`);
+        setDetailHtml(`${ozIcon('cat-decor', 14, 'icon-coin')} <b>[${escapeHtml(fDef.name)}]</b> 시공됨 — ${escapeHtml(fDef.desc)}`);
       } else {
-        setDetailText(`빈 전술 구역 (${tx}, ${ty}) — 하단 도크에서 방벽, 발전기, 숙소 또는 모던 가구를 선택해 배치하세요.`);
+        setDetailHtml(`빈 전술 구역 (${tx}, ${ty}) — 하단 도크에서 방벽, 발전기, 숙소 또는 모던 가구를 선택해 배치하세요.`);
       }
       return;
     }
@@ -464,16 +644,15 @@ window.ZS = window.ZS || {};
       let actionHtml = '';
       if (st.hqLevel < 4) {
         const nextInfo = ZS.Game.getHqLevelInfo(st.hqLevel + 1);
-        const c = nextInfo.cost || {};
-        const costLabel = `🪵${c.wood || 0} 🔩${c.scrap || 0} 🪙${c.coin || 0}`;
+        const costHtml = formatInlineCostHtml(nextInfo.cost || {}, 14);
         const disabledAttr = upCheck.ok ? '' : 'disabled';
-        actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${upCheck.ok ? `${nextInfo.name} 증축` : upCheck.reason}">⬆️ 본부 Lv.${nextInfo.level} 증축 (${costLabel})</button>`;
+        actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? `${nextInfo.name} 증축` : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
       } else {
         actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.4)</span>`;
       }
 
-      setDetailText(
-        `🏛️ [${hqInfo.name} · Lv.${st.hqLevel}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge}⚡ · 용량 ${hqInfo.basePowerCap}⚡ · 숙소 ${hqInfo.basePopCap}👥 · ${wpnText}`,
+      setDetailHtml(
+        `${ozIcon('hud-hq', 14)} <b>[${escapeHtml(hqInfo.name)} · Lv.${st.hqLevel}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 숙소 ${hqInfo.basePopCap}명 · ${escapeHtml(wpnText)}`,
         actionHtml
       );
 
@@ -495,17 +674,19 @@ window.ZS = window.ZS || {};
       const upCheck = ZS.Game.canUpgradeStructure(tx, ty);
       if (lv >= 3) {
         const perk = ZS.DATA.LV3_PERK_LABELS && ZS.DATA.LV3_PERK_LABELS[def.id];
-        actionHtml = `<span class="cost-chip free" title="${perk || ''}">◆◆◆ Lv.3 MAX</span>`;
+        actionHtml = `<span class="cost-chip free" title="${escapeHtml(perk || '')}">◆◆◆ Lv.3 MAX</span>`;
       } else {
         const cost = ZS.Game.getUpgradeCost(def, lv) || {};
-        const costLabel = `🪵${cost.wood || 0} 🔩${cost.scrap || 0} 🪙${cost.coin || 0}`;
-        let btnText = `⬆️ Lv.${lv + 1} 강화 (${costLabel}) [U]`;
-        if (upCheck.hqCapped) {
-          btnText = `🔒 본부 Lv.${upCheck.reqHqLevel} 필요 (${costLabel})`;
-        }
-        actionHtml = `<button id="btn-upgrade-struct" class="detail-upgrade-btn" ${upCheck.ok ? '' : 'disabled'} title="${upCheck.ok ? '단축키 U로 즉시 강화' : upCheck.reason}">${btnText}</button>`;
+        const costHtml = formatInlineCostHtml(cost, 14);
+        const upIconCls = lv + 1 === 3 && !upCheck.hqCapped ? 'icon-max' : '';
+        const btnInner = upCheck.hqCapped
+          ? `${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${upCheck.reqHqLevel} 필요</span>(${costHtml})`
+          : `${ozIcon('state-upgrade', 16, upIconCls)}<span>Lv.${lv + 1} 강화</span>(${costHtml})<span>[U]</span>`;
+        actionHtml = `<button id="btn-upgrade-struct" class="detail-upgrade-btn" ${upCheck.ok ? '' : 'disabled'} title="${escapeHtml(upCheck.ok ? '단축키 U로 즉시 강화' : upCheck.reason)}">${btnInner}</button>`;
       }
     }
+
+    const catIcon = def.category === 'defense' ? 'cat-defense' : def.category === 'infra' ? 'cat-infra' : 'cat-decor';
 
     if (def.subType === 'manned' || def.subType === 'turret') {
       const eff = ZS.Game.getStructureEffectiveStats(obj, tx, ty);
@@ -518,12 +699,11 @@ window.ZS = window.ZS || {};
       const pct = nextR
         ? Math.max(0, Math.min(100, ((xp - curMin) / Math.max(1, nextR.minXp - curMin)) * 100))
         : 100;
-      const rankSymbol = rank >= 3 ? '★' : rank === 2 ? '︾' : rank === 1 ? '▾' : '•';
       const remLabel = nextR ? `남은 ${(Math.max(0.1, nextR.minXp - xp)).toFixed(1)} XP` : 'MAX';
       const rankWidgetHtml = `
         <span class="detail-rank-box" title="처치 ${obj.kills || 0}기 · 누적 ${xp.toFixed(1)} XP">
-          <span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${rankSymbol}</span>
-          <span class="detail-rank-name" style="color:${rInfo.color};">${rInfo.name}</span>
+          <span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span>
+          <span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span>
           <span class="detail-xp-track"><span class="detail-xp-fill" style="width:${pct.toFixed(1)}%;background:${rInfo.color};"></span></span>
           <span class="detail-xp-rem">${remLabel}</span>
         </span>
@@ -531,44 +711,44 @@ window.ZS = window.ZS || {};
       actionHtml = rankWidgetHtml + actionHtml;
 
       const pwrInfo = def.requiresPower
-        ? `⚡대기 -${eff.powerIdle}/s, 사격 -${eff.powerShot}`
-        : `👥요원 ${def.popUse}명`;
+        ? `${ozIcon('res-power', 13, 'icon-power')}대기 -${eff.powerIdle}/s, 사격 -${eff.powerShot}`
+        : `${ozIcon('res-agent', 13)}요원 ${def.popUse}명`;
       let nextPreview = '';
       if (lv < 3) {
         const nextEff = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
-        const perkHint = lv + 1 === 3 && nextEff.perkLabel ? ` · ★${nextEff.perkLabel.split(' (')[0]}` : '';
+        const perkHint = lv + 1 === 3 && nextEff.perkLabel ? ` · ★${escapeHtml(nextEff.perkLabel.split(' (')[0])}` : '';
         nextPreview = ` → [Lv.${lv + 1}: 화력 ${nextEff.damage.toFixed(1)} · 연사 ${nextEff.fireRate.toFixed(2)}/s${perkHint}]`;
       } else if (eff.perkLabel) {
-        nextPreview = ` · ★${eff.perkLabel}`;
+        nextPreview = ` · ★${escapeHtml(eff.perkLabel)}`;
       }
-      setDetailText(
-        `${def.icon} [${def.name} Lv.${lv}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${eff.range.toFixed(1)} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${nextPreview}`,
+      setDetailHtml(
+        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${eff.range.toFixed(1)} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${nextPreview}`,
         actionHtml
       );
     } else if (ZS.Game.isUpgradeableDef(def)) {
       const prof = ZS.Game.getStructLevelProfile(def, lv);
       let statSummary = '';
       if (def.subType === 'wall') {
-        statSummary = prof.perkLabel ? `★${prof.perkLabel}` : `차단 방호벽`;
+        statSummary = prof.perkLabel ? `★${escapeHtml(prof.perkLabel)}` : '차단 방호벽';
       } else if (def.id === 'razor_pad') {
-        statSummary = `지속피해 ${prof.trapDps}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${prof.perkLabel ? ` · ★${prof.perkLabel}` : ''}`;
+        statSummary = `지속피해 ${prof.trapDps}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${prof.perkLabel ? ` · ★${escapeHtml(prof.perkLabel)}` : ''}`;
       } else if (def.subType === 'power') {
-        statSummary = `주간 충전 +${prof.dayCharge}⚡ · 저장 용량 +${prof.powerCap}⚡`;
+        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${prof.dayCharge} · 저장 용량 +${prof.powerCap}`;
       } else if (def.subType === 'housing') {
-        statSummary = `요원 수용 +${prof.popCap}👥 · 안락함 +${prof.cozy}💛`;
+        statSummary = `${ozIcon('res-agent', 13)}요원 수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }
       if (lv < 3) {
         const nextProf = ZS.Game.getStructLevelProfile(def, lv + 1);
-        const fid = st.floorGrid[ty] && st.floorGrid[ty][tx];
-        const fDef = fid ? ZS.DATA.ITEMS[fid] : null;
-        const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
+        const fid2 = st.floorGrid[ty] && st.floorGrid[ty][tx];
+        const fDef2 = fid2 ? ZS.DATA.ITEMS[fid2] : null;
+        const hpMult = 1 + (fDef2 && fDef2.hpMultBonus ? fDef2.hpMultBonus : 0);
         const nextMaxHp = Math.round(nextProf.baseMaxHp * hpMult);
-        const perkHint = lv + 1 === 3 && nextProf.perkLabel ? ` · ★${nextProf.perkLabel.split(' (')[0]}` : '';
+        const perkHint = lv + 1 === 3 && nextProf.perkLabel ? ` · ★${escapeHtml(nextProf.perkLabel.split(' (')[0])}` : '';
         statSummary += ` → [Lv.${lv + 1}: HP ${nextMaxHp}${perkHint}]`;
       }
-      setDetailText(`${def.icon} [${def.name} Lv.${lv}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
+      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
     } else {
-      setDetailText(`${def.icon} [${def.name}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${def.desc}`);
+      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${escapeHtml(def.desc)}`);
     }
 
     const upStructBtn = document.getElementById('btn-upgrade-struct');
@@ -611,16 +791,15 @@ window.ZS = window.ZS || {};
       if (!removed && target && rank >= 1) {
         const def = ZS.DATA.ITEMS[target.id];
         const rInfo = ZS.Game.getVeterancyRankInfo(rank);
-        const rankSymbol = rank >= 3 ? '★' : rank === 2 ? '︾' : '▾';
-        setDetailText(
-          `⚠️ [${def ? def.name : target.id}] 철거 확인 — ${rInfo.name} 배지(${Math.floor(target.xp || 0)} XP) 계급이 사라집니다.`,
-          `<span class="detail-rank-box"><span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${rankSymbol}</span><span class="detail-rank-name" style="color:${rInfo.color};">${rInfo.name}</span></span><button id="btn-confirm-demolish" class="detail-demolish-confirm-btn">🗑️ 계급 소멸 감수하고 철거</button>`
+        setDetailHtml(
+          `${ozIcon('state-alert', 14, 'icon-danger')} <b>[${escapeHtml(def ? def.name : target.id)}]</b> 철거 확인 — ${escapeHtml(rInfo.name)} 배지(${Math.floor(target.xp || 0)} XP) 계급이 사라집니다.`,
+          `<span class="detail-rank-box"><span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span><span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span></span><button id="btn-confirm-demolish" class="detail-demolish-confirm-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>계급 소멸 감수하고 철거</span></button>`
         );
         const confirmBtn = document.getElementById('btn-confirm-demolish');
         if (confirmBtn) {
           confirmBtn.addEventListener('click', () => {
             if (ZS.Game.removeAt(tx, ty, true)) {
-              setDetailText('🗑️ [철거 완료] 건설·강화 자원의 80%를 회수했습니다.');
+              setDetailHtml(`${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 완료]</b> 건설·강화 자원의 80%를 회수했습니다.`);
             }
           });
         }
@@ -635,14 +814,14 @@ window.ZS = window.ZS || {};
         if (src && src.id !== 'command_hq') {
           uiState.movingSource = { tx, ty };
           const def = ZS.DATA.ITEMS[src.id];
-          setDetailText(`🔄 [${def ? def.name : src.id}] 선택됨 — 이동할 빈 타일을 클릭하세요.`);
+          setDetailHtml(`${ozIcon('tool-move', 14)} <b>[${escapeHtml(def ? def.name : src.id)}]</b> 선택됨 — 이동할 빈 타일을 클릭하세요.`);
         } else {
           ZS.Audio.playError();
         }
       } else {
         if (uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) {
           uiState.movingSource = null;
-          setDetailText('🔄 이동 취소됨 — 옮길 다른 시설을 클릭하세요.');
+          setDetailHtml(`${ozIcon('tool-move', 14)} 이동 취소됨 — 옮길 다른 시설을 클릭하세요.`);
         } else if (ZS.Game.moveStructure(uiState.movingSource.tx, uiState.movingSource.ty, tx, ty)) {
           uiState.movingSource = null;
         }
@@ -668,12 +847,22 @@ window.ZS = window.ZS || {};
       }
 
       if (e.button === 0) {
+        if (uiState.dockCollapsed && uiState.mode === 'build') {
+          setDockCollapsed(false);
+        }
         const g = ZS.Iso.screenToGrid(e.clientX, e.clientY);
+        uiState.pointerClient = { x: e.clientX, y: e.clientY, inside: true };
         uiState.hoverTile = { tx: g.tx, ty: g.ty };
         isLeftPainting = true;
         lastPaintKey = `${g.tx},${g.ty}`;
         handlePrimaryTileAction(g.tx, g.ty, g.gx, g.gy, false);
+        updateCursorTooltip();
       }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      uiState.pointerClient.inside = false;
+      updateCursorTooltip();
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -686,8 +875,11 @@ window.ZS = window.ZS || {};
         return;
       }
 
+      const overCanvas = e.target === canvas;
+      uiState.pointerClient = { x: e.clientX, y: e.clientY, inside: overCanvas };
       const g = ZS.Iso.screenToGrid(e.clientX, e.clientY);
       uiState.hoverTile = { tx: g.tx, ty: g.ty };
+      updateCursorTooltip();
 
       if (isLeftPainting) {
         const key = `${g.tx},${g.ty}`;
@@ -726,7 +918,11 @@ window.ZS = window.ZS || {};
       } else if (e.code === 'KeyM') {
         setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
       } else if (e.code === 'KeyX') {
+        if (uiState.dockCollapsed) setDockCollapsed(false);
         setToolMode(uiState.mode === 'remove' ? 'inspect' : 'remove');
+      } else if (e.code === 'Tab') {
+        e.preventDefault();
+        setDockCollapsed(!uiState.dockCollapsed);
       } else if (e.code === 'Space' && document.activeElement === document.body) {
         ZS.Iso.resetCamera();
       }
@@ -740,6 +936,22 @@ window.ZS = window.ZS || {};
     document.getElementById('tool-inspect').addEventListener('click', () => setToolMode('inspect'));
     document.getElementById('tool-move').addEventListener('click', () => setToolMode('move'));
     document.getElementById('tool-remove').addEventListener('click', () => setToolMode('remove'));
+
+    const dockToggleBtn = document.getElementById('btn-toggle-dock');
+    if (dockToggleBtn) {
+      dockToggleBtn.addEventListener('click', () => setDockCollapsed(true));
+    }
+    const dockExpandBtn = document.getElementById('btn-expand-dock');
+    if (dockExpandBtn) {
+      dockExpandBtn.addEventListener('click', () => setDockCollapsed(false));
+    }
+    const hudResToggleBtn = document.getElementById('btn-toggle-hud-res');
+    if (hudResToggleBtn) {
+      hudResToggleBtn.addEventListener('click', () => {
+        uiState.hudResCompact = !uiState.hudResCompact;
+        syncDockAndHudState();
+      });
+    }
 
     document.getElementById('btn-start-wave').addEventListener('click', () => {
       setToolMode('inspect');
@@ -785,8 +997,29 @@ window.ZS = window.ZS || {};
 
     document.getElementById('btn-sound').addEventListener('click', () => {
       const muted = ZS.Audio.toggleMute();
-      document.getElementById('btn-sound').textContent = muted ? '🔇' : '🔊';
+      const soundBtn = document.getElementById('btn-sound');
+      soundBtn.innerHTML = ozIcon(muted ? 'sys-sound-off' : 'sys-sound-on', 16);
+      soundBtn.classList.toggle('toggle-off', muted);
     });
+
+    const shakeBtn = document.getElementById('btn-shake');
+    if (shakeBtn && ZS.Game.isScreenShakeEnabled) {
+      const syncShakeBtn = () => {
+        const on = ZS.Game.isScreenShakeEnabled();
+        shakeBtn.innerHTML = `${ozIcon(on ? 'sys-shake-on' : 'sys-shake-off', 16)}<span>${on ? '흔들림 ON' : '흔들림 OFF'}</span>`;
+        shakeBtn.classList.toggle('toggle-off', !on);
+      };
+      syncShakeBtn();
+      shakeBtn.addEventListener('click', () => {
+        const on = ZS.Game.toggleScreenShake();
+        syncShakeBtn();
+        showWaveBanner(
+          on ? '화면 흔들림 켜짐' : '화면 흔들림 꺼짐',
+          on ? '폭격·보스 등장·본부 피격 시 미세한 진동 피드백이 재생됩니다.' : '카메라 화면 흔들림 연출이 비활성화되었습니다.',
+          'info'
+        );
+      });
+    }
 
     const hqBoxEl = document.getElementById('hud-hq-box');
     if (hqBoxEl) {
@@ -850,12 +1083,19 @@ window.ZS = window.ZS || {};
     const st = ZS.Game.state;
     const P = ZS.DATA.PALETTE;
     const pwrVal = Math.round(st.power);
+    const isNightBlackout = st.isNight && st.power <= 0.01;
     document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
     const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
     const pwrBar = document.getElementById('res-power-bar');
     pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
     pwrBar.style.background = pwrPct > 35 ? P.power : pwrPct > 5 ? P.healthMid : P.danger;
-    document.querySelector('.power-pill').classList.toggle('blackout', st.isNight && st.power <= 0.01);
+    document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
+
+    const pwrIconEl = document.getElementById('res-power-icon');
+    if (pwrIconEl) {
+      pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
+      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
+    }
 
     const left = st.spawnQueue.length + st.zombies.length;
     document.getElementById('hud-enemies-left').textContent = `${left}기`;
@@ -953,16 +1193,16 @@ window.ZS = window.ZS || {};
     bar.classList.remove('hidden');
     bar.innerHTML = `
       <div class="debug-head">
-        <span class="debug-title">🛠️ DEBUG · ${env.saveKey === 'outpost_zero_save_dev' ? 'DEV SAVE' : 'LOCAL'}</span>
+        <span class="debug-title">${ozIcon('act-repair', 14, 'icon-coin')}<span>DEBUG · ${env.saveKey === 'outpost_zero_save_dev' ? 'DEV SAVE' : 'LOCAL'}</span></span>
         <button id="btn-debug-collapse" class="debug-toggle-btn" title="디버그 바 접기/펼치기">접기 ▴</button>
       </div>
       <div class="debug-body">
-        <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">+500 자원</button>
-        <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">⚡ 전력 완충/방전</button>
-        <button id="btn-dbg-pop" class="debug-btn" title="가용 요원 및 임시 숙소 수용량 +2">👥 요원 +2</button>
-        <button id="btn-dbg-wave1" class="debug-btn" title="주간 정비 상태에서 웨이브 +1">⏭️ 웨이브 +1</button>
-        <button id="btn-dbg-wave5" class="debug-btn" title="주간 정비 상태에서 웨이브 +5 (보스전 등)">⏭️ +5</button>
-        <button id="btn-dbg-xp" class="debug-btn" title="조회 중인 초소·포탑에 숙련도 +20 XP 즉시 부여">🎖️ 선택 시설 XP +20</button>
+        <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">${ozIcon('res-coin', 13, 'icon-coin')}<span>+500 자원</span></button>
+        <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">${ozIcon('res-power', 13, 'icon-power')}<span>전력 완충/방전</span></button>
+        <button id="btn-dbg-pop" class="debug-btn" title="가용 요원 및 임시 숙소 수용량 +2">${ozIcon('res-agent', 13)}<span>요원 +2</span></button>
+        <button id="btn-dbg-wave1" class="debug-btn" title="주간 정비 상태에서 웨이브 +1">${ozIcon('act-speed', 13)}<span>웨이브 +1</span></button>
+        <button id="btn-dbg-wave5" class="debug-btn" title="주간 정비 상태에서 웨이브 +5 (보스전 등)">${ozIcon('act-speed', 13)}<span>+5</span></button>
+        <button id="btn-dbg-xp" class="debug-btn" title="조회 중인 초소·포탑에 숙련도 +20 XP 즉시 부여">${ozIcon('state-rank', 13, 'icon-coin')}<span>선택 시설 XP +20</span></button>
       </div>
     `;
 
@@ -999,7 +1239,7 @@ window.ZS = window.ZS || {};
     ZS.Iso.resetCamera();
 
     const env = ZS.Game.getEnvInfo ? ZS.Game.getEnvInfo() : { isDevBuild: false, isDevEnvironment: false, isDebugMode: false };
-    const ver = ZS.DATA.VERSION || 'v0.2.0';
+    const ver = ZS.DATA.VERSION || 'v0.3.0';
     const hudVer = document.getElementById('hud-version');
     const guideVer = document.getElementById('guide-version');
     if (hudVer) {
@@ -1025,7 +1265,7 @@ window.ZS = window.ZS || {};
     if (!ZS.Game.loadGame()) {
       ZS.Game.initNewGame();
       showWaveBanner(
-        '📡 OUTPOST ZERO 지휘권 인수 완료',
+        'OUTPOST ZERO 지휘권 인수 완료',
         '낮 동안 방어선·발전기·모던 쉘터를 구축하고 [웨이브 시작]을 눌러 야간 방어에 돌입하세요!',
         'info'
       );
