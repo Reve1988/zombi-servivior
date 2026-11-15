@@ -439,7 +439,7 @@ ZS.Renderer = (function () {
     }
 
     // ── Info Layer (Drawn above darkness: identical daytime brightness & contrast) ──
-    // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout ⚡OFF Warnings
+    // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout OFF Warnings
     drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale);
 
     // 10. Floating Texts (Damage, Loot, Buff Callouts)
@@ -2809,20 +2809,26 @@ ZS.Renderer = (function () {
         const cPrev = ZS.Game.getPlacementCozyPreview(uiState.selectedItemId, htx, hty);
         if (cPrev && (cPrev.isDiminished || cPrev.isFloorCapped || cPrev.gain > 0)) {
           const p = Iso.gridToScreen(htx + 0.5, hty + 0.5, 26);
+          const isNormalCozy = !cPrev.isFloorCapped && !cPrev.isDiminished;
           const label = cPrev.isFloorCapped
             ? '상한 도달'
             : cPrev.isDiminished
             ? `+${cPrev.gain} (50%)`
-            : `💛+${cPrev.gain}`;
-          const col = cPrev.isFloorCapped ? '#A9BCCF' : cPrev.isDiminished ? '#94A3B8' : P.gold;
-          const fontPx = Math.max(11, Math.round(12 * zScale));
+            : `+${cPrev.gain}`;
+          const col = cPrev.isFloorCapped ? '#A9BCCF' : cPrev.isDiminished ? '#A9BCCF' : P.gold;
+          const fontPx = Math.max(12, Math.round(12.5 * zScale));
           ctx.font = `700 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
           ctx.textAlign = 'center';
+          const textX = isNormalCozy ? p.x + 6 : p.x;
           ctx.strokeStyle = P.outlineDark || '#1B2430';
           ctx.lineWidth = 3;
-          ctx.strokeText(label, p.x, p.y);
+          ctx.lineJoin = 'round';
+          ctx.strokeText(label, textX, p.y);
           ctx.fillStyle = col;
-          ctx.fillText(label, p.x, p.y);
+          ctx.fillText(label, textX, p.y);
+          if (isNormalCozy) {
+            drawCanvasHeartIcon(ctx, p.x - fontPx * 0.85, p.y - fontPx * 0.36, Math.max(12, fontPx), P.gold, P.outlineDark || '#1B2430');
+          }
         }
       }
     }
@@ -2852,7 +2858,7 @@ ZS.Renderer = (function () {
       }
     }
 
-    // 2. Depth-sorted Structure HP Bars, ⚡OFF Warnings, and Zombie HP Bars
+    // 2. Depth-sorted Structure HP Bars, Power-OFF Warnings, and Zombie HP Bars
     const nightEyes = [];
     for (let i = 0; i < renderList.length; i++) {
       const item = renderList[i];
@@ -2903,24 +2909,23 @@ ZS.Renderer = (function () {
         if (isUnpowered) {
           const warnZ = isDamaged ? 35 : 29;
           const warnPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, warnZ);
-          const badgeScale = Math.max(9 / 11, zScale);
-          const fontPx = Math.round(11 * badgeScale);
-          const pillW = 40 * badgeScale;
-          const pillH = 14 * badgeScale;
+          const badgeScale = Math.max(1.0, zScale);
+          const fontPx = Math.max(12, Math.round(12 * badgeScale));
+          const pillW = 46 * badgeScale;
+          const pillH = 16 * badgeScale;
           const pillY = warnPos.y - pillH + 2 * badgeScale;
           ctx.fillStyle = P.outlineDark || '#1B2430';
           ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
           ctx.strokeStyle = P.danger;
-          ctx.lineWidth = 1.2;
+          ctx.lineWidth = 1.3;
           ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
 
-          ctx.font = `bold ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+          drawCanvasPowerOffIcon(ctx, warnPos.x - 13 * badgeScale, pillY + pillH * 0.5, Math.max(12, 12 * badgeScale), P.danger);
+          ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
           ctx.textAlign = 'center';
-          const textY = pillY + pillH * 0.5 + fontPx * 0.34;
-          ctx.fillStyle = P.power;
-          ctx.fillText('⚡', warnPos.x - 11.5 * badgeScale, textY);
+          const textY = pillY + pillH * 0.5 + fontPx * 0.35;
           ctx.fillStyle = P.danger;
-          ctx.fillText('OFF', warnPos.x + 5.5 * badgeScale, textY);
+          ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
         }
       } else if (item.kind === 'zombie') {
         const z = item.z;
@@ -2968,6 +2973,58 @@ ZS.Renderer = (function () {
       ctx.restore();
     }
 
+    ctx.restore();
+  }
+
+  function drawCanvasHeartIcon(ctx, cx, cy, size, fillCol, strokeCol) {
+    const s = (size || 12) / 24;
+    ctx.save();
+    ctx.translate(cx - 12 * s, cy - 12 * s);
+    ctx.beginPath();
+    ctx.moveTo(12 * s, 20 * s);
+    ctx.bezierCurveTo(12 * s, 20 * s, 4.5 * s, 15.4 * s, 4.5 * s, 9.8 * s);
+    ctx.bezierCurveTo(4.5 * s, 6.8 * s, 7.2 * s, 5.2 * s, 9.8 * s, 5.6 * s);
+    ctx.bezierCurveTo(10.9 * s, 5.8 * s, 11.6 * s, 6.4 * s, 12 * s, 7.2 * s);
+    ctx.bezierCurveTo(12.4 * s, 6.4 * s, 13.1 * s, 5.8 * s, 14.2 * s, 5.6 * s);
+    ctx.bezierCurveTo(16.8 * s, 5.2 * s, 19.5 * s, 6.8 * s, 19.5 * s, 9.8 * s);
+    ctx.bezierCurveTo(19.5 * s, 15.4 * s, 12 * s, 20 * s, 12 * s, 20 * s);
+    ctx.closePath();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if (strokeCol) {
+      ctx.strokeStyle = strokeCol;
+      ctx.lineWidth = Math.max(2.4, 3.2 * s);
+      ctx.stroke();
+    }
+    ctx.fillStyle = fillCol || '#FFD34D';
+    ctx.fill();
+    ctx.strokeStyle = fillCol || '#FFD34D';
+    ctx.lineWidth = Math.max(1.2, 1.8 * s);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCanvasPowerOffIcon(ctx, cx, cy, size, col) {
+    const s = (size || 12) / 24;
+    ctx.save();
+    ctx.translate(cx - 12 * s, cy - 12 * s);
+    ctx.strokeStyle = col || '#FF4D6D';
+    ctx.lineWidth = Math.max(1.4, 2.1 * s);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(13 * s, 2.5 * s);
+    ctx.lineTo(5 * s, 13.5 * s);
+    ctx.lineTo(11 * s, 13.5 * s);
+    ctx.lineTo(10 * s, 21.5 * s);
+    ctx.lineTo(18 * s, 10.5 * s);
+    ctx.lineTo(12 * s, 10.5 * s);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(3.5 * s, 3.5 * s);
+    ctx.lineTo(20.5 * s, 20.5 * s);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -3078,7 +3135,8 @@ ZS.Renderer = (function () {
       const p = Iso.gridToScreen(ft.x, ft.y, ft.z);
       const alpha = Math.min(1, (ft.life / ft.maxLife) * 1.4);
       ctx.globalAlpha = Math.max(0, alpha);
-      ctx.font = `bold ${Math.round((ft.size || 12) * Math.min(1.25, Math.max(0.85, zScale)))}px 'Pretendard', 'Segoe UI', sans-serif`;
+      const fontPx = Math.max(12, Math.round((ft.size || 12) * Math.min(1.25, Math.max(0.95, zScale))));
+      ctx.font = `bold ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
       if (ft.strokeColor) {
         ctx.strokeStyle = ft.strokeColor;
         ctx.lineWidth = 2.2 * Math.min(1.2, zScale);
