@@ -71,22 +71,38 @@ window.ZS = window.ZS || {};
     Object.values(ZS.DATA.ITEMS).forEach((def) => {
       if (def.category !== uiState.activeCategory) return;
 
-      const isLocked = def.unlockedByBoss && !st.bossDefeated;
+      const bossLocked = def.unlockedByBoss && !st.bossDefeated;
       const voucherCount = st.freeVouchers[def.id] || 0;
+      const reqHq = def.reqHqLevel || 1;
+      const hqLockedRaw = (st.hqLevel || 1) < reqHq;
+      const voucherBypass = hqLockedRaw && !bossLocked && voucherCount > 0;
+      const isLocked = bossLocked || (hqLockedRaw && !voucherBypass);
 
       const card = document.createElement('div');
       card.className =
         'item-card' +
         (uiState.mode === 'build' && uiState.selectedItemId === def.id ? ' selected' : '') +
-        (isLocked ? ' locked' : '');
+        (isLocked ? ' locked' : '') +
+        (voucherBypass ? ' voucher-bypass' : '');
 
       const tag = getCardTagInfo(def);
 
+      let badgeHtml = '';
+      if (bossLocked) {
+        badgeHtml = `<span class="card-lock-badge">🔒 보스</span>`;
+      } else if (voucherBypass) {
+        badgeHtml = `<span class="card-voucher-badge">보급권 ${voucherCount}</span>`;
+      } else if (hqLockedRaw) {
+        badgeHtml = `<span class="card-lock-badge">🔒 본부 Lv.${reqHq}</span>`;
+      }
+
       let costHtml = '';
-      if (isLocked) {
+      if (bossLocked) {
         costHtml = `<span class="cost-chip short">🔒 보스 처치 해금</span>`;
       } else if (voucherCount > 0) {
-        costHtml = `<span class="cost-chip free">🎁 무료 보급 x${voucherCount}</span>`;
+        costHtml = `<span class="cost-chip free">🎁 보급권 ${voucherCount}</span>`;
+      } else if (hqLockedRaw) {
+        costHtml = `<span class="cost-chip short">🔒 본부 Lv.${reqHq} 필요</span>`;
       } else {
         const c = def.cost || {};
         if (c.wood) {
@@ -101,6 +117,7 @@ window.ZS = window.ZS || {};
       }
 
       card.innerHTML = `
+        ${badgeHtml}
         <div class="card-top">
           <span class="card-icon">${def.icon}</span>
           <span class="card-title">${def.name}</span>
@@ -110,6 +127,21 @@ window.ZS = window.ZS || {};
       `;
 
       card.addEventListener('click', () => {
+        if (isLocked) {
+          ZS.Audio.playError();
+          if (bossLocked) {
+            showWaveBanner('특수 기념비 잠김', 'WAVE 5 알파 타이탄 변이체를 격파하면 해금됩니다.', 'warn');
+          } else {
+            const reqInfo = ZS.Game.getHqLevelInfo(reqHq);
+            showWaveBanner(
+              `지휘 본부 Lv.${reqHq} 필요`,
+              `[${def.name}] 시설은 지휘 본부를 Lv.${reqHq}(${reqInfo.name})로 증축하면 건설할 수 있습니다.`,
+              'warn'
+            );
+          }
+          inspectTileAt(ZS.DATA.HQ_POS.x, ZS.DATA.HQ_POS.y);
+          return;
+        }
         setToolMode('build', def.id);
       });
 
@@ -147,8 +179,12 @@ window.ZS = window.ZS || {};
     renderItemCards();
   }
 
-  function setDetailText(msg) {
+  function setDetailText(msg, actionsHtml) {
     document.getElementById('detail-text').textContent = msg;
+    const actEl = document.getElementById('detail-actions');
+    if (actEl) {
+      actEl.innerHTML = actionsHtml || '';
+    }
   }
 
   function updateHud() {
@@ -167,8 +203,13 @@ window.ZS = window.ZS || {};
       document.getElementById('hud-phase-text').textContent = '작전 실패';
     }
 
+    const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
+    const hqTitleEl = document.getElementById('hud-hq-title');
+    if (hqTitleEl) {
+      hqTitleEl.textContent = `🏛️ 본부 Lv.${st.hqLevel}`;
+    }
     const hqHp = hq ? Math.ceil(hq.hp) : 0;
-    const hqMax = hq ? hq.maxHp : ZS.DATA.HQ_STATS.maxHp;
+    const hqMax = hq ? hq.maxHp : hqInfo.maxHp;
     document.getElementById('hud-hq-hp').textContent = `${hqHp} / ${hqMax}`;
     document.getElementById('hud-hq-bar').style.width = `${Math.max(0, (hqHp / hqMax) * 100)}%`;
 
@@ -253,6 +294,9 @@ window.ZS = window.ZS || {};
     }
 
     renderItemCards();
+    if (uiState.inspectedTile && uiState.mode === 'inspect') {
+      inspectTileAt(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
+    }
     if (!document.getElementById('trader-modal').classList.contains('hidden')) {
       renderTraderModal();
     }
@@ -319,9 +363,33 @@ window.ZS = window.ZS || {};
     }
 
     if (obj.id === 'command_hq') {
+      const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
+      const wpnText = hqInfo.weapon
+        ? `무장: ${hqInfo.weapon.name}(피해 ${hqInfo.weapon.damage}, 사거리 ${hqInfo.weapon.range})`
+        : '무장: 없음(Lv.2 개방)';
+      const upCheck = ZS.Game.canUpgradeHq();
+      let actionHtml = '';
+      if (st.hqLevel < 4) {
+        const nextInfo = ZS.Game.getHqLevelInfo(st.hqLevel + 1);
+        const c = nextInfo.cost || {};
+        const costLabel = `🪵${c.wood || 0} 🔩${c.scrap || 0} 🪙${c.coin || 0}`;
+        const disabledAttr = upCheck.ok ? '' : 'disabled';
+        actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${upCheck.ok ? `${nextInfo.name} 증축` : upCheck.reason}">⬆️ 본부 Lv.${nextInfo.level} 증축 (${costLabel})</button>`;
+      } else {
+        actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.4)</span>`;
+      }
+
       setDetailText(
-        `🏛️ [전술 지휘 본부] 내구도 ${Math.ceil(obj.hp)}/${obj.maxHp} · 기본 충전 +${ZS.DATA.HQ_STATS.baseDayCharge}⚡ · 기본 용량 ${ZS.DATA.HQ_STATS.basePowerCap}⚡ · 기본 숙소 ${ZS.DATA.HQ_STATS.basePopCap}👥`
+        `🏛️ [${hqInfo.name} · Lv.${st.hqLevel}] HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge}⚡ · 용량 ${hqInfo.basePowerCap}⚡ · 숙소 ${hqInfo.basePopCap}👥 · ${wpnText}`,
+        actionHtml
       );
+
+      const upBtn = document.getElementById('btn-upgrade-hq');
+      if (upBtn) {
+        upBtn.addEventListener('click', () => {
+          ZS.Game.upgradeHq();
+        });
+      }
       return;
     }
 
@@ -526,6 +594,15 @@ window.ZS = window.ZS || {};
       const muted = ZS.Audio.toggleMute();
       document.getElementById('btn-sound').textContent = muted ? '🔇' : '🔊';
     });
+
+    const hqBoxEl = document.getElementById('hud-hq-box');
+    if (hqBoxEl) {
+      hqBoxEl.addEventListener('click', () => {
+        setToolMode('inspect');
+        ZS.Iso.resetCamera();
+        inspectTileAt(ZS.DATA.HQ_POS.x, ZS.DATA.HQ_POS.y);
+      });
+    }
 
     document.getElementById('btn-center').addEventListener('click', () => {
       ZS.Iso.resetCamera();
