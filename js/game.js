@@ -365,7 +365,7 @@ ZS.Game = (function () {
         const pts = [{ x, y }];
         let breach = null;
 
-        for (let stepIdx = 0; stepIdx < 48; stepIdx++) {
+        for (let stepIdx = 0; stepIdx < 80; stepIdx++) {
           const step = flow.next[y] && flow.next[y][x];
           if (!step) break;
           x += step.dx;

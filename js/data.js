@@ -369,7 +369,7 @@ ZS.DATA = (function () {
       allowWallMount: false,
       gateSlowRadius: 1.15,
       gateSlowFactor: 0.75,
-      desc: '[전술 관문] 성벽과 매끄럽게 연결되며 좀비를 이 통로로 유도합니다. 통과 직전 적을 25% 둔화시킵니다 (거치 불가).'
+      desc: '[전술 방호문] 성벽과 연결되어 폐쇄 방어선의 좀비 무리를 문 앞 킬존으로 강력하게 유인합니다. 접근 적을 25% 둔화시킵니다 (거치 불가).'
     },
     razor_pad: {
       id: 'razor_pad',
