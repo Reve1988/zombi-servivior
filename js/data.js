@@ -169,12 +169,33 @@ ZS.DATA = (function () {
     4: { level: 4, name: '강화 작전 생활관', reqHqLevel: 4, upCost: { wood: 36, scrap: 52, coin: 34 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'housing_t4', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
   };
 
+  const GATE_TIERS = {
+    1: { level: 1, name: '철조망 바리케이드 통문', reqHqLevel: 1, cost: { wood: 6, scrap: 8 }, maxHp: 240, gateSlowRadius: 1.15, gateSlowFactor: 0.82, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, topZ: 16.5 },
+    2: { level: 2, name: '전술 방호 게이트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 6 }, maxHp: 480, gateSlowRadius: 1.15, gateSlowFactor: 0.75, thornsRatio: 0, thornsMin: 0, allowWallMount: false, topZ: 26.5 },
+    3: { level: 3, name: '전자식 쇼크 게이트', reqHqLevel: 3, upCost: { wood: 12, scrap: 28, coin: 18 }, maxHp: 880, gateSlowRadius: 1.25, gateSlowFactor: 0.60, thornsRatio: 0.35, thornsMin: 8, allowWallMount: false, topZ: 28.0 }
+  };
+
+  const TRAP_TIERS = {
+    1: { level: 1, name: '스파이크 철조망 매트', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 4.6 },
+    2: { level: 2, name: '소투스 칼날 매트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 4.7 },
+    3: { level: 3, name: '고전압 파쇄 패드', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 5.0 }
+  };
+
+  const REPAIR_TIERS = {
+    1: { level: 1, name: '현장 수리 거치대', reqHqLevel: 1, cost: { wood: 10, scrap: 14 }, maxHp: 165, auraRadius: 2.2, regenPerSec: 2.5, cozy: 5, cozyGroup: 'repair_t1', lightRadius: 0, topZ: 18 },
+    2: { level: 2, name: '필드 로봇 정비 베이', reqHqLevel: 2, upCost: { wood: 8, scrap: 18, coin: 12 }, maxHp: 230, auraRadius: 2.6, regenPerSec: 5.0, cozy: 9, cozyGroup: 'repair_t2', lightRadius: 0, topZ: 25 },
+    3: { level: 3, name: '나노 드론 정비소', reqHqLevel: 3, upCost: { wood: 12, scrap: 32, coin: 24 }, maxHp: 320, auraRadius: 3.2, regenPerSec: 9.5, cozy: 15, cozyGroup: 'repair_t3', lightRadius: 2.2, lightColor: 'rgba(74, 222, 128, 0.32)', topZ: 30 }
+  };
+
   const TIER_MAPS = {
     barricade_wall: WALL_TIERS,
     solar_array: SOLAR_TIERS,
     wind_turbine: WIND_TIERS,
     battery_bank: BATTERY_TIERS,
-    field_tent: BARRACKS_TIERS
+    field_tent: BARRACKS_TIERS,
+    tactical_gate: GATE_TIERS,
+    razor_pad: TRAP_TIERS,
+    repair_bay: REPAIR_TIERS
   };
 
   return {
@@ -308,11 +329,12 @@ ZS.DATA = (function () {
   WIND_TIERS,
   BATTERY_TIERS,
   BARRACKS_TIERS,
+  GATE_TIERS,
+  TRAP_TIERS,
+  REPAIR_TIERS,
   TIER_MAPS,
 
   LV3_PERK_LABELS: {
-    tactical_gate: '고장력 제압 게이트 (근접 둔화 40% · 피격 35% 반사)',
-    razor_pad: '취약화 철조망 (둔화 60% · 받는 사격 피해 +15%)',
     rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
@@ -404,17 +426,18 @@ ZS.DATA = (function () {
     },
     tactical_gate: {
       id: 'tactical_gate',
-      name: '전술 방호 게이트',
+      name: '철조망 바리케이드 통문',
       category: 'defense',
       layer: 'struct',
       subType: 'gate',
-      reqHqLevel: 2,
-      cost: { wood: 8, scrap: 16 },
-      maxHp: 420,
+      reqHqLevel: 1,
+      cost: { wood: 6, scrap: 8 },
+      maxHp: 240,
       allowWallMount: false,
       gateSlowRadius: 1.15,
-      gateSlowFactor: 0.75,
-      desc: '[전술 방호문] 성벽과 연결되어 폐쇄 방어선의 좀비 무리를 문 앞 킬존으로 강력하게 유인합니다. 접근 적을 25% 둔화시킵니다 (거치 불가).'
+      gateSlowFactor: 0.82,
+      thornsRatio: 0.15,
+      desc: '[3단 진화 전술 관문] 철조망 통문(1단·둔화 18%·반사 15%) → 전술 방호 게이트(2단·25%) → 전자식 쇼크 게이트(3단·40%·반사 35%). 성벽 킬존 유인 가중치(2.0) 고정 (거치 불가).'
     },
     razor_pad: {
       id: 'razor_pad',
@@ -428,7 +451,7 @@ ZS.DATA = (function () {
       maxHp: 180,
       trapDps: 11,
       slowFactor: 0.55,
-      desc: '성벽 앞이나 게이트 입구에 까는 무전력 바닥 둔화·출혈 함정'
+      desc: '[3단 진화 바닥 함정] 스파이크 매트(1단·11/s·둔화 45%) → 소투스 칼날(2단·19/s·52%) → 고전압 파쇄 패드(3단·30/s·60%·피해+15%).'
     },
 
     // ================= DEFENSE: MANNED POSTS (Pop: 1, Power: 0) =================
@@ -685,17 +708,17 @@ ZS.DATA = (function () {
     },
     repair_bay: {
       id: 'repair_bay',
-      name: '필드 로봇 정비 베이',
+      name: '현장 수리 거치대',
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      reqHqLevel: 2,
-      cost: { wood: 10, scrap: 26, coin: 12 },
-      maxHp: 210,
-      cozy: 8,
-      cozyGroup: 'decor_repair',
-      aura: { radius: 2.6, regenPerSec: 4.5 },
-      desc: '반경 2.6칸 내 손상된 방벽과 시설을 전투 중에도 초당 4.5 HP씩 실시간 자동 수리합니다.'
+      reqHqLevel: 1,
+      cost: { wood: 10, scrap: 14 },
+      maxHp: 165,
+      cozy: 5,
+      cozyGroup: 'repair_t1',
+      aura: { radius: 2.2, regenPerSec: 2.5 },
+      desc: '[3단 진화 자동 수리] 수리 거치대(1단·2.2칸 +2.5/s) → 로봇 정비 베이(2단·2.6칸 +5/s) → 나노 드론 정비소(3단·3.2칸 +9.5/s·야간 조명).'
     },
     lounge_set: {
       id: 'lounge_set',

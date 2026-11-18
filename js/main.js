@@ -116,14 +116,20 @@ window.ZS = window.ZS || {};
       };
     }
     if (def.category === 'decor') {
+      if (def.id === 'repair_bay' && def.aura && def.aura.regenPerSec) {
+        return {
+          html: `${ozIcon('act-repair', 13, 'icon-heal')}<span>수리 +${def.aura.regenPerSec}/s ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`,
+          cls: 'tag-manned'
+        };
+      }
       const pwrPrefix = def.requiresPower ? `${ozIcon('res-power', 13, 'icon-power')}<span>전등 ·</span>` : '';
       if (preview && preview.isDiminished) {
         return { html: `${pwrPrefix}<span>+${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
       }
       return { html: `${pwrPrefix}${ozIcon('res-cozy', 13, 'icon-coin')}<span>안락함 +${def.cozy || 0}</span>`, cls: 'tag-cozy' };
     }
-    if (def.subType === 'trap') return { html: `<span>무전력 둔화 함정</span>`, cls: '' };
-    if (def.subType === 'gate') return { html: `<span>전술 관문 · 둔화 25%</span>`, cls: '' };
+    if (def.subType === 'trap') return { html: `<span>초당 ${def.trapDps} · 둔화 45%</span>`, cls: '' };
+    if (def.subType === 'gate') return { html: `<span>전술 관문 · 둔화 18%</span>`, cls: '' };
     if (def.id === 'barricade_wall') return { html: `<span>3단 진화 · 반사 15%</span>`, cls: '' };
     return { html: `<span>방호벽 · HP ${def.maxHp}</span>`, cls: '' };
   }
@@ -1092,9 +1098,14 @@ window.ZS = window.ZS || {};
         statSummary = parts.join(' · ');
       } else if (def.subType === 'gate') {
         const slowPct = Math.round((1 - (prof.gateSlowFactor || 0.75)) * 100);
-        statSummary = `전술 관문 · 주변 둔화 ${slowPct}%${prof.thornsRatio > 0 ? ` · 반사 ${Math.round(prof.thornsRatio * 100)}%` : ''}${prof.perkLabel ? ` · ★${escapeHtml(prof.perkLabel)}` : ''}`;
+        const slowRad = prof.gateSlowRadius || 1.15;
+        statSummary = `전술 관문 · 주변 둔화 ${slowPct}% (반경 ${slowRad}칸)${prof.thornsRatio > 0 ? ` · 반사 ${Math.round(prof.thornsRatio * 100)}% (최소 ${prof.thornsMin || 4})` : ''}`;
       } else if (def.id === 'razor_pad') {
-        statSummary = `지속피해 ${prof.trapDps}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${prof.perkLabel ? ` · ★${escapeHtml(prof.perkLabel)}` : ''}`;
+        const vulnTxt = prof.vulnMult > 1 ? ` · 받는피해 +${Math.round((prof.vulnMult - 1) * 100)}%` : '';
+        statSummary = `지속피해 ${prof.trapDps}/s · 마모 ${prof.trapWear}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${vulnTxt}`;
+      } else if (def.id === 'repair_bay') {
+        const lightTxt = prof.lightRadius > 0 ? ` · 야간 조명 ${prof.lightRadius}칸` : '';
+        statSummary = `${ozIcon('act-repair', 13, 'icon-heal')}수리 반경 ${prof.auraRadius}칸 · 회복 +${prof.regenPerSec} HP/s · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}${lightTxt}`;
       } else if (def.subType === 'power') {
         const nightTxt = prof.nightGen > 0 ? ` · 야간 +${prof.nightGen.toFixed(2)}/s` : '';
         statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${prof.dayCharge}${nightTxt} · 저장 용량 +${prof.powerCap}`;
@@ -1112,6 +1123,12 @@ window.ZS = window.ZS || {};
         const extraHint =
           def.id === 'barricade_wall' && lv + 1 === 2
             ? ' · 상부 거치 해금'
+            : def.subType === 'gate'
+            ? ` · 둔화 ${Math.round((1 - (nextProf.gateSlowFactor || 0.75)) * 100)}%`
+            : def.id === 'razor_pad'
+            ? ` · 피해 ${nextProf.trapDps}/s`
+            : def.id === 'repair_bay'
+            ? ` · 회복 +${nextProf.regenPerSec}/s`
             : def.subType === 'power' && nextProf.nightGen > 0
             ? ` · 밤 +${nextProf.nightGen.toFixed(2)}/s`
             : def.subType === 'housing'
