@@ -1228,6 +1228,7 @@ button, input, select {
   font-weight: 700;
   color: #f1f5f9;
   line-height: 1.22;
+  word-break: keep-all;
 }
 
 .card-tag {

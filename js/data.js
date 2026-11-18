@@ -124,7 +124,57 @@ ZS.DATA = (function () {
     deckWood: '#8A6A45',
     deckRail: '#6E5536',
     deckSteelRail: '#3A434E',
-    gateSlowRing: '#C9D3DE'
+    gateSlowRing: '#C9D3DE',
+
+    // 6. Tier Evolution Tokens (share/design/phase2-tokens.md §5)
+    piezoCopper: '#B87333',
+    piezoArc: '#FF8A3D',
+    piezoSpark: '#FFD08A',
+    trapBlade: '#DCE5EE',
+    habitatRoof: '#D96B38',
+    repairNano: '#4ADE80'
+  };
+
+  const WALL_TIERS = {
+    1: { level: 1, name: '철조망 바리케이드', reqHqLevel: 1, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
+    2: { level: 2, name: '헤스코 전술 방벽', reqHqLevel: 2, upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
+    3: { level: 3, name: '합금 장갑 성벽', reqHqLevel: 3, upCost: { wood: 6, scrap: 18, coin: 6 }, maxHp: 640, thornsRatio: 0.35, thornsMin: 8, allowWallMount: true, mountBaseZ: 25.4, topZ: 27.7 }
+  };
+
+  const SOLAR_TIERS = {
+    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 38, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'solar_t1', topZ: 12 },
+    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 14, scrap: 28, coin: 6 }, maxHp: 195, dayCharge: 75, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'solar_t2', topZ: 17 },
+    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 18, scrap: 44, coin: 16 }, maxHp: 270, dayCharge: 135, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'solar_t3', topZ: 24 },
+    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 24, scrap: 70, coin: 34 }, maxHp: 370, dayCharge: 220, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'solar_t4', topZ: 34 }
+  };
+
+  const WIND_TIERS = {
+    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'wind_t1', topZ: 30 },
+    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 12, scrap: 26, coin: 6 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'wind_t2', topZ: 44 },
+    3: { level: 3, name: '중형 풍력발전기', reqHqLevel: 3, upCost: { wood: 16, scrap: 42, coin: 16 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'wind_t3', topZ: 60 },
+    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 20, scrap: 66, coin: 32 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'wind_t4', topZ: 70 }
+  };
+
+  const BATTERY_TIERS = {
+    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 70, dayCharge: 6, nightGen: 0, cozy: 1, cozyGroup: 'battery_t1', topZ: 14 },
+    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 8, scrap: 24, coin: 8 }, maxHp: 230, powerCap: 155, dayCharge: 14, nightGen: 0, cozy: 2, cozyGroup: 'battery_t2', topZ: 22 },
+    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 10, scrap: 38, coin: 18 }, maxHp: 300, powerCap: 290, dayCharge: 26, nightGen: 0, cozy: 4, cozyGroup: 'battery_t3', topZ: 33 },
+    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 14, scrap: 64, coin: 36 }, maxHp: 400, powerCap: 480, dayCharge: 42, nightGen: 0, cozy: 7, cozyGroup: 'battery_t4', topZ: 40 }
+  };
+
+  const BARRACKS_TIERS = {
+    1: { level: 1, name: '전술 돔 막사', reqHqLevel: 1, cost: { wood: 24, scrap: 8 }, maxHp: 170, popCap: 1, cozy: 5, cozyGroup: 'housing_t1', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
+    2: { level: 2, name: '확장형 야전 막사', reqHqLevel: 2, upCost: { wood: 22, scrap: 16, coin: 8 }, maxHp: 230, popCap: 2, cozy: 10, cozyGroup: 'housing_t2', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
+    3: { level: 3, name: '모듈러 컨테이너 숙소', reqHqLevel: 3, upCost: { wood: 28, scrap: 30, coin: 18 }, maxHp: 310, popCap: 4, cozy: 18, cozyGroup: 'housing_t3', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
+    4: { level: 4, name: '강화 작전 생활관', reqHqLevel: 4, upCost: { wood: 36, scrap: 52, coin: 34 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'housing_t4', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
+  };
+
+  const TIER_MAPS = {
+    barricade_wall: WALL_TIERS,
+    solar_array: SOLAR_TIERS,
+    wind_turbine: WIND_TIERS,
+    battery_bank: BATTERY_TIERS,
+    field_tent: BARRACKS_TIERS
   };
 
   return {
@@ -249,18 +299,18 @@ ZS.DATA = (function () {
 
   CATEGORIES: [
     { id: 'defense', iconId: 'cat-defense', label: '방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
-    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 충전 발전기, 배터리, 요원 숙소' },
+    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 태양광·야간 풍력 발전기, 배터리, 요원 숙소' },
     { id: 'decor',   iconId: 'cat-decor',   label: '모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
 
-  WALL_TIERS: {
-    1: { level: 1, name: '철조망 바리케이드', reqHqLevel: 1, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
-    2: { level: 2, name: '헤스코 전술 방벽', reqHqLevel: 2, upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
-    3: { level: 3, name: '합금 장갑 성벽', reqHqLevel: 3, upCost: { wood: 6, scrap: 18, coin: 6 }, maxHp: 640, thornsRatio: 0.35, thornsMin: 8, allowWallMount: true, mountBaseZ: 25.4, topZ: 27.7 }
-  },
+  WALL_TIERS,
+  SOLAR_TIERS,
+  WIND_TIERS,
+  BATTERY_TIERS,
+  BARRACKS_TIERS,
+  TIER_MAPS,
 
   LV3_PERK_LABELS: {
-    barricade_wall: '충격 반사 장갑 (근접 피격 35% 반사 · 상부 거치 유지)',
     tactical_gate: '고장력 제압 게이트 (근접 둔화 40% · 피격 35% 반사)',
     razor_pad: '취약화 철조망 (둔화 60% · 받는 사격 피해 +15%)',
     rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
@@ -268,12 +318,7 @@ ZS.DATA = (function () {
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
     vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
     missile_pod: '고폭 확산탄 (폭발 반경 1.75 확대)',
-    emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)',
-    solar_array: '고밀도 발전 셀 (충전·용량 ×1.9)',
-    wind_turbine: '고출력 로터 (충전·용량 ×1.9)',
-    battery_bank: '대용량 ESS 팩 (용량 205 · 충전 +28)',
-    field_tent: '확장형 전술 막사 (수용 +3명 · 안락함 +12)',
-    shelter_pod: '프리미엄 모듈러 생활관 (수용 +4명 · 안락함 +26)'
+    emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
 
   VETERANCY_RANKS: [
@@ -504,51 +549,54 @@ ZS.DATA = (function () {
       desc: '[전력 소모] 최대 3기 좀비에게 연쇄 고압 전격을 날리고 이동속도를 크게 둔화시킵니다.'
     },
 
-    // ================= INFRASTRUCTURE: POWER & HOUSING =================
+    // ================= INFRASTRUCTURE: POWER & HOUSING (4-Tier Evolution) =================
     solar_array: {
       id: 'solar_array',
-      name: '고효율 태양광 어레이',
+      name: '소형 태양광 패널',
       category: 'infra',
       layer: 'struct',
       subType: 'power',
       reqHqLevel: 1,
-      cost: { wood: 10, scrap: 22 },
-      maxHp: 155,
-      dayCharge: 36,
+      cost: { wood: 10, scrap: 20 },
+      maxHp: 135,
+      dayCharge: 38,
+      nightGen: 0,
       powerCap: 15,
-      cozy: 2,
-      cozyGroup: 'infra_solar',
-      desc: '낮 전환 시 배터리를 +36 충전하며 최대 저장 용량도 +15 늘려줍니다.'
+      cozy: 1,
+      cozyGroup: 'solar_t1',
+      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+220)까지 진화합니다.'
     },
     wind_turbine: {
       id: 'wind_turbine',
-      name: '마이크로 풍력 터빈',
+      name: '마이크로 풍력발전기',
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      reqHqLevel: 3,
-      cost: { wood: 14, scrap: 38 },
-      maxHp: 175,
-      dayCharge: 68,
-      powerCap: 25,
-      cozy: 4,
-      cozyGroup: 'infra_wind',
-      desc: '매끈하게 회전하는 현대식 터빈. 낮마다 +68 대량 충전 및 용량 +25를 제공합니다.'
+      reqHqLevel: 1,
+      cost: { wood: 8, scrap: 18 },
+      maxHp: 140,
+      dayCharge: 14,
+      nightGen: 0.65,
+      powerCap: 10,
+      cozy: 1,
+      cozyGroup: 'wind_t1',
+      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다.'
     },
     battery_bank: {
       id: 'battery_bank',
-      name: '리튬 ESS 배터리 뱅크',
+      name: '소형 야전 배터리 팩',
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      reqHqLevel: 2,
-      cost: { wood: 8, scrap: 28 },
-      maxHp: 215,
-      dayCharge: 12,
-      powerCap: 95,
-      cozy: 2,
-      cozyGroup: 'infra_ess',
-      desc: '대용량 에너지 저장 장치. 최대 전력 저장량을 +95 확장하고 +12 보조 충전합니다.'
+      reqHqLevel: 1,
+      cost: { wood: 6, scrap: 18 },
+      maxHp: 165,
+      dayCharge: 6,
+      nightGen: 0,
+      powerCap: 70,
+      cozy: 1,
+      cozyGroup: 'battery_t1',
+      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+480)까지 진화합니다.'
     },
     field_tent: {
       id: 'field_tent',
@@ -557,28 +605,14 @@ ZS.DATA = (function () {
       layer: 'struct',
       subType: 'housing',
       reqHqLevel: 1,
-      cost: { wood: 26, scrap: 8 },
-      maxHp: 165,
+      cost: { wood: 24, scrap: 8 },
+      maxHp: 170,
       popCap: 1,
       cozy: 5,
-      cozyGroup: 'housing_tent',
-      desc: '최대 요원 수용량 +1명 확장 (빈자리가 있으면 매일 아침 신규 요원이 합류합니다).'
-    },
-    shelter_pod: {
-      id: 'shelter_pod',
-      name: '모듈러 컨테이너 숙소',
-      category: 'infra',
-      layer: 'struct',
-      subType: 'housing',
-      reqHqLevel: 3,
-      cost: { wood: 32, scrap: 26, coin: 15 },
-      maxHp: 245,
-      popCap: 2,
-      cozy: 12,
-      cozyGroup: 'housing_pod',
-      lightRadius: 2.2,
-      lightColor: 'rgba(255, 214, 145, 0.35)',
-      desc: '냉난방이 완비된 모던 모듈러 생활관. 수용량 +2명 및 높은 안락함(+12)을 제공합니다.'
+      cozyGroup: 'housing_t1',
+      lightRadius: 1.8,
+      lightColor: 'rgba(255, 206, 112, 0.34)',
+      desc: '[요원 숙소 · 4단 진화] 요원 수용량을 확장하고 매일 아침 신규 요원이 합류합니다. 모듈러 숙소·강화 작전 생활관(+6명)으로 진화합니다.'
     },
 
     // ================= MODERN DECOR & TACTICAL SUPPORT =================
@@ -897,10 +931,12 @@ ZS.DATA = (function () {
     {
       id: 'crate_pod',
       name: '프리팹: 모듈러 컨테이너 숙소',
-      desc: '목재·고철 없이 모듈러 2인 숙소 무료 설치권 1개를 확보합니다.',
+      desc: '목재·고철 없이 모듈러 컨테이너 숙소(3단계 · 수용 +4명) 1회 무료 배치권을 확보합니다.',
       coinCost: 36,
       type: 'free_item',
-      itemId: 'shelter_pod'
+      itemId: 'field_tent',
+      spawnTier: 3,
+      voucherKey: 'shelter_pod'
     },
     {
       id: 'crate_emp',
