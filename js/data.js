@@ -199,7 +199,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.3.0',
+  VERSION: 'v0.4.0',
   GRID_SIZE: 22,
   HQ_POS: { x: 10, y: 10 },
   PALETTE,
