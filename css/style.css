@@ -271,7 +271,7 @@ button, input, select {
   display: none;
 }
 
-#top-hud.hud-res-compact .power-pill .res-micro {
+#top-hud.hud-res-compact .power-pill:not(.blackout) .res-micro {
   display: none;
 }
 
