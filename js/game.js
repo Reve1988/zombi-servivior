@@ -1108,6 +1108,7 @@ ZS.Game = (function () {
       lightRadius,
       lightColor,
       auraRadius,
+      gateSlowRadius: prof.gateSlowRadius,
       critChance: Math.min(0.85, critChance),
       powerIdle: prof.powerIdle,
       powerShot: prof.powerShot,
@@ -2454,8 +2455,9 @@ ZS.Game = (function () {
         const st = state.structGrid[y][x];
         if (!st || st.id !== 'repair_bay') continue;
         const def = DATA.ITEMS.repair_bay;
-        const rad = def.aura.radius;
-        const regen = def.aura.regenPerSec * dt;
+        const prof = getStructLevelProfile(def, st.level || 1);
+        const rad = prof.auraRadius || def.aura.radius;
+        const regen = (prof.regenPerSec || def.aura.regenPerSec) * dt;
 
         for (let ny = Math.max(0, Math.floor(y - rad)); ny <= Math.min(N - 1, Math.ceil(y + rad)); ny++) {
           for (let nx = Math.max(0, Math.floor(x - rad)); nx <= Math.min(N - 1, Math.ceil(x + rad)); nx++) {
@@ -3381,9 +3383,9 @@ ZS.Game = (function () {
           const gs = state.structGrid[gy] && state.structGrid[gy][gx];
           if (!gs || gs.id !== 'tactical_gate' || gs.hp <= 0) continue;
           const gDef = DATA.ITEMS.tactical_gate;
-          const gRad = (gDef && gDef.gateSlowRadius) || 1.15;
+          const gProf = gDef ? getStructLevelProfile(gDef, gs.level || 1) : null;
+          const gRad = (gProf && gProf.gateSlowRadius) || (gDef && gDef.gateSlowRadius) || 1.15;
           if (Math.hypot(z.x - (gx + 0.5), z.y - (gy + 0.5)) <= gRad) {
-            const gProf = gDef ? getStructLevelProfile(gDef, gs.level || 1) : null;
             const gSlow = gProf && gProf.gateSlowFactor ? gProf.gateSlowFactor : 0.75;
             slowMult = Math.min(slowMult, gSlow);
             z.inGateAura = true;
@@ -3834,10 +3836,16 @@ ZS.Game = (function () {
       return ['#8B6843', '#BAC6D2', '#5E452B'];
     }
     switch (itemId) {
-      case 'tactical_gate': return ['#59636E', '#4A5562', '#F0BD35'];
+      case 'tactical_gate':
+        if ((level || 1) <= 1) return ['#8B6843', '#BAC6D2', '#F0BD35'];
+        if ((level || 1) >= 3) return ['#59636E', '#B87333', '#FF8A3D'];
+        return ['#59636E', '#4A5562', '#F0BD35'];
       case 'hesco_wall': return ['#C9B48A', '#9E8758', '#8C96A3'];
       case 'blast_wall': return ['#6B7686', '#F0BD35', '#FF9F43'];
-      case 'razor_pad': return ['#4A525C', '#C9D3DE', '#596574'];
+      case 'razor_pad':
+        if ((level || 1) >= 3) return ['#343C46', '#B87333', '#FF8A3D'];
+        if ((level || 1) === 2) return ['#3E4650', '#DCE5EE', '#F0BD35'];
+        return ['#4A525C', '#C9D3DE', '#596574'];
       case 'rifle_bunker': return ['#B5A27A', '#55684F', '#8C96A3'];
       case 'shotgun_post': return ['#B5A27A', '#3A4654', '#EBA834'];
       case 'sniper_tower': return ['#7C8B99', '#4F5D4B', '#5B6875'];
@@ -3980,6 +3988,7 @@ ZS.Game = (function () {
     try {
       const payload = {
         saveVersion: 2,
+        defenseTierV2: true,
         wave: state.wave,
         hqLevel: state.hqLevel,
         bossDefeated: state.bossDefeated,
@@ -4053,6 +4062,7 @@ ZS.Game = (function () {
       state.freeVouchers = d.freeVouchers || {};
       const saveVersion = Number(d.saveVersion || 1);
       const isLegacyV1 = saveVersion < 2;
+      const needsDefenseMigration = isLegacyV1 || !d.defenseTierV2;
       let migratedWalls = false;
       let migratedV2 = false;
       if (state.freeVouchers.hesco_wall || state.freeVouchers.blast_wall) {
@@ -4093,6 +4103,18 @@ ZS.Game = (function () {
               migratedV2 = true;
             } else if (s.id === 'field_tent') {
               s.level = Math.min(3, Math.max(1, s.level || 1));
+              migratedV2 = true;
+            }
+          }
+          if (needsDefenseMigration) {
+            if (s.id === 'tactical_gate') {
+              s.level = (s.level || 1) >= 2 ? 3 : 2;
+              migratedV2 = true;
+            } else if (s.id === 'razor_pad') {
+              s.level = Math.max(1, Math.min(3, s.level || 1));
+              migratedV2 = true;
+            } else if (s.id === 'repair_bay') {
+              s.level = (s.level || 1) >= 2 ? Math.min(3, s.level) : 2;
               migratedV2 = true;
             }
           }
@@ -4159,7 +4181,7 @@ ZS.Game = (function () {
       } else {
         refreshTraderOffers(false);
       }
-      if (offset > 0 || migratedWalls || isLegacyV1 || migratedV2) saveGame();
+      if (offset > 0 || migratedWalls || isLegacyV1 || needsDefenseMigration || migratedV2) saveGame();
       notifyUi();
       return true;
     } catch (e) {
