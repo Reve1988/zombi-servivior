@@ -7,6 +7,7 @@
 ## 1. 문서 구성
 
 - **[github-gitflow.md](./github-gitflow.md)**: GitHub CLI(`gh`) 사용법, 정통 GitFlow 5대 브랜치 규칙, 이슈 기반 작업 및 PR 권한, 커밋 메시지 포맷, 릴리즈·태그 규칙 상세 정의
+- *(공통 소통 규약)* **[../github-communication-guide.md](../github-communication-guide.md)**: GitHub 중심 대화, Project #1 동기화, 단일 계정 역할 말머리(`### 🛠️ [개발자 / Developer]`, PR 제목 `[개발자]`) 필수 규칙
 - *(공통 파이프라인)* **[../README.md](../README.md)** · **[../../share/README.md](../../share/README.md)**: `share/` 기반 시안·기획 수령 및 개발 에이전트 단일 코드 작성(`Single Code Writer`) 협업 흐름
 
 ---

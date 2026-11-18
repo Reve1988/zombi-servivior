@@ -89,13 +89,119 @@ ZS.DATA = (function () {
     zombieBossCoat: '#591259',
     zombieBossCrack: '#E040FB',
     zombieBossSkin: '#F9DBFF',
-    zombieBossEye: '#FF4D6D'
+    zombieBossEye: '#FF4D6D',
+
+    // 5. Phase 2 Tokens (share/design/phase2-tokens.md)
+    mutantAcid: '#C8F542',
+    mutantAcidDim: '#6E8A1E',
+    mutantEmp: '#B26BFF',
+    mutantSpark: '#FFE14D',
+    mutantBone: '#F4EBDD',
+    zombieSpitterCoat: '#4F2147',
+    zombieSpitterLegs: '#3A1636',
+    zombieSpitterSkin: '#E9D3C2',
+    zombieLeaperCoat: '#7A2338',
+    zombieLeaperLegs: '#4A1522',
+    zombieLeaperSkin: '#F4D9CF',
+    zombieShockerCoat: '#2E1B4F',
+    zombieShockerLegs: '#1E1236',
+    zombieShockerPack: '#3B2A5E',
+    zombieShockerRod: '#6B5A8E',
+    zombieShockerSkin: '#D9CCE8',
+
+    reconRoute: '#FF8FA3',
+    reconRouteOutline: 'rgba(27, 36, 48, 0.55)',
+
+    wireWood: '#8B6843',
+    wireWoodDark: '#5E452B',
+    wireIron: '#4A5562',
+    wireCoil: '#BAC6D2',
+    wireCoilDim: '#6E7B88',
+    wireBarb: '#DCE5EE',
+    gatePylon: '#59636E',
+    gateBeam: '#4A5562',
+    gateBar: '#2B333D',
+    deckWood: '#8A6A45',
+    deckRail: '#6E5536',
+    deckSteelRail: '#3A434E',
+    gateSlowRing: '#C9D3DE',
+
+    // 6. Tier Evolution Tokens (share/design/phase2-tokens.md §5)
+    piezoCopper: '#B87333',
+    piezoArc: '#FF8A3D',
+    piezoSpark: '#FFD08A',
+    trapBlade: '#DCE5EE',
+    habitatRoof: '#D96B38',
+    repairNano: '#4ADE80'
+  };
+
+  const WALL_TIERS = {
+    1: { level: 1, name: '철조망 바리케이드', reqHqLevel: 1, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
+    2: { level: 2, name: '헤스코 전술 방벽', reqHqLevel: 2, upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
+    3: { level: 3, name: '합금 장갑 성벽', reqHqLevel: 3, upCost: { wood: 6, scrap: 18, coin: 6 }, maxHp: 640, thornsRatio: 0.35, thornsMin: 8, allowWallMount: true, mountBaseZ: 25.4, topZ: 27.7 }
+  };
+
+  const SOLAR_TIERS = {
+    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 38, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'solar_t1', topZ: 12 },
+    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 14, scrap: 28, coin: 6 }, maxHp: 195, dayCharge: 75, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'solar_t2', topZ: 17 },
+    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 18, scrap: 44, coin: 16 }, maxHp: 270, dayCharge: 135, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'solar_t3', topZ: 24 },
+    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 24, scrap: 70, coin: 34 }, maxHp: 370, dayCharge: 220, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'solar_t4', topZ: 34 }
+  };
+
+  const WIND_TIERS = {
+    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'wind_t1', topZ: 30 },
+    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 12, scrap: 26, coin: 6 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'wind_t2', topZ: 44 },
+    3: { level: 3, name: '중형 풍력발전기', reqHqLevel: 3, upCost: { wood: 16, scrap: 42, coin: 16 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'wind_t3', topZ: 60 },
+    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 20, scrap: 66, coin: 32 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'wind_t4', topZ: 70 }
+  };
+
+  const BATTERY_TIERS = {
+    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 70, dayCharge: 6, nightGen: 0, cozy: 1, cozyGroup: 'battery_t1', topZ: 14 },
+    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 8, scrap: 24, coin: 8 }, maxHp: 230, powerCap: 155, dayCharge: 14, nightGen: 0, cozy: 2, cozyGroup: 'battery_t2', topZ: 22 },
+    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 10, scrap: 38, coin: 18 }, maxHp: 300, powerCap: 290, dayCharge: 26, nightGen: 0, cozy: 4, cozyGroup: 'battery_t3', topZ: 33 },
+    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 14, scrap: 64, coin: 36 }, maxHp: 400, powerCap: 480, dayCharge: 42, nightGen: 0, cozy: 7, cozyGroup: 'battery_t4', topZ: 40 }
+  };
+
+  const BARRACKS_TIERS = {
+    1: { level: 1, name: '전술 돔 막사', reqHqLevel: 1, cost: { wood: 24, scrap: 8 }, maxHp: 170, popCap: 1, cozy: 5, cozyGroup: 'housing_t1', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
+    2: { level: 2, name: '확장형 야전 막사', reqHqLevel: 2, upCost: { wood: 22, scrap: 16, coin: 8 }, maxHp: 230, popCap: 2, cozy: 10, cozyGroup: 'housing_t2', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
+    3: { level: 3, name: '모듈러 컨테이너 숙소', reqHqLevel: 3, upCost: { wood: 28, scrap: 30, coin: 18 }, maxHp: 310, popCap: 4, cozy: 18, cozyGroup: 'housing_t3', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
+    4: { level: 4, name: '강화 작전 생활관', reqHqLevel: 4, upCost: { wood: 36, scrap: 52, coin: 34 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'housing_t4', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
+  };
+
+  const GATE_TIERS = {
+    1: { level: 1, name: '철조망 바리케이드 통문', reqHqLevel: 1, cost: { wood: 6, scrap: 8 }, maxHp: 240, gateSlowRadius: 1.15, gateSlowFactor: 0.82, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, topZ: 16.5 },
+    2: { level: 2, name: '전술 방호 게이트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 6 }, maxHp: 480, gateSlowRadius: 1.15, gateSlowFactor: 0.75, thornsRatio: 0, thornsMin: 0, allowWallMount: false, topZ: 26.5 },
+    3: { level: 3, name: '전자식 쇼크 게이트', reqHqLevel: 3, upCost: { wood: 12, scrap: 28, coin: 18 }, maxHp: 880, gateSlowRadius: 1.25, gateSlowFactor: 0.60, thornsRatio: 0.35, thornsMin: 8, allowWallMount: false, topZ: 28.0 }
+  };
+
+  const TRAP_TIERS = {
+    1: { level: 1, name: '스파이크 철조망 매트', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 4.6 },
+    2: { level: 2, name: '소투스 칼날 매트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 4.7 },
+    3: { level: 3, name: '고전압 파쇄 패드', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 5.0 }
+  };
+
+  const REPAIR_TIERS = {
+    1: { level: 1, name: '현장 수리 거치대', reqHqLevel: 1, cost: { wood: 10, scrap: 14 }, maxHp: 165, auraRadius: 2.2, regenPerSec: 2.5, cozy: 5, cozyGroup: 'repair_t1', lightRadius: 0, topZ: 18 },
+    2: { level: 2, name: '필드 로봇 정비 베이', reqHqLevel: 2, upCost: { wood: 8, scrap: 18, coin: 12 }, maxHp: 230, auraRadius: 2.6, regenPerSec: 5.0, cozy: 9, cozyGroup: 'repair_t2', lightRadius: 0, topZ: 25 },
+    3: { level: 3, name: '나노 드론 정비소', reqHqLevel: 3, upCost: { wood: 12, scrap: 32, coin: 24 }, maxHp: 320, auraRadius: 3.2, regenPerSec: 9.5, cozy: 15, cozyGroup: 'repair_t3', lightRadius: 2.2, lightColor: 'rgba(74, 222, 128, 0.32)', topZ: 30 }
+  };
+
+  const TIER_MAPS = {
+    barricade_wall: WALL_TIERS,
+    solar_array: SOLAR_TIERS,
+    wind_turbine: WIND_TIERS,
+    battery_bank: BATTERY_TIERS,
+    field_tent: BARRACKS_TIERS,
+    tactical_gate: GATE_TIERS,
+    razor_pad: TRAP_TIERS,
+    repair_bay: REPAIR_TIERS
   };
 
   return {
-  VERSION: 'v0.3.0',
-  GRID_SIZE: 18,
-  HQ_POS: { x: 8, y: 8 },
+  VERSION: 'v0.4.0',
+  GRID_SIZE: 22,
+  HQ_POS: { x: 10, y: 10 },
   PALETTE,
 
   INITIAL_RESOURCES: {
@@ -214,25 +320,27 @@ ZS.DATA = (function () {
 
   CATEGORIES: [
     { id: 'defense', iconId: 'cat-defense', label: '방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
-    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 충전 발전기, 배터리, 요원 숙소' },
+    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 태양광·야간 풍력 발전기, 배터리, 요원 숙소' },
     { id: 'decor',   iconId: 'cat-decor',   label: '모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
 
+  WALL_TIERS,
+  SOLAR_TIERS,
+  WIND_TIERS,
+  BATTERY_TIERS,
+  BARRACKS_TIERS,
+  GATE_TIERS,
+  TRAP_TIERS,
+  REPAIR_TIERS,
+  TIER_MAPS,
+
   LV3_PERK_LABELS: {
-    hesco_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
-    blast_wall: '충격 반사 장갑 (근접 피격 35% 반사)',
-    razor_pad: '취약화 철조망 (둔화 60% · 받는 사격 피해 +15%)',
     rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
     vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
     missile_pod: '고폭 확산탄 (폭발 반경 1.75 확대)',
-    emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)',
-    solar_array: '고밀도 발전 셀 (충전·용량 ×1.9)',
-    wind_turbine: '고출력 로터 (충전·용량 ×1.9)',
-    battery_bank: '대용량 ESS 팩 (용량 205 · 충전 +28)',
-    field_tent: '확장형 전술 막사 (수용 +3명 · 안락함 +12)',
-    shelter_pod: '프리미엄 모듈러 생활관 (수용 +4명 · 안락함 +26)'
+    emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
 
   VETERANCY_RANKS: [
@@ -246,6 +354,9 @@ ZS.DATA = (function () {
     walker: 1.0,
     runner: 1.5,
     brute: 4.0,
+    spitter: 2.5,
+    leaper: 2.5,
+    shocker: 4.5,
     boss: 12.0,
     bossGlobalBonus: 4.0
   },
@@ -301,31 +412,36 @@ ZS.DATA = (function () {
     },
 
     // ================= DEFENSE: BARRIERS & TRAPS =================
-    hesco_wall: {
-      id: 'hesco_wall',
-      name: '헤스코 전술 방벽',
+    barricade_wall: {
+      id: 'barricade_wall',
+      name: '철조망 바리케이드',
       category: 'defense',
       layer: 'struct',
       subType: 'wall',
       reqHqLevel: 1,
-      cost: { wood: 10, scrap: 4 },
-      maxHp: 260,
-      desc: '철망 프레임과 고밀도 충진재로 구성된 현대 군용 표준 바리케이드입니다.'
+      cost: { wood: 6, scrap: 2 },
+      maxHp: 180,
+      thornsRatio: 0.15,
+      desc: '[3단 진화 성벽] 철조망(Lv.1) → 헤스코 방벽(Lv.2·상부 거치 해금) → 합금 장갑 성벽(Lv.3·35% 반사)으로 진화하며 인접 성벽·게이트와 자동 연결됩니다.'
     },
-    blast_wall: {
-      id: 'blast_wall',
-      name: '합금 장갑 방벽',
+    tactical_gate: {
+      id: 'tactical_gate',
+      name: '철조망 바리케이드 통문',
       category: 'defense',
       layer: 'struct',
-      subType: 'wall',
-      reqHqLevel: 3,
-      cost: { wood: 6, scrap: 18 },
-      maxHp: 560,
-      desc: '중장갑 강철 경사 장갑판으로 제작되어 브루트 좀비의 돌파도 오래 버텨냅니다.'
+      subType: 'gate',
+      reqHqLevel: 1,
+      cost: { wood: 6, scrap: 8 },
+      maxHp: 240,
+      allowWallMount: false,
+      gateSlowRadius: 1.15,
+      gateSlowFactor: 0.82,
+      thornsRatio: 0.15,
+      desc: '[3단 진화 전술 관문] 철조망 통문(1단·둔화 18%·반사 15%) → 전술 방호 게이트(2단·25%) → 전자식 쇼크 게이트(3단·40%·반사 35%). 성벽 킬존 유인 가중치(2.0) 고정 (거치 불가).'
     },
     razor_pad: {
       id: 'razor_pad',
-      name: '고장력 철조망 패드',
+      name: '스파이크 철조망 매트',
       category: 'defense',
       layer: 'struct',
       subType: 'trap',
@@ -335,7 +451,7 @@ ZS.DATA = (function () {
       maxHp: 180,
       trapDps: 11,
       slowFactor: 0.55,
-      desc: '[무전력 함정] 좀비가 밟고 지나가며 이동속도가 45% 감소하고 지속 피해를 입습니다.'
+      desc: '[3단 진화 바닥 함정] 스파이크 매트(1단·11/s·둔화 45%) → 소투스 칼날(2단·19/s·52%) → 고전압 파쇄 패드(3단·30/s·60%·피해+15%).'
     },
 
     // ================= DEFENSE: MANNED POSTS (Pop: 1, Power: 0) =================
@@ -353,6 +469,8 @@ ZS.DATA = (function () {
       damage: 19,
       fireRate: 2.5,
       projType: 'rifle',
+      canMountOnWall: true,
+      mountTopOffset: 15.5,
       desc: '[요원 1명 · 무전력] 돌격소총 사수가 배치된 엄폐호. 정전 시에도 멈추지 않고 사격합니다.'
     },
     shotgun_post: {
@@ -371,6 +489,8 @@ ZS.DATA = (function () {
       spread: 0.34,
       fireRate: 1.1,
       projType: 'shotgun',
+      canMountOnWall: true,
+      mountTopOffset: 15,
       desc: '[요원 1명 · 무전력] 근접 저지용 전술 산탄 사수. 한 번에 4발의 산탄을 발사합니다.'
     },
     sniper_tower: {
@@ -408,6 +528,8 @@ ZS.DATA = (function () {
       damage: 13,
       fireRate: 5.6,
       projType: 'vulcan',
+      canMountOnWall: true,
+      mountTopOffset: 12,
       desc: '[전력 소모] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
     },
     missile_pod: {
@@ -450,51 +572,54 @@ ZS.DATA = (function () {
       desc: '[전력 소모] 최대 3기 좀비에게 연쇄 고압 전격을 날리고 이동속도를 크게 둔화시킵니다.'
     },
 
-    // ================= INFRASTRUCTURE: POWER & HOUSING =================
+    // ================= INFRASTRUCTURE: POWER & HOUSING (4-Tier Evolution) =================
     solar_array: {
       id: 'solar_array',
-      name: '고효율 태양광 어레이',
+      name: '소형 태양광 패널',
       category: 'infra',
       layer: 'struct',
       subType: 'power',
       reqHqLevel: 1,
-      cost: { wood: 10, scrap: 22 },
-      maxHp: 155,
-      dayCharge: 36,
+      cost: { wood: 10, scrap: 20 },
+      maxHp: 135,
+      dayCharge: 38,
+      nightGen: 0,
       powerCap: 15,
-      cozy: 2,
-      cozyGroup: 'infra_solar',
-      desc: '낮 전환 시 배터리를 +36 충전하며 최대 저장 용량도 +15 늘려줍니다.'
+      cozy: 1,
+      cozyGroup: 'solar_t1',
+      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+220)까지 진화합니다.'
     },
     wind_turbine: {
       id: 'wind_turbine',
-      name: '마이크로 풍력 터빈',
+      name: '마이크로 풍력발전기',
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      reqHqLevel: 3,
-      cost: { wood: 14, scrap: 38 },
-      maxHp: 175,
-      dayCharge: 68,
-      powerCap: 25,
-      cozy: 4,
-      cozyGroup: 'infra_wind',
-      desc: '매끈하게 회전하는 현대식 터빈. 낮마다 +68 대량 충전 및 용량 +25를 제공합니다.'
+      reqHqLevel: 1,
+      cost: { wood: 8, scrap: 18 },
+      maxHp: 140,
+      dayCharge: 14,
+      nightGen: 0.65,
+      powerCap: 10,
+      cozy: 1,
+      cozyGroup: 'wind_t1',
+      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다.'
     },
     battery_bank: {
       id: 'battery_bank',
-      name: '리튬 ESS 배터리 뱅크',
+      name: '소형 야전 배터리 팩',
       category: 'infra',
       layer: 'struct',
       subType: 'power',
-      reqHqLevel: 2,
-      cost: { wood: 8, scrap: 28 },
-      maxHp: 215,
-      dayCharge: 12,
-      powerCap: 95,
-      cozy: 2,
-      cozyGroup: 'infra_ess',
-      desc: '대용량 에너지 저장 장치. 최대 전력 저장량을 +95 확장하고 +12 보조 충전합니다.'
+      reqHqLevel: 1,
+      cost: { wood: 6, scrap: 18 },
+      maxHp: 165,
+      dayCharge: 6,
+      nightGen: 0,
+      powerCap: 70,
+      cozy: 1,
+      cozyGroup: 'battery_t1',
+      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+480)까지 진화합니다.'
     },
     field_tent: {
       id: 'field_tent',
@@ -503,28 +628,14 @@ ZS.DATA = (function () {
       layer: 'struct',
       subType: 'housing',
       reqHqLevel: 1,
-      cost: { wood: 26, scrap: 8 },
-      maxHp: 165,
+      cost: { wood: 24, scrap: 8 },
+      maxHp: 170,
       popCap: 1,
       cozy: 5,
-      cozyGroup: 'housing_tent',
-      desc: '최대 요원 수용량 +1명 확장 (빈자리가 있으면 매일 아침 신규 요원이 합류합니다).'
-    },
-    shelter_pod: {
-      id: 'shelter_pod',
-      name: '모듈러 컨테이너 숙소',
-      category: 'infra',
-      layer: 'struct',
-      subType: 'housing',
-      reqHqLevel: 3,
-      cost: { wood: 32, scrap: 26, coin: 15 },
-      maxHp: 245,
-      popCap: 2,
-      cozy: 12,
-      cozyGroup: 'housing_pod',
-      lightRadius: 2.2,
-      lightColor: 'rgba(255, 214, 145, 0.35)',
-      desc: '냉난방이 완비된 모던 모듈러 생활관. 수용량 +2명 및 높은 안락함(+12)을 제공합니다.'
+      cozyGroup: 'housing_t1',
+      lightRadius: 1.8,
+      lightColor: 'rgba(255, 206, 112, 0.34)',
+      desc: '[요원 숙소 · 4단 진화] 요원 수용량을 확장하고 매일 아침 신규 요원이 합류합니다. 모듈러 숙소·강화 작전 생활관(+6명)으로 진화합니다.'
     },
 
     // ================= MODERN DECOR & TACTICAL SUPPORT =================
@@ -560,6 +671,8 @@ ZS.DATA = (function () {
       lightRadius: 4.8,
       lightColor: 'rgba(94, 242, 255, 0.42)',
       aura: { radius: 3.4, rangeMult: 0.15, critChance: 0.18 },
+      canMountOnWall: true,
+      mountTopOffset: 16,
       desc: '[야간 전력 소모] 고광량 서치라이트. 반경 3.4칸 내 초소·포탑의 사거리 +15%, 치명타율 +18%!'
     },
     urban_planter: {
@@ -595,17 +708,17 @@ ZS.DATA = (function () {
     },
     repair_bay: {
       id: 'repair_bay',
-      name: '필드 로봇 정비 베이',
+      name: '현장 수리 거치대',
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      reqHqLevel: 2,
-      cost: { wood: 10, scrap: 26, coin: 12 },
-      maxHp: 210,
-      cozy: 8,
-      cozyGroup: 'decor_repair',
-      aura: { radius: 2.6, regenPerSec: 4.5 },
-      desc: '반경 2.6칸 내 손상된 방벽과 시설을 전투 중에도 초당 4.5 HP씩 실시간 자동 수리합니다.'
+      reqHqLevel: 1,
+      cost: { wood: 10, scrap: 14 },
+      maxHp: 165,
+      cozy: 5,
+      cozyGroup: 'repair_t1',
+      aura: { radius: 2.2, regenPerSec: 2.5 },
+      desc: '[3단 진화 자동 수리] 수리 거치대(1단·2.2칸 +2.5/s) → 로봇 정비 베이(2단·2.6칸 +5/s) → 나노 드론 정비소(3단·3.2칸 +9.5/s·야간 조명).'
     },
     lounge_set: {
       id: 'lounge_set',
@@ -704,6 +817,64 @@ ZS.DATA = (function () {
       eyeColor: PALETTE.zombieBruteEye,
       eyeGlow: 'rgba(255, 77, 109, 0.62)'
     },
+    spitter: {
+      id: 'spitter',
+      name: '애시드 스피터',
+      hp: 52,
+      speed: 0.95,
+      damage: 13,
+      attackRate: 0.75,
+      attackRange: 3.2,
+      scrapDrop: [3, 6],
+      coinDrop: [2, 4],
+      scale: 1.04,
+      coatColor: PALETTE.zombieSpitterCoat,
+      legColor: PALETTE.zombieSpitterLegs,
+      accentColor: PALETTE.mutantAcid,
+      accentDimColor: PALETTE.mutantAcidDim,
+      skinColor: PALETTE.zombieSpitterSkin,
+      eyeColor: PALETTE.mutantAcid,
+      eyeGlow: 'rgba(200, 245, 66, 0.75)'
+    },
+    leaper: {
+      id: 'leaper',
+      name: '스토커 리퍼',
+      hp: 46,
+      speed: 1.75,
+      damage: 15,
+      attackRate: 1.25,
+      scrapDrop: [3, 6],
+      coinDrop: [2, 4],
+      scale: 0.96,
+      coatColor: PALETTE.zombieLeaperCoat,
+      legColor: PALETTE.zombieLeaperLegs,
+      accentColor: PALETTE.mutantBone,
+      skinColor: PALETTE.zombieLeaperSkin,
+      eyeColor: PALETTE.danger,
+      eyeGlow: 'rgba(255, 77, 109, 0.75)'
+    },
+    shocker: {
+      id: 'shocker',
+      name: '볼트 쇼커',
+      hp: 125,
+      speed: 0.88,
+      damage: 22,
+      attackRate: 0.90,
+      empRadius: 2.1,
+      empDuration: 3.0,
+      scrapDrop: [5, 9],
+      coinDrop: [3, 6],
+      scale: 1.16,
+      coatColor: PALETTE.zombieShockerCoat,
+      legColor: PALETTE.zombieShockerLegs,
+      packColor: PALETTE.zombieShockerPack,
+      rodColor: PALETTE.zombieShockerRod,
+      accentColor: PALETTE.mutantEmp,
+      sparkColor: PALETTE.mutantSpark,
+      skinColor: PALETTE.zombieShockerSkin,
+      eyeColor: PALETTE.mutantSpark,
+      eyeGlow: 'rgba(255, 225, 77, 0.78)'
+    },
     boss: {
       id: 'boss',
       name: '알파 타이탄 변이체',
@@ -783,10 +954,12 @@ ZS.DATA = (function () {
     {
       id: 'crate_pod',
       name: '프리팹: 모듈러 컨테이너 숙소',
-      desc: '목재·고철 없이 모듈러 2인 숙소 무료 설치권 1개를 확보합니다.',
+      desc: '목재·고철 없이 모듈러 컨테이너 숙소(3단계 · 수용 +4명) 1회 무료 배치권을 확보합니다.',
       coinCost: 36,
       type: 'free_item',
-      itemId: 'shelter_pod'
+      itemId: 'field_tent',
+      spawnTier: 3,
+      voucherKey: 'shelter_pod'
     },
     {
       id: 'crate_emp',

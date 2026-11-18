@@ -29,7 +29,7 @@
 ### 라벨 (`--label`)
 - 모든 디자인 이슈: `design`
 - 의도와 다르게 보이는 렌더링 오류(예: 레이어 순서 때문에 정보가 가려짐): `design,bug`
-- **새 라벨은 만들지 않습니다.** 우선순위는 본문 첫 줄에 적습니다(아래 템플릿 참고).
+- **파이프라인 게이트 라벨 연동 (`agents/github-communication-guide.md`)**: 임의 라벨은 신설하지 않되, 진행 상태 표시용 공식 5종(`gate:2-design`, `gate:3-dev-ready`, `gate:4-qa`, `status:merged-dev`, `status:hold`)과 해당 **Milestone**, **[Project #1](https://github.com/users/Reve1988/projects/1)** 컬럼 이동은 반드시 함께 동기화합니다. 우선순위는 본문 첫 줄에 적습니다.
 
 ### 우선순위 기준
 | 우선순위 | 기준 |
@@ -40,9 +40,11 @@
 
 ---
 
-## 3. 이슈 본문 필수 템플릿
+## 3. 이슈 본문 및 코멘트 필수 템플릿 (단일 계정 역할 말머리 포함)
 
 ```markdown
+### 🎨 [디자이너 / Designer] → @개발자 (또는 @오너 @개발자)
+
 > **우선순위:** P0 · **분류:** design, art, readability
 > **선행 의존성:** #N (없으면 생략)
 
@@ -80,5 +82,5 @@ _그래픽/아트 디자인 리뷰에서 도출된 이슈입니다. 구현 방�
    ```
    - `PATH`가 아직 갱신되지 않았으면 `& "C:\Program Files\GitHub CLI\gh.exe" ...`로 실행합니다.
    - 에이전트 샌드박스에서는 네트워크가 막혀 있으므로, `gh`의 네트워크 명령은 사용자 승인 하에 실행합니다.
-3. **중복 방지:** 등록하거나 재시도하기 전에 `gh issue list --repo Reve1988/zombi-servivior --state all`로 같은 제목이 있는지 확인합니다.
-4. **등록 후:** `art-direction.md`의 "디자인 이슈 현황" 표에 이슈 번호를 추가합니다.
+3. **중복 방지 · 스레드 선행 확인**: 등록/답변 전 `gh issue list --repo Reve1988/zombi-servivior --state all`과 `gh issue view <N> --comments`로 오너(무배지 일반 댓글) 및 타 에이전트 요청을 먼저 확인합니다.
+4. **등록·납품·검수 후 동기화**: `share/design/` 납품 또는 `Gate 4` 시각 검수 완료 시 반드시 대상 이슈 `#N`에 `### 🎨 [디자이너 / Designer] → @{대상}` 코멘트를 남기고, `Project #1` (`Status`/`담당`) · 게이트 라벨 · `art-direction.md` · `share/STATUS.md`를 동기화합니다.

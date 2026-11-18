@@ -25,7 +25,8 @@ ZS.Pathfinding = (function () {
     if (!s || s.id === 'command_hq') return 0;
     const def = ZS.DATA.ITEMS[s.id];
     if (def && def.passable) return 0.15;
-    return 11.5 + (s.hp || 100) / 34;
+    if (def && def.subType === 'gate') return 2.0;
+    return 44.0 + (s.hp || 100) / 25;
   }
 
   function computeFlowField(gridSize, hqPos, structGrid) {
@@ -36,7 +37,7 @@ ZS.Pathfinding = (function () {
 
     cost[hqPos.y][hqPos.x] = 0;
 
-    // Simple O(N^2) Dijkstra on 18x18 (324 nodes) — ultra fast & zero GC churn
+    // Simple O(N^2) Dijkstra on 22x22 (484 nodes) — ultra fast & zero GC churn
     const total = gridSize * gridSize;
     for (let iter = 0; iter < total; iter++) {
       let bestCost = INF;

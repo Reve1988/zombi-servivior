@@ -33,11 +33,11 @@
 
 복수의 개발 에이전트가 동시에 서로 다른 이슈를 작업하더라도 브랜치와 작업 파일이 섞이지 않도록, **모든 개발 작업은 반드시 `git worktree`를 사용해 독립된 작업 디렉토리에서 진행**합니다.
 
-### 3.1 작업 시작 (Issue 확인 → `git worktree` 생성)
-1. 기획·디자인 에이전트가 등록한 이슈를 조회하여 요구사항과 인수 조건을 파악합니다.
+### 3.1 작업 시작 (Project #1 / Issue 코멘트 확인 → `git worktree` 생성)
+1. [github-communication-guide.md](../github-communication-guide.md)에 따라 Project #1(`gh project item-list 1 --owner Reve1988`)에서 `gate:3-dev-ready` 이슈를 확인하고, **착수 전 반드시 `--comments`로 오너(일반 댓글)·디자이너·기획자의 최신 지시를 정독**한 뒤 Project #1 `Status`를 `⚙️ In Progress (개발 중)`으로 전환합니다.
    ```powershell
-   gh issue list
-   gh issue view <issueNumber>
+   gh project item-list 1 --owner Reve1988
+   gh issue view <issueNumber> --repo Reve1988/zombi-servivior --comments
    ```
 2. 루트 저장소(`zombi-servivior/`)의 체크아웃 브랜치(`develop`)는 직접 변경하지 않고, 원격 정보를 최신화한 뒤 `.worktrees/` 하위에 이슈 전용 워크트리와 `feature` 브랜치를 동시에 생성합니다.
    - *(예외: Antigravity 서브에이전트/스웜의 `workspace: "share"` 등 이미 시스템 차원에서 분리된 워크트리를 할당받은 에이전트는 현재 할당된 워크스페이스에서 바로 브랜치를 생성해 작업할 수 있습니다.)*
@@ -79,10 +79,11 @@
    ```powershell
    git -C .worktrees/feature-<issueNumber>-<short-slug> push -u origin feature/<issueNumber>-<short-slug>
    ```
-2. `gh pr create`를 사용해 **`develop` 브랜치를 타겟(`--base develop`)** 으로 Pull Request를 생성합니다.
+2. `gh pr create`를 사용해 **`develop` 브랜치를 타겟(`--base develop`)** 으로 Pull Request를 생성합니다. (**PR 제목에는 `[개발자]` 말머리, PR 본문·이슈 보고 코멘트 첫 줄에는 `### 🛠️ [개발자 / Developer] → @디자이너 @기획자 @오너`를 반드시 포함**하며 한글 깨짐 방지를 위해 UTF-8 `--body-file`을 사용합니다.)
    ```powershell
-   gh pr create --base develop --head feature/<issueNumber>-<short-slug> --title "feat: [#<issueNumber>] <issueName>" --body "Closes #<issueNumber>`n`n## 변경 사항`n- ...`n`n## 확인 내역`n- ..."
+   gh pr create --base develop --head feature/<issueNumber>-<short-slug> --title "[개발자] feat: [#<issueNumber>] <issueName>" --body-file "<scratch>/pr_<issueNumber>.md"
    ```
+   - PR 생성(`develop` 반영) 및 `share/dev/` 캡처 저장 후에는 원본 이슈 `#<issueNumber>`에도 구현 요약 + 캡처 경로 코멘트를 남기고, 라벨을 `gate:4-qa`로, Project #1 `Status`를 **`🔍 Gate 4: QA (시각·밸런스 검수)`** 로 전환합니다. *(신규 이슈를 개발자가 직접 제안/등록할 때는 `[개발/{영역}]` 제목 + 첫 줄 `### 🛠️ [개발자 / Developer] → @기획자 @오너`를 사용합니다.)*
 3. **권한 경계 (중요)**:
    - 개발 에이전트는 **PR 생성까지만 직접 수행**하고 사용자에게 PR 링크와 요약 결과를 보고합니다.
    - **코드 리뷰 및 머지(`merge`)는 사용자가 직접 진행**합니다. 에이전트는 사용자의 명시적 지시 없이 `gh pr merge`를 실행하거나 `main` / `develop` 브랜치에 직접 커밋·푸시하지 않습니다.

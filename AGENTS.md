@@ -1,20 +1,44 @@
-# Project Agent Guidelines
+# Project Agent Guidelines (`OUTPOST ZERO`)
 
-이 저장소(`OUTPOST ZERO`)에서 작업하는 모든 에이전트(기획/PM · 디자인 · 개발)는 작업 시작 전 반드시 아래 공통 규칙과 자신의 역할별 가이드를 읽고 준수해야 합니다.
+본 저장소는 속도·토큰 효율과 진정한 기능 병렬화를 위해 **`1 총괄 에이전트(기획·조율) + N 기능별 풀스택 서브에이전트(병렬 구현·PR)`** 경량 체제로 운영합니다.
 
-## 1. 역할별 필독 가이드
+---
 
-- **멀티 에이전트 공통 협업 파이프라인 (`Single Code Writer` 원칙)**: `agents/README.md`
-- **공통 GitHub / GitFlow / 버전 표준**: `agents/developer/github-gitflow.md`
-- **에이전트 간 로컬 작업물 공유 허브 (Git 미추적)**: `share/README.md`, `share/STATUS.md` (전체 실행 계획서: `share/plans/issue-execution-plan.md`)
-- **기획 · PM (Planner / PM) 에이전트**: `agents/pm/README.md`, `agents/pm/issue-spec-guide.md`, `agents/pm/roadmap-and-balance.md` 참고
-- **개발 (Developer) 에이전트**: `agents/developer/README.md` 및 `agents/developer/github-gitflow.md` 참고
-- **디자인 (Designer) 에이전트**: `agents/designer/README.md`, `agents/designer/design-issue-guide.md`, `agents/designer/art-direction.md` 참고 (코드베이스 구조는 `agents/developer/README.md` 참고)
+## 1. 운영 구조 (`Coordinator + Parallel Full-Stack Workers`)
 
-## 2. 핵심 역할 경계 및 불변 원칙
+1. **총괄 에이전트 (Lead / Coordinator — 메인 대화창)**
+   - 사용자(오너)와 방향·수치·우선순위를 간결하게 합의해 GitHub 이슈를 정리합니다.
+   - 수정 파일이 겹치지 않는 독립 이슈는 **`invoke_subagent`(`Workspace: "share"` 또는 `.worktrees/feature-{N}-{slug}`)** 로 **동시에 병렬 실행**합니다.
+   - 반면 `renderer.js`·`game.js` 등 핵심 파일을 함께 고치는 연관 작업은 **단일 워커 · 단일 통합 PR (`1 Sprint = 1 PR` 허용)** 로 묶어 충돌과 중복 파일 탐색을 막습니다.
+   - 사소한 1~2파일 수정·문서 정리·핫픽스는 서브에이전트 없이 총괄 에이전트가 직접 처리할 수 있습니다.
+2. **기능별 풀스택 서브에이전트 (Full-Stack Worker)**
+   - 과거의 `기획 → 디자인 → 개발` 직렬 역할 분리를 폐지합니다. 각 워커는 할당받은 이슈를 **`조형·UI/SVG + 게임 로직 + 구문/브라우저 검증 + develop 타겟 PR 생성`까지 End-to-End** 로 완결합니다.
+   - 작업 완료 시 전후 비교 캡처(필요한 경우에만 `share/dev/issue-{N}.png`)와 검증 요약을 PR 본문(`Closes #N`)에 남기고 종료합니다.
 
-1. **기획(PM) 에이전트의 코드·PR 비개입 원칙**: 기획 에이전트는 인게임 런타임 코드(`index.html`, `css/*`, `js/*`)를 직접 수정하거나 PR을 생성하지 않으며, 코드베이스를 읽기 전용으로 분석한 뒤 구체적인 수치·공식·인수 조건을 담은 GitHub 이슈(`gh issue create`) 및 `share/plans/` 계획서로 할 일을 등록합니다.
-2. **디자인(Designer) 에이전트의 시안 납품 및 코드·PR 비개입 원칙**: 디자인 에이전트 역시 인게임 코드를 직접 수정하거나 PR을 생성하지 않습니다. 디자인 이슈(`[Art]` / `[UI]`, `design` 라벨) 등록 또는 기획 이슈의 시각 명세 수립 후 **프로토타입 시안 HTML/Canvas·SVG 원본·팔레트·수치 명세 결과물을 반드시 `share/design/`에 선행 납품**(필요 시 이슈에 핵심 수치 코멘트 추가)하며, 비주얼 기준의 단일 출처는 `agents/designer/art-direction.md`입니다.
-3. **개발(Developer) 에이전트 단일 코드 작성(`Single Code Writer`) 및 임의 조형 금지 원칙**: 기획 이슈와 디자인 이슈 모두 **오직 개발 에이전트가 `share/plans/` 및 `share/design/`의 확정 결과물을 인게임 코드에 이식·최적화**하여 `feature/{issueNumber}-{slug}` 브랜치에서 구현하고, 검증 캡처를 `share/dev/`에 남긴 뒤 `develop` 타겟 PR(`Closes #{issueNumber}`) 생성까지만 수행합니다. 시각 요소가 포함된 과제는 **디자이너의 `share/design/` 산출물 없이 개발 에이전트가 임의로 오브젝트 조형·SVG 아이콘·UI 디자인을 창작해 선행 구현하지 않습니다.**
-4. **`v0.4.0` 이후 필수 순차 파이프라인 (`기획 → 디자인 → 개발 → 검수`)**: `v0.4.0`(Phase 2) 작업부터는 모든 기능·콘텐츠를 반드시 **`[1단계: 기획(PM) 명세·이슈화]` → `[2단계: 디자인(Designer) 시안·SVG·아트 명세 납품 (`share/design/`) & 컨펌]` → `[3단계: 개발(Developer) 인게임 코드 이식 & PR 생성]` → `[4단계: 디자인 시각 검수 & PM 밸런스 검수]`** 순서로 진행합니다. (순수 백엔드/데이터 전용 작업만 디자인 단계 생략 가능)
-5. **머지 및 보호 브랜치 권한**: 모든 에이전트는 사용자의 명시적 지시 없이 `main` / `develop` 브랜치에 직접 커밋·푸시하거나 `gh pr merge`를 실행하지 않습니다.
+---
+
+## 2. 토큰 · 속도 절감 불변 수칙 (`Zero-Bloat Rules`)
+
+1. **단일 기록 원칙 (`Single Source of Truth = GitHub Issue / PR`)**:
+   - `share/STATUS.md`, `share/plans/*`, `share/dev/*-handoff.md`, 상시 `GitHub Wiki` 중복 동기화를 **폐지**합니다.
+   - 요구사항·수치는 GitHub 이슈 본문에, 구현 결과·검증 내역은 PR 본문(`Closes #N`)에만 간결히 적습니다. *(Wiki는 정식 릴리스 시 필요할 때만 총괄이 선택 갱신)*
+2. **HTML 프로토타입 시안 이중 코딩 금지**:
+   - 사용자의 명시적 요청이 없는 한 `share/design/*.html` 별도 렌더 시안을 새로 코딩하지 않고, **인게임 코드에 직접 구현한 뒤 실제 게임 화면 캡처로 검수**합니다.
+3. **필요한 문서만 선택 열람 (전수 열람 금지)**:
+   - 모든 에이전트는 작업 시작 전 아래 해당 파일만 선택해 읽습니다:
+     - **시각 · UI · 조형 수정 포함 시**: `agents/designer/art-direction.md` (시맨틱 팔레트·음영·`>=12px`·이모지 금지)
+     - **브랜치 · `worktree` · PR · 릴리스 작업 시**: `agents/developer/github-gitflow.md` (커밋·PR 포맷·GitFlow)
+     - *(구 `agents/pm/*`, `agents/designer/design-issue-guide.md`, `agents/github-communication-guide.md`는 과거 3에이전트 직렬 체제 아카이브이며 현행 필수 규칙이 아님)*
+
+---
+
+## 3. GitHub 표기 · 권한 · 런타임 불변 기준
+
+1. **단일 계정(`Reve1988`) 구분 말머리**:
+   - GitHub 이슈·코멘트·PR 작성 시 첫 줄에 **`### 📋 [총괄/기획]`** 또는 **`### 🛠️ [풀스택 워커]`**, PR 제목에 `[워커] {type}: [#{N}] {요약}`을 표기합니다. 말머리가 없는 일반 댓글은 오너 직접 지시로 간주합니다.
+   - `Project #1` / 게이트 라벨 갱신은 최소한으로 유지합니다(PR 머지 또는 핵심 상태 전환 시에만 동기화).
+2. **보호 브랜치 및 머지 권한**:
+   - 모든 에이전트는 사용자의 명시적 지시 없이 `main` / `develop` 브랜치에 직접 커밋·푸시하거나 `gh pr merge`를 실행하지 않습니다.
+3. **런타임 불변 원칙 (`file://` 호환 & 비주얼 기준)**:
+   - 순수 HTML / CSS / Vanilla JS(`window.ZS`)를 유지하며 `<script type="module">` · `import` / `export`를 절대 사용하지 않습니다.
+   - `12px` 최소 폰트, 런타임 UI 내 OS 이모지 `0개`, 좌상단 광원 3면 명도(`100% / 82% / 66%`), **전력 청록(`#5EF2FF`)은 유전력 설비 전용(무전력 시설 청록 `0px`)** 규칙을 반드시 준수합니다.

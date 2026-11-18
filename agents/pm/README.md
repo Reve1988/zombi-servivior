@@ -8,6 +8,7 @@
 
 - **[issue-spec-guide.md](./issue-spec-guide.md)**: 개발 에이전트가 즉시 구현 가능한 수준의 기획 이슈 작성 템플릿, 수치·예외 정의 기준, `gh issue create` 운영 규칙
 - **[roadmap-and-balance.md](./roadmap-and-balance.md)**: 게임 코어 재미 기둥(Design Pillars), `v0.1.0` 밸런스 진단 내역, 페이즈별 기획 로드맵 및 발행된 GitHub 이슈 현황
+- *(공통 소통 규약)* **[../github-communication-guide.md](../github-communication-guide.md)**: GitHub 중심 대화, Project #1 동기화, 단일 계정 역할 말머리(`### 📋 [기획자 / PM]`) 필수 규칙
 - *(공통 파이프라인)* **[../README.md](../README.md)**: 3개 에이전트 협업 흐름 및 개발 에이전트 단일 코드 작성(`Single Code Writer`) 원칙
 - *(로컬 협업 허브 관리)* **[../../share/README.md](../../share/README.md)** · **[../../share/STATUS.md](../../share/STATUS.md)**: 에이전트 간 작업물·계획서·시안 실시간 공유 공간 (PM 총괄 관리, `.gitignore` 대상)
 - *(공통 참조)* **[../developer/github-gitflow.md](../developer/github-gitflow.md)**: 저장소 브랜치 전략, 시맨틱 버저닝(`vX.Y.Z`), 이슈·PR 협업 흐름
