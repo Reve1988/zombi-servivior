@@ -5,6 +5,7 @@
 ## 1. 역할별 필독 가이드
 
 - **멀티 에이전트 공통 협업 파이프라인 (`Single Code Writer` 원칙)**: `agents/README.md`
+- **공통 GitHub 중심 소통 및 역할 말머리 필수 가이드**: `agents/github-communication-guide.md` (`Project #1` · `Milestones` · `Wiki` 연동)
 - **공통 GitHub / GitFlow / 버전 표준**: `agents/developer/github-gitflow.md`
 - **에이전트 간 로컬 작업물 공유 허브 (Git 미추적)**: `share/README.md`, `share/STATUS.md` (전체 실행 계획서: `share/plans/issue-execution-plan.md`)
 - **기획 · PM (Planner / PM) 에이전트**: `agents/pm/README.md`, `agents/pm/issue-spec-guide.md`, `agents/pm/roadmap-and-balance.md` 참고
@@ -18,3 +19,7 @@
 3. **개발(Developer) 에이전트 단일 코드 작성(`Single Code Writer`) 및 임의 조형 금지 원칙**: 기획 이슈와 디자인 이슈 모두 **오직 개발 에이전트가 `share/plans/` 및 `share/design/`의 확정 결과물을 인게임 코드에 이식·최적화**하여 `feature/{issueNumber}-{slug}` 브랜치에서 구현하고, 검증 캡처를 `share/dev/`에 남긴 뒤 `develop` 타겟 PR(`Closes #{issueNumber}`) 생성까지만 수행합니다. 시각 요소가 포함된 과제는 **디자이너의 `share/design/` 산출물 없이 개발 에이전트가 임의로 오브젝트 조형·SVG 아이콘·UI 디자인을 창작해 선행 구현하지 않습니다.**
 4. **`v0.4.0` 이후 필수 순차 파이프라인 (`기획 → 디자인 → 개발 → 검수`)**: `v0.4.0`(Phase 2) 작업부터는 모든 기능·콘텐츠를 반드시 **`[1단계: 기획(PM) 명세·이슈화]` → `[2단계: 디자인(Designer) 시안·SVG·아트 명세 납품 (`share/design/`) & 컨펌]` → `[3단계: 개발(Developer) 인게임 코드 이식 & PR 생성]` → `[4단계: 디자인 시각 검수 & PM 밸런스 검수]`** 순서로 진행합니다. (순수 백엔드/데이터 전용 작업만 디자인 단계 생략 가능)
 5. **머지 및 보호 브랜치 권한**: 모든 에이전트는 사용자의 명시적 지시 없이 `main` / `develop` 브랜치에 직접 커밋·푸시하거나 `gh pr merge`를 실행하지 않습니다.
+6. **GitHub 중심 소통 및 단일 계정(`Reve1988`) 역할 표시 필수 원칙 (`agents/github-communication-guide.md`)**:
+   - 모든 에이전트는 GitHub 이슈·코멘트·PR 작성 시 첫 줄(`Line 1`)에 반드시 본인 역할 말머리(`### 📋 [기획자 / PM]`, `### 🎨 [디자이너 / Designer]`, `### 🛠️ [개발자 / Developer]` — 필요 시 `→ @{대상}` 병기)를 표기해야 하며, **역할 배지가 없는 일반 댓글은 오너(사용자)의 직접 지시·컨펌으로 자동 인식**합니다. (PR 제목에도 `[개발자]` 말머리 필수)
+   - 모든 `share/` 산출물 납품·QA 완료·상태 전환 시에는 **GitHub 이슈 `#N` 코멘트, 게이트 라벨, [Project #1](https://github.com/users/Reve1988/projects/1) `Status`/`담당` 필드를 함께 동기화**해 채팅창 복붙 없이 GitHub만으로 협업이 이어지도록 합니다.
+   - 모든 에이전트는 작업 시작 전 `gh issue view <N> --comments`와 `Project #1`을 조회해 오너 및 타 에이전트의 최신 코멘트를 먼저 확인합니다.

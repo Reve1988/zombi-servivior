@@ -9,6 +9,7 @@
 - **[pm/README.md](./pm/README.md)**: 시스템·밸런스 기획, 이슈 분할 표준, 페이즈별 로드맵 관리
 - **[designer/README.md](./designer/README.md)**: 아트 디렉션, 시맨틱 팔레트, 시안/SVG 제작 및 비주얼 검수
 - **[developer/README.md](./developer/README.md)**: `git worktree` 기반 코드 구현, `share/` 산출물 통합, PR 생성 및 버전 관리
+- **[github-communication-guide.md](./github-communication-guide.md)**: **GitHub 중심 소통 절차(Project #1 · Milestones · Wiki) 및 단일 계정(`Reve1988`) 역할 말머리 필수 규칙**
 - **[../share/README.md](../share/README.md)**: Git에 추적되지 않는 로컬 실시간 작업물 공유 허브 운영 지침 (`share/STATUS.md` 현황판 포함)
 
 ---
@@ -39,24 +40,21 @@
 
 ```text
 [Gate 1. 기획 & 이슈화 — PM Agent]
-  • 코드 읽기 전용 분석 → 구체적 수치·공식 기획서(share/plans/) 작성 및 GitHub 이슈(#N) 등록
-  • share/STATUS.md에 스프린트 우선순위 배치 및 디자이너 인계(Design Needed 표시)
+  • 코드 읽기 전용 분석 → 기획서(share/plans/) 작성 · GitHub 이슈(#N, 첫 줄 📋 [기획자 / PM]) · Milestone/Wiki/Project #1 등록
+  • 게이트 라벨 gate:2-design 및 share/STATUS.md에 등록해 디자이너 인계
         │
         ▼
 [Gate 2. 아트 명세 & 시안 납품 — Designer Agent] (PR 생성 X · 개발 착수 선행 조건)
-  • 기획서(share/plans/) 및 이슈(#N)를 바탕으로 오브젝트 조형 시안 HTML/Canvas, 신규 SVG 원본,
-    레이아웃·컬러·수치 명세를 share/design/에 반드시 선행 납품
-  • 중요 신규 외형·UI 시안은 사용자(Owner) 컨펌을 거친 뒤 share/STATUS.md를 Dev Ready로 전환
+  • HTML/Canvas 시안·SVG·수치 명세를 share/design/에 납품 + 이슈 #N에 첫 줄 🎨 [디자이너 / Designer] 요약 코멘트 작성
+  • Project #1 담당 → Owner 전환 후 오너(일반 댓글 = 오너 지시) 컨펌 완료 시 gate:3-dev-ready로 전환
         │
         ▼
 [Gate 3. 통합 코드 이식 & PR 생성 — Developer Agent] (유일한 PR 생성 주체 · 임의 디자인 금지)
-  • GitHub 이슈(#N) + share/plans/(기획) + share/design/(확정 시안) 산출물이 모두 준비된 후 착수
-  • .worktrees/feature-{N}-{slug} 독립 워크트리에서 시안과 수치를 인게임 코드로 정확히 이식·최적화
-  • 구현 전후 비교 캡처를 share/dev/에 저장 → develop 타겟 PR 생성 ("Closes #N") → STATUS.md 갱신
+  • gh issue view <N> --comments로 오너/디자이너 최신 지시 확인 + share/plans/·share/design/ 수령 후 착수 (In Progress)
+  • .worktrees/feature-{N}-{slug} 구현·share/dev/ 캡처 저장 → [개발자] PR 생성 + 이슈 #N에 🛠️ [개발자 / Developer] 보고 & gate:4-qa 전환
         │
         ▼
 [Gate 4. 교차 검수 & 최종 병합 — Designer · PM · User]
-  • Designer: share/dev/ 캡처를 원본 시안 및 art-direction.md와 대조해 시각 검수(Visual QA) 수행
-  • PM: 기획 수치·공식·밸런스 무결성 검수 수행
-  • User (Owner): 최종 확인 후 PR Merge 수행
+  • Designer(🎨 [디자이너 / Designer]) 시각 검수 & PM(📋 [기획자 / PM]) 밸런스 검수 코멘트를 GitHub 이슈/PR에 기록
+  • 양측 Pass 시 status:merged-dev / ✅ Done 전환 → User(Owner) 최종 PR Merge & 릴리스 시 이슈 Close
 ```

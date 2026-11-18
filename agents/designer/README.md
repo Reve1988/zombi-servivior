@@ -8,6 +8,7 @@
 
 - **[design-issue-guide.md](./design-issue-guide.md)**: 디자인 이슈 제목·라벨 규칙, 본문 필수 템플릿, `gh` 등록 수칙
 - **[art-direction.md](./art-direction.md)**: 아트 키워드, 시맨틱 컬러 팔레트, 음영·실루엣·캐릭터·이펙트·UI 기준, `v0.1.0` 비주얼 진단, 디자인 이슈 현황
+- *(공통 소통 규약)* **[../github-communication-guide.md](../github-communication-guide.md)**: GitHub 중심 대화, Project #1 동기화, 단일 계정 역할 말머리(`### 🎨 [디자이너 / Designer]`) 필수 규칙
 - *(공통 파이프라인)* **[../README.md](../README.md)** · **[../../share/README.md](../../share/README.md)**: `share/` 기반 시안 납품 및 개발 에이전트 단일 PR(`Single Code Writer`) 협업 흐름
 - *(공통 참조)* **[../developer/github-gitflow.md](../developer/github-gitflow.md)**: 브랜치 전략, 버전 규칙, 이슈·PR 협업 흐름
 - *(공통 참조)* **[../pm/issue-spec-guide.md](../pm/issue-spec-guide.md)**: 기획 이슈 명세 표준 (기획 이슈 안의 UI/연출 요구사항을 보완할 때 참고)

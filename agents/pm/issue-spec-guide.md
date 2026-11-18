@@ -40,9 +40,17 @@
 
 ## 3. 이슈 본문 필수 템플릿 (5대 섹션)
 
-모든 기획 이슈 본문에는 아래 항목이 빠짐없이 포함되어야 합니다.
+모든 기획 이슈 본문과 코멘트는 첫 줄에 **역할 말머리(`### 📋 [기획자 / PM] → @{대상}`, [github-communication-guide.md](../github-communication-guide.md))** 를 넣고 아래 항목을 빠짐없이 포함합니다.
 
 ```markdown
+### 📋 [기획자 / PM] → @디자이너 (또는 @개발자)
+
+- **목표 버전(Milestone)**: `v0.4.0`
+- **선행 의존성**: #N (있는 경우)
+- **디자인 게이트**: `Gate 2 필수` 또는 `생략 (Dev Ready)`
+
+---
+
 ## 📌 기획 배경 및 목적
 - 현재 게임에서 발생하는 플레이 경험/밸런스 문제점과 본 시스템 도입으로 얻고자 하는 기대 효과 요약
 - 필요 시 선행 의존성 이슈 번호(`#번호`) 명시
@@ -90,5 +98,7 @@
    ```powershell
    & "C:\Program Files\GitHub CLI\gh.exe" issue create --repo Reve1988/zombi-servivior --title "[기획/레벨링 1-1] ..." --label enhancement --body-file "<임시파일_절대경로>.md"
    ```
-3. **중복 등록 방지**:
-   - 이슈 등록 전이나 재시도 시 `gh issue list --repo Reve1988/zombi-servivior`로 이미 동일 이슈가 올라갔는지 먼저 확인합니다.
+3. **중복 등록 방지 · 대화 확인 · 보드/마일스톤 동기화**:
+   - 이슈 등록 전 `gh issue list --repo Reve1988/zombi-servivior --state all` 및 작업 전 `gh issue view <N> --comments`로 오너/타 에이전트 코멘트를 먼저 확인합니다.
+   - 이슈 생성 후 반드시 해당 **Milestone**, 게이트 라벨(`gate:2-design` 또는 `gate:3-dev-ready`), **[Project #1](https://github.com/users/Reve1988/projects/1)** 에 등록하고 주요 기획 변경 시 GitHub Wiki도 동기화합니다.
+   - 모든 이슈 코멘트(`gh issue comment`) 첫 줄에도 `### 📋 [기획자 / PM] → @{대상}`를 반드시 표기합니다.
