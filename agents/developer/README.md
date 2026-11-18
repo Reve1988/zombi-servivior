@@ -36,8 +36,8 @@
   - `js/data.js`: **인게임 버전(`ZS.DATA.VERSION`)**, 건물/가구/좀비/상인 밸런스 데이터
   - `js/iso.js`: 2:1 아이소메트릭 투영, 카메라 제어, 3D 복셀 프리즘 드로잉
   - `js/pathfinding.js`: 다익스트라 기반 플로우 필드 길찾기
-  - `js/renderer.js`: 복셀 오브젝트 및 주야간 조명·블랙아웃 렌더러
-  - `js/game.js`: 자원·전력·전투·안락함·상인·세이브 시뮬레이션 로직
+  - `js/renderer-{core,structures,entities,overlay}.js`: 지형·복셀 조형·엔티티·야간 조명/오버레이 분할 렌더러 (`ZS._Renderer` / `ZS.Renderer`)
+  - `js/game-{core,build,combat,zombies}.js`: 상태/세이브·건설/스탯·전투·좀비 AI 분할 시뮬레이션 (`ZS._Game` / `ZS.Game`)
   - `js/audio.js` / `js/main.js`: Web Audio 사운드 합성 및 입력·UI 바인딩
 
 ### 인게임 버전 관리 규칙 (필수)
