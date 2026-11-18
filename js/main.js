@@ -95,8 +95,14 @@ window.ZS = window.ZS || {};
       return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>야간전력 소모</span>`, cls: 'tag-power' };
     }
     if (def.subType === 'power') {
+      if (def.nightGen > 0) {
+        return {
+          html: `${ozIcon('res-power', 13, 'icon-power')}<span>밤+${def.nightGen}/s · 낮+${def.dayCharge}</span>`,
+          cls: 'tag-power'
+        };
+      }
       return {
-        html: `${ozIcon('phase-day', 13, 'icon-coin')}<span>+${def.dayCharge}</span>${ozIcon('res-power', 13, 'icon-power')}<span>/ 용량+${def.powerCap}</span>`,
+        html: `${ozIcon('phase-day', 13, 'icon-coin')}<span>낮+${def.dayCharge}</span>${ozIcon('res-power', 13, 'icon-power')}<span>· 용량+${def.powerCap}</span>`,
         cls: 'tag-power'
       };
     }
@@ -131,7 +137,7 @@ window.ZS = window.ZS || {};
       if (def.category !== uiState.activeCategory) return;
 
       const bossLocked = def.unlockedByBoss && !st.bossDefeated;
-      const voucherCount = st.freeVouchers[def.id] || 0;
+      const voucherCount = (st.freeVouchers[def.id] || 0) + (def.id === 'field_tent' ? st.freeVouchers.shelter_pod || 0 : 0);
       const reqHq = def.reqHqLevel || 1;
       const hqLockedRaw = (st.hqLevel || 1) < reqHq;
       const voucherBypass = hqLockedRaw && !bossLocked && voucherCount > 0;
@@ -399,8 +405,52 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function formatPowerSubText(st) {
+    if (st.isNight && st.blackoutActive && (st.nightGen || 0) > 0) {
+      const target = Math.min(Math.round(st.powerCap || 12), 12);
+      return `블랙아웃 · 풍력 복구 중 (${Math.floor(st.power)}/${target})`;
+    }
+    if (st.isNight && st.blackoutActive) {
+      return '배터리 방전 (자동포탑 정지)';
+    }
+    return `낮 +${Math.round(st.dayCharge || 0)} · 밤 +${(st.nightGen || 0).toFixed(1)}/s · 대기 -${(st.nightIdleDrain || 0).toFixed(1)}/s`;
+  }
+
+  function syncNightPhaseAndPowerHud(st) {
+    const P = ZS.DATA.PALETTE;
+    const isNightBlackout = !!(st.isNight && st.blackoutActive);
+    if (st.phase === 'night') {
+      const phaseIconEl = document.getElementById('hud-phase-icon');
+      if (phaseIconEl) {
+        phaseIconEl.className = isNightBlackout ? 'icon-slot icon-danger' : 'icon-slot';
+        phaseIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'phase-night', 20);
+      }
+      const phaseTextEl = document.getElementById('hud-phase-text');
+      if (phaseTextEl) {
+        phaseTextEl.textContent = isNightBlackout ? '블랙아웃 교전 중!' : '야간 방어 교전 중';
+      }
+    }
+
+    const pwrVal = Math.round(st.power);
+    document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
+    const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
+    const pwrBar = document.getElementById('res-power-bar');
+    pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
+    pwrBar.style.background = pwrPct > 35 ? P.power : pwrPct > 5 ? P.healthMid : P.danger;
+
+    const pwrIconEl = document.getElementById('res-power-icon');
+    if (pwrIconEl) {
+      pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
+      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
+    }
+
+    document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
+    document.getElementById('res-power-sub').textContent = formatPowerSubText(st);
+  }
+
   function updateHud() {
     const st = ZS.Game.state;
+    const P = ZS.DATA.PALETTE;
     const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
     const phaseIconEl = document.getElementById('hud-phase-icon');
 
@@ -410,10 +460,7 @@ window.ZS = window.ZS || {};
       phaseIconEl.innerHTML = ozIcon('phase-day', 20);
       document.getElementById('hud-phase-text').textContent = '주간 정비 · 건설 페이즈';
     } else if (st.phase === 'night') {
-      const isBlackout = st.power <= 0.01;
-      phaseIconEl.className = isBlackout ? 'icon-slot icon-danger' : 'icon-slot';
-      phaseIconEl.innerHTML = ozIcon(isBlackout ? 'state-power-off' : 'phase-night', 20);
-      document.getElementById('hud-phase-text').textContent = isBlackout ? '블랙아웃 교전 중!' : '야간 방어 교전 중';
+      syncNightPhaseAndPowerHud(st);
     } else {
       phaseIconEl.className = 'icon-slot icon-danger';
       phaseIconEl.innerHTML = ozIcon('state-alert', 20);
@@ -434,31 +481,9 @@ window.ZS = window.ZS || {};
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
 
-    // Power display & blackout icon state (#9)
-    const pwrVal = Math.round(st.power);
-    const isNightBlackout = st.isNight && st.power <= 0.01;
-    document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
-    const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
-    const pwrBar = document.getElementById('res-power-bar');
-    const P = ZS.DATA.PALETTE;
-    pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
-    pwrBar.style.background =
-      pwrPct > 35
-        ? P.power
-        : pwrPct > 5
-        ? P.healthMid
-        : P.danger;
-
-    const pwrIconEl = document.getElementById('res-power-icon');
-    if (pwrIconEl) {
-      pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
-      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
+    if (st.phase !== 'night') {
+      syncNightPhaseAndPowerHud(st);
     }
-
-    document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
-    document.getElementById('res-power-sub').textContent = isNightBlackout
-      ? '배터리 방전 (자동포탑 정지)'
-      : `낮 충전 +${st.dayCharge} · 대기 -${st.nightIdleDrain.toFixed(1)}/s`;
 
     // Population display
     document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
@@ -761,7 +786,8 @@ window.ZS = window.ZS || {};
 
       let iconVisualHtml = '';
       if (offer.type === 'free_item' && offer.itemId && ZS.Renderer.renderItemThumbnail) {
-        const thumbSrc = ZS.Renderer.renderItemThumbnail(offer.itemId, 44);
+        const tierOpt = offer.spawnTier || (offer.itemId === 'shelter_pod' ? 3 : 1);
+        const thumbSrc = ZS.Renderer.renderItemThumbnail(offer.itemId, 44, tierOpt);
         iconVisualHtml = `<span class="offer-icon-box"><img class="offer-thumb" src="${thumbSrc}" width="40" height="40" alt="" /></span>`;
       } else {
         const svgId =
@@ -919,18 +945,20 @@ window.ZS = window.ZS || {};
 
       let wallUpHtml = '';
       const wallCheck = ZS.Game.canUpgradeWallBase ? ZS.Game.canUpgradeWallBase(tx, ty) : null;
-      if (lv >= 3) {
-        wallUpHtml = `<span class="cost-chip free">◆◆◆ Lv.3 MAX</span>`;
+      const wallMaxLv = ZS.Game.getStructMaxTier ? ZS.Game.getStructMaxTier(def) : 3;
+      if (lv >= wallMaxLv) {
+        wallUpHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
       } else if (wallCheck) {
         const wCost = wallCheck.cost || ZS.Game.getUpgradeCost(def, lv) || {};
         const wCostHtml = formatInlineCostHtml(wCost, 13);
+        const nextWallProf = ZS.Game.getStructLevelProfile(def, lv + 1);
         const wInner = wallCheck.hqCapped
           ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>본부 Lv.${wallCheck.reqHqLevel} 필요</span>(${wCostHtml})`
-          : `${ozIcon('wall-upgrade', 14)}<span>성벽 Lv.${lv + 1}</span>(${wCostHtml})<span>[G]</span>`;
+          : `${ozIcon('wall-upgrade', 14)}<span>${escapeHtml(nextWallProf.levelName || '합금 장갑 성벽')} 업그레이드</span>(${wCostHtml})<span>[G]</span>`;
         wallUpHtml = `<button id="btn-comp-up-wall" class="detail-upgrade-btn" ${wallCheck.ok ? '' : 'disabled'} title="${escapeHtml(wallCheck.ok ? '단축키 G로 상부 유지 성벽 승강' : wallCheck.reason)}">${wInner}</button>`;
       }
 
-      const wallStatSummary = `반사 ${Math.round((wallProf.thornsRatio || 0) * 100)}% (최소 ${wallProf.thornsMin || 0})${wallProf.perkLabel ? ` · ★${escapeHtml(wallProf.perkLabel.split(' (')[0])}` : ''}`;
+      const wallStatSummary = `반사 ${Math.round((wallProf.thornsRatio || 0) * 100)}% (최소 ${wallProf.thornsMin || 0})`;
       const compHtml = `
         <div class="comp-list">
           <div class="comp-row top">
@@ -958,7 +986,6 @@ window.ZS = window.ZS || {};
             <div class="comp-info">
               <div class="comp-title-line">
                 <span class="comp-title">${escapeHtml(wallName)}</span>
-                <span class="comp-lv">Lv.${lv}</span>
                 <div class="comp-hpb-wrap">
                   <span class="comp-hpb wall"><span style="width:${wallHpPct.toFixed(1)}%"></span></span>
                   <span class="comp-hp-txt">${Math.ceil(obj.hp)}/${obj.maxHp}</span>
@@ -988,7 +1015,7 @@ window.ZS = window.ZS || {};
         setToolMode('move');
         uiState.movingSource = { tx, ty };
         const canMountDest = !!(mDef && mDef.canMountOnWall);
-        setDetailHtml(`${ozIcon('unmount', 14)} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(m))}]</b> (상부 분리) 선택됨 — 이동할 빈 타일${canMountDest ? ' 또는 Lv.2+ 성벽' : ''}을 클릭하세요.`);
+        setDetailHtml(`${ozIcon('unmount', 14)} <b>[${escapeHtml(ZS.Game.getStructureDisplayName(m))}]</b> (상부 분리) 선택됨 — 이동할 빈 타일${canMountDest ? ' 또는 헤스코+ 성벽' : ''}을 클릭하세요.`);
       });
       document.getElementById('btn-comp-demolish-top')?.addEventListener('click', () => {
         if (st.phase !== 'day') return;
@@ -997,18 +1024,27 @@ window.ZS = window.ZS || {};
       return;
     }
 
+    const isTierEvo = !!(ZS.Game.isTierEvolutionDef && ZS.Game.isTierEvolutionDef(def));
+    const maxLv = isTierEvo && ZS.Game.getStructMaxTier ? ZS.Game.getStructMaxTier(def) : 3;
     let actionHtml = '';
     if (ZS.Game.isUpgradeableDef(def)) {
       const upCheck = ZS.Game.canUpgradeStructure(tx, ty);
-      if (lv >= 3) {
-        const perk = ZS.DATA.LV3_PERK_LABELS && ZS.DATA.LV3_PERK_LABELS[def.id];
-        actionHtml = `<span class="cost-chip free" title="${escapeHtml(perk || '')}">◆◆◆ Lv.3 MAX</span>`;
+      if (lv >= maxLv) {
+        if (isTierEvo) {
+          actionHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
+        } else {
+          const perk = ZS.DATA.LV3_PERK_LABELS && ZS.DATA.LV3_PERK_LABELS[def.id];
+          actionHtml = `<span class="cost-chip free" title="${escapeHtml(perk || '')}">◆◆◆ Lv.3 MAX</span>`;
+        }
       } else {
         const cost = ZS.Game.getUpgradeCost(def, lv) || {};
         const costHtml = formatInlineCostHtml(cost, 14);
-        const upIconCls = lv + 1 === 3 && !upCheck.hqCapped ? 'icon-max' : '';
+        const upIconCls = lv + 1 === maxLv && !upCheck.hqCapped ? 'icon-max' : '';
+        const nextProfBtn = ZS.Game.getStructLevelProfile(def, lv + 1);
         const btnInner = upCheck.hqCapped
           ? `${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${upCheck.reqHqLevel} 필요</span>(${costHtml})`
+          : isTierEvo
+          ? `${ozIcon('state-upgrade', 16, upIconCls)}<span>${escapeHtml(nextProfBtn.levelName || def.name)} 업그레이드</span>(${costHtml})<span>[U]</span>`
           : `${ozIcon('state-upgrade', 16, upIconCls)}<span>Lv.${lv + 1} 강화</span>(${costHtml})<span>[U]</span>`;
         actionHtml = `<button id="btn-upgrade-struct" class="detail-upgrade-btn" ${upCheck.ok ? '' : 'disabled'} title="${escapeHtml(upCheck.ok ? '단축키 U로 즉시 강화' : upCheck.reason)}">${btnInner}</button>`;
       }
@@ -1047,7 +1083,7 @@ window.ZS = window.ZS || {};
         }
         if (def.id === 'barricade_wall') {
           if (lv === 1) {
-            parts.push('초소·포탑·조명 거치 불가 — [U] 헤스코 방벽(Lv.2) 강화 시 상부 거치 해금');
+            parts.push('초소·포탑·조명 거치 불가 — [U] 헤스코 전술 방벽 업그레이드 시 상부 거치 해금');
           } else {
             parts.push('상부 거치 가능 (사거리 +0.5)');
           }
@@ -1060,24 +1096,33 @@ window.ZS = window.ZS || {};
       } else if (def.id === 'razor_pad') {
         statSummary = `지속피해 ${prof.trapDps}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${prof.perkLabel ? ` · ★${escapeHtml(prof.perkLabel)}` : ''}`;
       } else if (def.subType === 'power') {
-        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${prof.dayCharge} · 저장 용량 +${prof.powerCap}`;
+        const nightTxt = prof.nightGen > 0 ? ` · 야간 +${prof.nightGen.toFixed(2)}/s` : '';
+        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${prof.dayCharge}${nightTxt} · 저장 용량 +${prof.powerCap}`;
       } else if (def.subType === 'housing') {
         statSummary = `${ozIcon('res-agent', 13)}요원 수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }
-      if (lv < 3) {
+      if (lv < maxLv) {
         const nextProf = ZS.Game.getStructLevelProfile(def, lv + 1);
         const nextDispName = ZS.Game.getStructureDisplayName({ id: def.id, level: lv + 1 });
         const fid2 = st.floorGrid[ty] && st.floorGrid[ty][tx];
         const fDef2 = fid2 ? ZS.DATA.ITEMS[fid2] : null;
         const hpMult = 1 + (fDef2 && fDef2.hpMultBonus ? fDef2.hpMultBonus : 0);
         const nextMaxHp = Math.round(nextProf.baseMaxHp * hpMult);
-        const nextLabel = def.id === 'barricade_wall' ? `${escapeHtml(nextDispName)} Lv.${lv + 1}` : `Lv.${lv + 1}`;
-        const perkHint = lv + 1 === 3 && nextProf.perkLabel
-          ? ` · ★${escapeHtml(nextProf.perkLabel.split(' (')[0])}`
-          : (def.id === 'barricade_wall' && lv + 1 === 2 ? ' · 상부 거치 해금' : '');
-        statSummary += ` → [${nextLabel}: HP ${nextMaxHp}${perkHint}]`;
+        const nextLabel = isTierEvo ? escapeHtml(nextDispName) : `Lv.${lv + 1}`;
+        const extraHint =
+          def.id === 'barricade_wall' && lv + 1 === 2
+            ? ' · 상부 거치 해금'
+            : def.subType === 'power' && nextProf.nightGen > 0
+            ? ` · 밤 +${nextProf.nightGen.toFixed(2)}/s`
+            : def.subType === 'housing'
+            ? ` · 수용 +${nextProf.popCap}명`
+            : !isTierEvo && lv + 1 === 3 && nextProf.perkLabel
+            ? ` · ★${escapeHtml(nextProf.perkLabel.split(' (')[0])}`
+            : '';
+        statSummary += ` → [${nextLabel}: HP ${nextMaxHp}${extraHint}]`;
       }
-      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(dispName)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
+      const titleText = isTierEvo ? escapeHtml(dispName) : `${escapeHtml(dispName)} Lv.${lv}`;
+      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${titleText}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
     } else {
       const dispName = ZS.Game.getStructureDisplayName(obj);
       setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(dispName)}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${escapeHtml(def.desc)}`);
@@ -1437,21 +1482,7 @@ window.ZS = window.ZS || {};
 
   function updateLiveNightNumbers() {
     const st = ZS.Game.state;
-    const P = ZS.DATA.PALETTE;
-    const pwrVal = Math.round(st.power);
-    const isNightBlackout = st.isNight && st.power <= 0.01;
-    document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
-    const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
-    const pwrBar = document.getElementById('res-power-bar');
-    pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
-    pwrBar.style.background = pwrPct > 35 ? P.power : pwrPct > 5 ? P.healthMid : P.danger;
-    document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
-
-    const pwrIconEl = document.getElementById('res-power-icon');
-    if (pwrIconEl) {
-      pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
-      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
-    }
+    syncNightPhaseAndPowerHud(st);
 
     const left = st.spawnQueue.length + st.zombies.length;
     document.getElementById('hud-enemies-left').textContent = `${left}기`;

@@ -154,7 +154,7 @@ ZS.Renderer = (function () {
 
   function computeBlackoutElectricPowered(state, timeSec) {
     if (!state.isNight) return true;
-    if (state.power > 0.01) return true;
+    if (!state.blackoutActive) return true;
     const flk = state.blackoutFlickerTimer || 0;
     if (flk > 0) {
       // Rapid fluorescent stutter over 0.5s before plunging into full blackout (#8)
@@ -391,7 +391,7 @@ ZS.Renderer = (function () {
     renderList.sort((a, b) => a.depth - b.depth);
 
     const powered = computeBlackoutElectricPowered(state, timeSec);
-    const statusPowered = !state.isNight || state.power > 0.01;
+    const statusPowered = !state.isNight || !state.blackoutActive;
     const nightEmissives = state.nightAlpha > 0.02 ? [] : null;
     emissiveList = nightEmissives;
 
@@ -1026,7 +1026,13 @@ ZS.Renderer = (function () {
       if (def && def.layer === 'struct') {
         const existing = state.structGrid[ty] && state.structGrid[ty][tx];
         if (!existing) {
-          previewObj = { id: def.id, level: 1, hp: 100, maxHp: 100, aimAngle: 0 };
+          const previewLv =
+            def.id === 'field_tent' && state.freeVouchers && state.freeVouchers.shelter_pod > 0
+              ? 3
+              : def.id === 'shelter_pod'
+              ? 3
+              : 1;
+          previewObj = { id: def.id === 'shelter_pod' ? 'field_tent' : def.id, level: previewLv, hp: 100, maxHp: 100, aimAngle: 0 };
         } else if (ZS.Game.canPlaceItem) {
           const check = ZS.Game.canPlaceItem(uiState.selectedItemId, tx, ty);
           if (check.ok && check.mountOnWall) {
@@ -1081,10 +1087,10 @@ ZS.Renderer = (function () {
       case 'vulcan_turret': return level >= 2 ? 24 : 21;
       case 'missile_pod': return 22;
       case 'emp_coil': return 35;
-      case 'solar_array': return 17;
-      case 'wind_turbine': return 60;
-      case 'battery_bank': return 33;
-      case 'field_tent': return level >= 3 ? 22 : 16;
+      case 'solar_array': return [12, 17, 24, 34][Math.min(4, Math.max(1, level || 1)) - 1];
+      case 'wind_turbine': return [30, 44, 60, 70][Math.min(4, Math.max(1, level || 1)) - 1];
+      case 'battery_bank': return [14, 22, 33, 40][Math.min(4, Math.max(1, level || 1)) - 1];
+      case 'field_tent': return [16, 19, 22, 32][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'shelter_pod': return 22;
       case 'gas_heater': return 26;
       case 'led_floodlight': return 24;
@@ -1317,6 +1323,44 @@ ZS.Renderer = (function () {
       true,
       zScale
     );
+  }
+
+  function drawSlantedSolarPanel(ctx, gx, gy, w, d, zBack, zFront, thick, frameHex, cellHex, gridHex, cols, rows, zScale) {
+    const Iso = ZS.Iso;
+    const a = Iso.gridToScreen(gx, gy, zBack);
+    const b = Iso.gridToScreen(gx + w, gy, zBack);
+    const c = Iso.gridToScreen(gx + w, gy + d, zFront);
+    const dd = Iso.gridToScreen(gx, gy + d, zFront);
+    const bB = Iso.gridToScreen(gx + w, gy, zBack - thick);
+    const cB = Iso.gridToScreen(gx + w, gy + d, zFront - thick);
+    const dB = Iso.gridToScreen(gx, gy + d, zFront - thick);
+    drawPolyFace(ctx, [dd, c, cB, dB], frameHex, 0.82, false, true, zScale);
+    drawPolyFace(ctx, [c, b, bB, cB], frameHex, 0.66, false, true, zScale);
+    drawPolyFace(ctx, [a, b, c, dd], cellHex, 1.0, false, true, zScale);
+    if (!window.ZS_SILHOUETTE_MODE) {
+      ctx.strokeStyle = Iso.resolveFaceColor(gridHex, 1.0, false, 0) || gridHex;
+      ctx.lineWidth = Math.max(0.75, 0.85 * zScale);
+      for (let i = 1; i < cols; i++) {
+        const sx = gx + (w * i) / cols;
+        const p1 = Iso.gridToScreen(sx, gy, zBack);
+        const p2 = Iso.gridToScreen(sx, gy + d, zFront);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+      for (let j = 1; j < rows; j++) {
+        const t = j / rows;
+        const sy = gy + d * t;
+        const sz = zBack + (zFront - zBack) * t;
+        const m1 = Iso.gridToScreen(gx, sy, sz);
+        const m2 = Iso.gridToScreen(gx + w, sy, sz);
+        ctx.beginPath();
+        ctx.moveTo(m1.x, m1.y);
+        ctx.lineTo(m2.x, m2.y);
+        ctx.stroke();
+      }
+    }
   }
 
   function drawHipRoof(ctx, gx, gy, z, w, d, h, hex, zScale) {
@@ -2261,154 +2305,231 @@ ZS.Renderer = (function () {
       }
 
       case 'solar_array': {
-        // Center pedestal + tilted photovoltaic panel (z=15 back -> z=8 front) + cell grid lines
-        drawIsoBox(ctx, tx + 0.44, ty + 0.44, 0.5, 0.12, 0.12, 9, lv >= 2 ? steelCol : '#7B8996', null, zScale);
-        const a = Iso.gridToScreen(tx + 0.06, ty + 0.12, 15.5);
-        const b = Iso.gridToScreen(tx + 0.94, ty + 0.12, 15.5);
-        const c = Iso.gridToScreen(tx + 0.94, ty + 0.88, 8.5);
-        const d = Iso.gridToScreen(tx + 0.06, ty + 0.88, 8.5);
-        const cB = Iso.gridToScreen(tx + 0.94, ty + 0.88, 7.0);
-        const dB = Iso.gridToScreen(tx + 0.06, ty + 0.88, 7.0);
-        const bB = Iso.gridToScreen(tx + 0.94, ty + 0.12, 14.0);
-        drawPolyFace(ctx, [d, c, cB, dB], lv >= 3 ? maxAccent : '#A9B6C4', 0.82, false, true, zScale);
-        drawPolyFace(ctx, [c, b, bB, cB], lv >= 3 ? maxAccent : '#A9B6C4', 0.66, false, true, zScale);
-        drawPolyFace(ctx, [a, b, c, d], '#2466B5', 1.0, false, true, zScale);
-
-        ctx.strokeStyle = Iso.resolveFaceColor('#6E9FE0', 1.0, false, 0);
-        ctx.lineWidth = Math.max(0.75, 0.9 * zScale);
-        const splits = [1 / 3, 2 / 3];
-        for (let i = 0; i < splits.length; i++) {
-          const sx = tx + 0.06 + 0.88 * splits[i];
-          const p1 = Iso.gridToScreen(sx, ty + 0.12, 15.5);
-          const p2 = Iso.gridToScreen(sx, ty + 0.88, 8.5);
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
+        const solarOff = !powered;
+        if (lv <= 1) {
+          drawIsoBox(ctx, tx + 0.22, ty + 0.28, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
+          drawIsoBox(ctx, tx + 0.22, ty + 0.72, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
+          drawIsoBox(ctx, tx + 0.45, ty + 0.30, 1.7, 0.10, 0.08, 7.6, '#7B8996', null, zScale);
+          drawIsoBox(ctx, tx + 0.12, ty + 0.52, 0.5, 0.12, 0.20, 4.2, '#475361', null, zScale);
+          drawIsoDot(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.72, 3.2), 1.4, solarOff ? P.powerDim : P.power, !solarOff, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.22, ty + 0.24, 0.58, 0.54, 11.2, 5.4, 1.1, '#9AA8B6', '#2466B5', '#6E9FE0', 2, 2, zScale);
+        } else if (lv === 2) {
+          drawIsoBox(ctx, tx + 0.44, ty + 0.44, 0.5, 0.12, 0.12, 9.0, '#7B8996', null, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.12, 0.88, 0.76, 15.5, 8.5, 1.5, '#A9B6C4', '#2466B5', '#6E9FE0', 3, 2, zScale);
+        } else if (lv === 3) {
+          drawCyl(ctx, tx + 0.50, ty + 0.44, 0.5, 0.22, 3.6, '#596673', { n: 14 }, zScale);
+          drawPowerStripCyl(ctx, tx + 0.50, ty + 0.44, 2.5, 0.225, solarOff, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.44, 4.1, 0.07, 11.4, '#8C9AA8', { n: 10 }, zScale);
+          drawIsoBox(ctx, tx + 0.18, ty + 0.40, 14.8, 0.64, 0.08, 1.8, '#7B8996', null, zScale);
+          drawIsoBox(ctx, tx + 0.34, ty + 0.66, 0.5, 0.32, 0.20, 7.2, '#DDE5EC', null, zScale);
+          drawIsoBox(ctx, tx + 0.37, ty + 0.855, 4.6, 0.26, 0.015, 1.4, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.54, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+        } else {
+          drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 3.0, '#475361', null, zScale);
+          drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.7, 0.85, 0.85, 1.0, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
+          drawIsoBox(ctx, tx + 0.38, ty + 0.34, 3.5, 0.24, 0.24, 26.0, '#607080', null, zScale);
+          drawIsoBox(ctx, tx + 0.375, ty + 0.335, 17.5, 0.25, 0.25, 1.5, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
+          drawIsoBox(ctx, tx + 0.41, ty + 0.37, 29.5, 0.18, 0.18, 3.5, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.06, 0.88, 0.42, 28.0, 20.5, 1.4, '#B6C3D0', '#1D5AA8', '#6E9FE0', 4, 2, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          drawSlantedSolarPanel(ctx, tx + 0.63, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
         }
-        const m1 = Iso.gridToScreen(tx + 0.06, ty + 0.50, 12.0);
-        const m2 = Iso.gridToScreen(tx + 0.94, ty + 0.50, 12.0);
-        ctx.beginPath();
-        ctx.moveTo(m1.x, m1.y);
-        ctx.lineTo(m2.x, m2.y);
-        ctx.stroke();
         break;
       }
 
       case 'wind_turbine': {
-        // Tallest & slenderest silhouette (h=60): pedestal + cylindrical mast + nacelle + 3 rotor blades
-        drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 4, '#758594', null, zScale);
-        if (lv >= 2) {
-          drawCyl(ctx, tx + 0.5, ty + 0.5, 4.5, 0.11, 2.4, steelCol, { n: 12 }, zScale);
-        }
-        drawCyl(ctx, tx + 0.5, ty + 0.5, 4.5, 0.058, 42, '#EEF3F8', { n: 10 }, zScale);
-        drawIsoBox(ctx, tx + 0.42, ty + 0.36, 46.5, 0.16, 0.28, 5, '#D0DBE6', null, zScale);
-        const hub = Iso.gridToScreen(tx + 0.5, ty + 0.66, 49.0);
-        const bladeAngle = timeSec * 2.6 + (tx + ty);
-        for (let b = 0; b < 3; b++) {
-          const a = bladeAngle + (b * Math.PI * 2) / 3;
-          const tip = { x: hub.x + Math.cos(a) * 23 * zScale, y: hub.y + Math.sin(a) * 23 * zScale };
-          drawIsoLine(ctx, hub, tip, '#F5F9FC', 2.7, true, zScale);
-          if (lv >= 3) {
-            drawIsoDot(ctx, tip, 2.0, maxAccent, false, zScale);
+        const windOff = false;
+        const bladeAngle = st.isPreview ? 0.45 + (tx + ty) * 0.4 : timeSec * 2.6 + (tx + ty);
+        if (lv <= 1) {
+          drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 3.0, '#647280', null, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 3.5, 0.13, 2.0, windOff ? P.powerDim : P.power, { n: 12, emissive: !windOff }, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 5.5, 0.042, 22.0, '#DCE5EE', { n: 10 }, zScale);
+          const rx = 0.21 * Math.cos(bladeAngle);
+          const ry = 0.21 * Math.sin(bladeAngle);
+          const bx1 = tx + 0.50 + rx;
+          const by1 = ty + 0.50 + ry;
+          const bx2 = tx + 0.50 - rx;
+          const by2 = ty + 0.50 - ry;
+          drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 14.0), Iso.gridToScreen(bx1, by1, 14.0), '#9AA8B6', 1.7, true, zScale);
+          drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 24.5), Iso.gridToScreen(bx1, by1, 24.5), '#9AA8B6', 1.7, true, zScale);
+          drawIsoLine(ctx, Iso.gridToScreen(bx1, by1, 12.2), Iso.gridToScreen(bx1, by1, 26.5), '#F5F9FC', 2.8, true, zScale);
+          drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 12.2), Iso.gridToScreen(bx2, by2, 26.5), '#F5F9FC', 2.8, true, zScale);
+          drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, 28.0), 2.2, '#C7D2DD', false, zScale);
+        } else if (lv === 2) {
+          drawIsoBox(ctx, tx + 0.34, ty + 0.34, 0.5, 0.32, 0.32, 3.5, '#6C7B8A', null, zScale);
+          drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 3.8, 0.125, windOff, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 4.0, 0.048, 31.0, '#E4ECF4', { n: 10 }, zScale);
+          drawIsoBox(ctx, tx + 0.44, ty + 0.38, 35.0, 0.12, 0.24, 3.8, '#C7D2DD', null, zScale);
+          drawIsoBox(ctx, tx + 0.48, ty + 0.18, 35.6, 0.04, 0.20, 4.4, '#7B8FA2', null, zScale);
+          const hub = Iso.gridToScreen(tx + 0.50, ty + 0.64, 37.0);
+          for (let b = 0; b < 3; b++) {
+            const a = bladeAngle + (b * Math.PI * 2) / 3;
+            drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 15.5 * zScale, y: hub.y + Math.sin(a) * 15.5 * zScale }, '#F5F9FC', 2.2, true, zScale);
           }
+          drawIsoDot(ctx, hub, 2.4, '#C7D2DD', false, zScale);
+        } else if (lv === 3) {
+          drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 4.0, '#758594', null, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 4.5, 0.058, 42.0, '#EEF3F8', { n: 10 }, zScale);
+          drawIsoBox(ctx, tx + 0.42, ty + 0.36, 46.5, 0.16, 0.28, 5.0, '#D0DBE6', null, zScale);
+          const hub = Iso.gridToScreen(tx + 0.50, ty + 0.66, 49.0);
+          for (let b = 0; b < 3; b++) {
+            const a = bladeAngle + (b * Math.PI * 2) / 3;
+            drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 23.0 * zScale, y: hub.y + Math.sin(a) * 23.0 * zScale }, '#F5F9FC', 2.7, true, zScale);
+          }
+          drawIsoDot(ctx, hub, 3.0, '#C7D2DD', false, zScale);
+        } else {
+          drawFrustum(ctx, tx + 0.30, ty + 0.30, 0.5, 0.40, 0.40, 6.5, 0.08, '#5E6E7E', null, zScale);
+          drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 5.4, 0.145, windOff, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.066, 47.0, '#EEF3F8', { n: 12 }, zScale);
+          drawIsoBox(ctx, tx + 0.40, ty + 0.28, 54.0, 0.20, 0.38, 5.6, '#DCE5EE', null, zScale);
+          drawIsoBox(ctx, tx + 0.395, ty + 0.275, 56.0, 0.21, 0.39, 1.3, windOff ? P.powerDim : P.power, { noTop: true, emissive: !windOff }, zScale);
+          drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.46, 61.0), 1.9, windOff ? P.powerDim : P.power, !windOff, zScale);
+          const hubB = Iso.gridToScreen(tx + 0.50, ty + 0.26, 56.8);
+          for (let b = 0; b < 3; b++) {
+            const a = -bladeAngle + 0.52 + (b * Math.PI * 2) / 3;
+            drawIsoLine(ctx, hubB, { x: hubB.x + Math.cos(a) * 13.5 * zScale, y: hubB.y + Math.sin(a) * 13.5 * zScale }, '#CBD7E3', 2.1, true, zScale);
+          }
+          const hubF = Iso.gridToScreen(tx + 0.50, ty + 0.68, 56.8);
+          for (let b = 0; b < 3; b++) {
+            const a = bladeAngle + (b * Math.PI * 2) / 3;
+            const tip = { x: hubF.x + Math.cos(a) * 26.0 * zScale, y: hubF.y + Math.sin(a) * 26.0 * zScale };
+            drawIsoLine(ctx, hubF, tip, '#F5F9FC', 2.9, true, zScale);
+            drawIsoDot(ctx, tip, 1.5, windOff ? P.powerDim : P.power, !windOff, zScale);
+          }
+          drawIsoDot(ctx, hubF, 3.2, '#B6C3D0', false, zScale);
         }
-        drawIsoDot(ctx, hub, 3.0, '#C7D2DD', false, zScale);
         break;
       }
 
       case 'battery_bank': {
-        // Tall narrow twin ESS cabinets with wide center gap (unmistakable split-pillar silhouette)
-        const ratio = Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0.75));
+        const ratio = st.isPreview ? 0.78 : Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0.78));
         const ledColor = ratio > 0.35 ? P.power : ratio > 0.05 ? P.healthMid : P.danger;
-        const barSlots = lv >= 3 ? 5 : 4;
-        const litSlots = ratio > 0.01 ? Math.max(1, Math.round(ratio * barSlots)) : 0;
-        const stepZ = 22.4 / barSlots;
-        const cabXs = [0.14, 0.58];
-        for (let c = 0; c < cabXs.length; c++) {
-          const cx = tx + cabXs[c];
-          drawIsoBox(ctx, cx, ty + 0.32, 0.5, 0.24, 0.34, 30, '#DDE5EC', null, zScale);
-          drawIsoBox(ctx, cx + 0.03, ty + 0.35, 30.5, 0.18, 0.28, 1.8, lv >= 3 ? maxAccent : '#9AA8B6', null, zScale);
-          if (lv >= 2) {
-            drawIsoBox(ctx, cx - 0.008, ty + 0.312, 2.2, 0.256, 0.356, 2.2, steelCol, { noTop: true }, zScale);
+        const hasCharge = ratio > 0.01;
+        if (lv <= 1) {
+          drawIsoBox(ctx, tx + 0.24, ty + 0.28, 0.5, 0.52, 0.44, 2.0, '#3E4854', null, zScale);
+          drawIsoBox(ctx, tx + 0.27, ty + 0.31, 2.5, 0.46, 0.38, 8.2, '#6A7B8C', null, zScale);
+          drawIsoBox(ctx, tx + 0.30, ty + 0.34, 10.7, 0.40, 0.32, 1.5, '#475361', null, zScale);
+          drawIsoBox(ctx, tx + 0.36, ty + 0.46, 12.2, 0.06, 0.06, 1.6, '#DCE5EE', null, zScale);
+          drawIsoBox(ctx, tx + 0.58, ty + 0.46, 12.2, 0.06, 0.06, 1.6, '#DCE5EE', null, zScale);
+          for (let k = 0; k < 2; k++) {
+            const lit = ratio > k * 0.4 && hasCharge;
+            drawIsoBox(ctx, tx + 0.34, ty + 0.695, 4.0 + k * 3.1, 0.32, 0.015, 2.0, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
           }
-          for (let k = 0; k < barSlots; k++) {
-            const isLit = k < litSlots;
-            drawIsoBox(
-              ctx,
-              cx + 0.04,
-              ty + 0.655,
-              5.2 + k * stepZ,
-              0.16,
-              0.014,
-              stepZ * 0.64,
-              isLit ? ledColor : P.powerDim,
-              { emissive: isLit },
-              zScale
-            );
+        } else if (lv === 2) {
+          const posts = [[0.18, 0.26], [0.76, 0.26], [0.18, 0.66], [0.76, 0.66]];
+          for (let i = 0; i < posts.length; i++) {
+            drawIsoBox(ctx, tx + posts[i][0], ty + posts[i][1], 0.5, 0.06, 0.06, 20.5, '#475361', null, zScale);
           }
+          const shelves = [0.5, 10.5, 20.0];
+          for (let i = 0; i < shelves.length; i++) {
+            drawIsoBox(ctx, tx + 0.18, ty + 0.26, shelves[i], 0.64, 0.46, 1.2, '#596673', null, zScale);
+          }
+          const modZs = [2.0, 12.0];
+          for (let mi = 0; mi < modZs.length; mi++) {
+            const mz = modZs[mi];
+            drawIsoBox(ctx, tx + 0.24, ty + 0.30, mz, 0.52, 0.38, 7.8, '#C9D4DF', null, zScale);
+            for (let k = 0; k < 3; k++) {
+              const lit = (mi * 3 + k) / 6 < ratio && hasCharge;
+              drawIsoBox(ctx, tx + 0.28 + k * 0.16, ty + 0.685, mz + 1.8, 0.11, 0.015, 4.2, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
+            }
+          }
+        } else if (lv === 3) {
+          const cabXs = [0.14, 0.58];
+          for (let c = 0; c < cabXs.length; c++) {
+            const cx = tx + cabXs[c];
+            drawIsoBox(ctx, cx, ty + 0.32, 0.5, 0.24, 0.34, 30.0, '#DDE5EC', null, zScale);
+            drawIsoBox(ctx, cx + 0.03, ty + 0.35, 30.5, 0.18, 0.28, 1.8, '#9AA8B6', null, zScale);
+            const litSlots = hasCharge ? Math.max(1, Math.round(ratio * 4)) : 0;
+            for (let k = 0; k < 4; k++) {
+              const lit = k < litSlots;
+              drawIsoBox(ctx, cx + 0.04, ty + 0.655, 5.2 + k * 5.6, 0.16, 0.014, 3.6, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
+            }
+          }
+        } else {
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 0.5, 0.40, 4.5, '#3B4654', { n: 8 }, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 5.0, 0.31, 2.0, '#596878', { n: 8 }, zScale);
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.17, 25.0, P.powerDim, { n: 14 }, zScale);
+          if (hasCharge) {
+            const litH = Math.max(4.0, 25.0 * ratio);
+            drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.174, litH, ledColor, { n: 14, emissive: true, noTop: true }, zScale);
+          }
+          const ringZs = [11.0, 18.5, 26.0];
+          for (let i = 0; i < ringZs.length; i++) {
+            drawCyl(ctx, tx + 0.50, ty + 0.50, ringZs[i], 0.22, 1.6, '#DCE5EE', { n: 14 }, zScale);
+          }
+          const fins = [[0.17, 0.46], [0.75, 0.46], [0.46, 0.17], [0.46, 0.75]];
+          for (let i = 0; i < fins.length; i++) {
+            drawIsoBox(ctx, tx + fins[i][0], ty + fins[i][1], 5.0, 0.08, 0.08, 29.0, '#475361', null, zScale);
+          }
+          drawCyl(ctx, tx + 0.50, ty + 0.50, 32.0, 0.24, 3.0, '#DCE5EE', { n: 12 }, zScale);
+          drawDome(ctx, tx + 0.50, ty + 0.50, 35.0, 0.12, 4.5, hasCharge ? ledColor : P.powerDim, { emissive: hasCharge }, zScale);
         }
         break;
       }
 
-      case 'field_tent': {
-        // Hemispherical olive dome tent + warm glowing triangular entrance flap
-        drawDome(ctx, tx + 0.5, ty + 0.5, 0.5, 0.42, 15, '#6E8466', { n: 16 }, zScale);
-        if (lv >= 2) {
-          drawCyl(ctx, tx + 0.5, ty + 0.5, 1.2, 0.425, 1.8, steelCol, { noTop: true, n: 16 }, zScale);
-        }
-        drawPolyFace(
-          ctx,
-          [
-            Iso.gridToScreen(tx + 0.40, ty + 0.915, 0.5),
-            Iso.gridToScreen(tx + 0.60, ty + 0.915, 0.5),
-            Iso.gridToScreen(tx + 0.50, ty + 0.915, 10.5)
-          ],
-          '#2E3A2B',
-          1.0,
-          false,
-          false,
-          zScale
-        );
-        drawPolyFace(
-          ctx,
-          [
-            Iso.gridToScreen(tx + 0.44, ty + 0.92, 0.5),
-            Iso.gridToScreen(tx + 0.56, ty + 0.92, 0.5),
-            Iso.gridToScreen(tx + 0.50, ty + 0.92, 7.5)
-          ],
-          P.baseLight,
-          1.0,
-          true,
-          false,
-          zScale
-        );
-        if (lv >= 3) {
-          drawIsoLine(
+      case 'field_tent':
+      case 'shelter_pod': {
+        const effTier = id === 'shelter_pod' ? 3 : lv;
+        if (effTier <= 1) {
+          drawDome(ctx, tx + 0.5, ty + 0.5, 0.5, 0.42, 15.0, '#6E8466', { n: 16 }, zScale);
+          drawPolyFace(
             ctx,
-            Iso.gridToScreen(tx + 0.66, ty + 0.34, 13.5),
-            Iso.gridToScreen(tx + 0.66, ty + 0.34, 21.5),
-            '#CBD5E1',
-            1.3,
+            [
+              Iso.gridToScreen(tx + 0.40, ty + 0.915, 0.5),
+              Iso.gridToScreen(tx + 0.60, ty + 0.915, 0.5),
+              Iso.gridToScreen(tx + 0.50, ty + 0.915, 10.5)
+            ],
+            '#2E3A2B',
+            1.0,
+            false,
             false,
             zScale
           );
-          drawIsoDot(ctx, Iso.gridToScreen(tx + 0.66, ty + 0.34, 22.0), 1.8, maxAccent, true, zScale);
-        }
-        break;
-      }
-
-      case 'shelter_pod': {
-        // Modular container shelter + orange pitched gable roof + warm window & door
-        drawIsoBox(ctx, tx + 0.06, ty + 0.14, 0.5, 0.88, 0.72, 13, '#DCE5ED', null, zScale);
-        if (lv >= 2) {
-          drawIsoBox(ctx, tx + 0.055, ty + 0.135, 2.2, 0.89, 0.73, 2.1, steelCol, { noTop: true }, zScale);
-        }
-        drawGable(ctx, tx + 0.03, ty + 0.11, 13.5, 0.94, 0.78, 8, '#EA6A3B', '#DCE5ED', zScale);
-        drawIsoBox(ctx, tx + 0.18, ty + 0.86, 4.5, 0.46, 0.015, 5, P.baseLight, { emissive: true }, zScale);
-        drawIsoBox(ctx, tx + 0.72, ty + 0.86, 0.5, 0.13, 0.015, 9, '#556370', null, zScale);
-        if (lv >= 3) {
-          drawIsoBox(ctx, tx + 0.935, ty + 0.28, 5.0, 0.015, 0.38, 5, P.baseLight, { emissive: true }, zScale);
+          drawPolyFace(
+            ctx,
+            [
+              Iso.gridToScreen(tx + 0.44, ty + 0.92, 0.5),
+              Iso.gridToScreen(tx + 0.56, ty + 0.92, 0.5),
+              Iso.gridToScreen(tx + 0.50, ty + 0.92, 7.5)
+            ],
+            P.baseLight,
+            1.0,
+            true,
+            false,
+            zScale
+          );
+        } else if (effTier === 2) {
+          drawIsoBox(ctx, tx + 0.05, ty + 0.12, 0.5, 0.90, 0.76, 1.6, '#7A5E42', null, zScale);
+          drawIsoBox(ctx, tx + 0.07, ty + 0.16, 2.1, 0.41, 0.66, 8.8, '#5F7758', null, zScale);
+          drawIsoBox(ctx, tx + 0.50, ty + 0.16, 2.1, 0.43, 0.66, 8.8, '#5F7758', null, zScale);
+          drawGable(ctx, tx + 0.06, ty + 0.14, 10.9, 0.43, 0.70, 5.8, '#768F6D', '#5F7758', zScale);
+          drawGable(ctx, tx + 0.49, ty + 0.14, 10.9, 0.45, 0.70, 5.8, '#768F6D', '#5F7758', zScale);
+          drawIsoBox(ctx, tx + 0.14, ty + 0.825, 4.8, 0.22, 0.015, 4.0, P.baseLight, { emissive: true }, zScale);
+          drawIsoBox(ctx, tx + 0.64, ty + 0.825, 4.8, 0.22, 0.015, 4.0, P.baseLight, { emissive: true }, zScale);
+          drawIsoBox(ctx, tx + 0.43, ty + 0.825, 2.1, 0.14, 0.015, 7.2, '#2E3A2B', null, zScale);
+          drawIsoBox(ctx, tx + 0.76, ty + 0.28, 14.0, 0.05, 0.05, 5.0, '#8C96A3', null, zScale);
+        } else if (effTier === 3) {
+          drawIsoBox(ctx, tx + 0.06, ty + 0.14, 0.5, 0.88, 0.72, 13.0, '#DCE5ED', null, zScale);
+          drawGable(ctx, tx + 0.03, ty + 0.11, 13.5, 0.94, 0.78, 8.0, '#EA6A3B', '#DCE5ED', zScale);
+          drawIsoBox(ctx, tx + 0.18, ty + 0.86, 4.5, 0.46, 0.015, 5.0, P.baseLight, { emissive: true }, zScale);
+          drawIsoBox(ctx, tx + 0.72, ty + 0.86, 0.5, 0.13, 0.015, 9.0, '#556370', null, zScale);
+        } else {
+          drawIsoBox(ctx, tx + 0.05, ty + 0.12, 0.5, 0.90, 0.76, 12.0, '#C8D4E0', null, zScale);
+          const pillars = [[0.05, 0.12], [0.89, 0.12], [0.05, 0.82], [0.89, 0.82]];
+          for (let i = 0; i < pillars.length; i++) {
+            drawIsoBox(ctx, tx + pillars[i][0], ty + pillars[i][1], 0.5, 0.06, 0.06, 12.0, '#4E5B68', null, zScale);
+          }
+          drawIsoBox(ctx, tx + 0.14, ty + 0.885, 4.2, 0.42, 0.015, 4.8, P.baseLight, { emissive: true }, zScale);
+          drawIsoBox(ctx, tx + 0.66, ty + 0.885, 0.5, 0.15, 0.015, 9.2, '#475361', null, zScale);
+          drawIsoBox(ctx, tx + 0.07, ty + 0.14, 12.5, 0.70, 0.68, 10.5, '#DCE5ED', null, zScale);
+          drawIsoBox(ctx, tx + 0.77, ty + 0.16, 12.5, 0.18, 0.64, 1.2, '#596673', null, zScale);
+          drawIsoBox(ctx, tx + 0.77, ty + 0.77, 13.7, 0.18, 0.03, 3.0, '#475361', null, zScale);
+          drawIsoBox(ctx, tx + 0.92, ty + 0.16, 13.7, 0.03, 0.64, 3.0, '#475361', null, zScale);
+          drawIsoBox(ctx, tx + 0.15, ty + 0.825, 15.8, 0.50, 0.015, 4.6, P.baseLight, { emissive: true }, zScale);
+          drawIsoBox(ctx, tx + 0.775, ty + 0.28, 15.8, 0.015, 0.34, 4.6, P.baseLight, { emissive: true }, zScale);
+          drawGable(ctx, tx + 0.05, ty + 0.11, 23.0, 0.74, 0.74, 6.5, P.habitatRoof || '#D96B38', '#DCE5ED', zScale);
+          drawIsoBox(ctx, tx + 0.18, ty + 0.24, 27.8, 0.18, 0.16, 3.4, '#7B8996', null, zScale);
         }
         break;
       }
@@ -3843,20 +3964,24 @@ ZS.Renderer = (function () {
       const def = DATA.ITEMS[node.id];
       if (!def) return;
       if (def.requiresPower && (!powered || (node.empStunTimer || 0) > 0)) return;
+      const prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, node.level || 1) : null;
       const eff = isMounted && ZS.Game.getStructureEffectiveStats
         ? ZS.Game.getStructureEffectiveStats(node, gx, gy, undefined, true)
         : null;
-      const lightR = (eff && eff.lightRadius != null) ? eff.lightRadius : def.lightRadius;
+      const lightR = (eff && eff.lightRadius != null)
+        ? eff.lightRadius
+        : (prof && prof.lightRadius !== undefined ? prof.lightRadius : def.lightRadius);
+      const lightCol = (prof && prof.lightColor) || def.lightColor;
       if (lightR) {
         const flicker = node.id === 'gas_heater' ? 0.96 + 0.05 * Math.sin(timeSec * 11 + gx) : 1.0;
         punchHole(gx + 0.5, gy + 0.5, lz, lightR * flicker, 0.92);
-        if (def.lightColor) {
+        if (lightCol) {
           colorGlows.push({
             gx: gx + 0.5,
             gy: gy + 0.5,
             z: lz,
             r: lightR * 0.85,
-            color: def.lightColor
+            color: lightCol
           });
         }
       } else if (def.subType === 'housing' || node.id === 'vending_machine') {
@@ -4406,9 +4531,10 @@ ZS.Renderer = (function () {
         } else {
           const isDamaged = st.hp < st.maxHp && st.hp > 0;
           const isUnpowered = state.isNight && def && def.requiresPower && !powered;
+          const isTierEvo = !!(ZS.Game && ZS.Game.isTierEvolutionDef && ZS.Game.isTierEvolutionDef(def));
           const isWallHub = isWall && wallMask !== 0 && ((wallMask & 5) !== 0 && (wallMask & 10) !== 0);
           const showWallPips = isWall && lv >= 2 && (wallMask === 0 || isWallHub || isWallInspOrHov);
-          const hasPips = id !== 'command_hq' && (isWall ? showWallPips : lv >= 2);
+          const hasPips = id !== 'command_hq' && !isTierEvo && (isWall ? showWallPips : lv >= 2);
           const hasRank = (st.rank || 0) >= 1;
           const topZ = id === 'command_hq'
             ? ((ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null)?.maxZ || 36)
@@ -4764,15 +4890,17 @@ ZS.Renderer = (function () {
     ctx.restore();
   }
 
-  function renderItemThumbnail(itemId, sizePx) {
+  function renderItemThumbnail(itemId, sizePx, tierOpt) {
+    const resolvedId = itemId === 'shelter_pod' ? 'field_tent' : itemId;
+    const tier = tierOpt || (itemId === 'shelter_pod' ? 3 : 1);
     const sz = Math.max(24, Math.round(sizePx || 44));
-    const key = `${itemId}@${sz}`;
+    const key = `${resolvedId}@${sz}@t${tier}`;
     const cached = thumbnailCache.get(key);
     if (cached) return cached;
 
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
-    const def = itemId === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[itemId];
+    const def = resolvedId === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[resolvedId];
     if (!def) return '';
 
     const dpr = 2;
@@ -4807,10 +4935,10 @@ ZS.Renderer = (function () {
         drawPolyFace(tctx, l, '#3A3027', 1.0, false, false, zoom);
         drawPolyFace(tctx, r, '#2C241D', 1.0, false, false, zoom);
         drawPolyFace(tctx, t, '#55705A', 1.0, false, false, zoom);
-        drawFloorTile(tctx, 0, 0, itemId, zoom);
+        drawFloorTile(tctx, 0, 0, resolvedId, zoom);
       } else {
-        const topZ = itemId === 'command_hq' ? 36 : getStructVisualTopZ(itemId, 1);
-        const extraTop = itemId === 'wind_turbine' ? 14 : 3;
+        const topZ = resolvedId === 'command_hq' ? 36 : getStructVisualTopZ(resolvedId, tier);
+        const extraTop = resolvedId === 'wind_turbine' && tier >= 3 ? 14 : 3;
         const spanY = Math.max(44, topZ + extraTop + 22);
         const zoom = Math.min((sz * 0.88) / 72, (sz * 0.88) / spanY);
         Iso.cam.zoom = zoom;
@@ -4833,12 +4961,13 @@ ZS.Renderer = (function () {
           powerCap: 100
         };
         const dummySt = {
-          id: itemId,
-          level: 1,
+          id: resolvedId,
+          level: tier,
           hp: 100,
           maxHp: 100,
           aimAngle: 0.78,
-          previewMask: itemId === 'barricade_wall' || itemId === 'tactical_gate' ? 10 : undefined
+          isPreview: true,
+          previewMask: resolvedId === 'barricade_wall' || resolvedId === 'tactical_gate' ? 10 : undefined
         };
         drawStructure(tctx, dummySt, 0, 0, dummyState, true, 0.45, zoom);
       }
