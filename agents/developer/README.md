@@ -38,7 +38,8 @@
   - `js/pathfinding.js`: 다익스트라 기반 플로우 필드 길찾기
   - `js/renderer-{core,structures,entities,overlay}.js`: 지형·복셀 조형·엔티티·야간 조명/오버레이 분할 렌더러 (`ZS._Renderer` / `ZS.Renderer`)
   - `js/game-{core,build,combat,zombies}.js`: 상태/세이브·건설/스탯·전투·좀비 AI 분할 시뮬레이션 (`ZS._Game` / `ZS.Game`)
-  - `js/audio.js` / `js/main.js`: Web Audio 사운드 합성 및 입력·UI 바인딩
+  - `js/audio.js`: Web Audio API 기반 합성 사운드 효과음
+  - `js/ui-hud.js` · `js/ui-dock.js` · `js/main.js`: 상단 HUD/정찰/배너, 건설 도크/시설 조회/상인 모달, 입력·메인 루프·초기화 컨트롤러 (`ZS._UI`)
 
 ### 인게임 버전 관리 규칙 (필수)
 - 게임 버전의 단일 진실 공급원(Single Source of Truth)은 **`js/data.js`의 `ZS.DATA.VERSION`** 상수입니다 (예: `'v0.1.0'`).
