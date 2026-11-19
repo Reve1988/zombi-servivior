@@ -57,8 +57,14 @@ zombi-servivior/
     ├── audio.js        # Web Audio API 기반 합성 사운드 효과음
     ├── iso.js          # 2:1 아이소메트릭 좌표 변환 및 3D 복셀 드로잉
     ├── pathfinding.js  # 다익스트라 플로우 필드 길찾기
-    ├── renderer.js     # 복셀 오브젝트 및 주야간·블랙아웃 라이팅 렌더러
-    ├── game.js         # 자원·전력·전투·안락함·상인·세이브 시뮬레이션
+    ├── renderer-core.js        # 지형·프레임 루프·기본 복셀 도형·발광 패스 렌더러 (ZS._Renderer)
+    ├── renderer-structures.js  # 연결 성벽·게이트·거치 데크·건물/HQ/요원 조형 렌더러
+    ├── renderer-entities.js    # 좀비·특수 변이체·보스·투사체·사망/파티클 렌더러
+    ├── renderer-overlay.js     # 야간 조명·정찰선·정보 레이어·도크 썸네일 & ZS.Renderer 조합
+    ├── game-core.js            # 전역 state·그리드·정찰 경로·숙련도·세이브/로드·디버그 (ZS._Game)
+    ├── game-build.js           # 티어 진화·안락함/오라 스탯·건설/거치/이동/철거·상인 시스템
+    ├── game-combat.js          # 웨이브/정찰 생성·스킬·주야간 전력/블랙아웃·포탑/투사체 전투
+    ├── game-zombies.js         # 좀비/보스 AI·성벽 파괴·웨이브 정산·VFX & ZS.Game 조합
     └── main.js         # 입력 처리 및 메인 루프 컨트롤러
 ```
 
