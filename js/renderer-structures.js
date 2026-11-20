@@ -5,14 +5,9 @@ window.ZS = window.ZS || {};
   const STAMP_SCALE = 2.0;
   const STAMP_CACHE_MAX = 512;
   const structStampCache = new Map();
-  const _stampOrigin = { x: 0, y: 0 };
   R.structStampCache = structStampCache;
 
-  function getTintBucket(state, isSil) {
-    if (isSil) return 'sil';
-    if (!state || state.nightAlpha <= 0.02) return 0;
-    return Math.round(state.nightAlpha * 4);
-  }
+  const getTintBucket = R.getTintBucket;
 
   function isNodeAnimatingOrFlashing(node) {
     return !!(
@@ -38,92 +33,7 @@ window.ZS = window.ZS || {};
     const anchorX = 44;
     const anchorY = Math.max(44, Math.ceil((topZ || 24) + 22));
     const logicalH = anchorY + 42;
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(logicalW * STAMP_SCALE);
-    cv.height = Math.round(logicalH * STAMP_SCALE);
-    const sctx = cv.getContext('2d');
-
-    const Iso = ZS.Iso;
-    const prevVp = Iso.getViewport();
-    const prevMinZoom = Iso.cam.minZoom;
-    const prevCamX = Iso.cam.x;
-    const prevCamY = Iso.cam.y;
-    const prevZoom = Iso.cam.zoom;
-    const prevMods = Iso.getRenderModifiers();
-    const prevEmis = R.emissiveList;
-    const stampEmis = isSil ? null : [];
-    let bakedEmissives = null;
-
-    try {
-      Iso.setViewport(logicalW, logicalH);
-      Iso.cam.zoom = 1.0;
-      Iso.cam.x = logicalW * 0.5 - anchorX;
-      Iso.cam.y = logicalH * 0.5 - anchorY;
-
-      sctx.setTransform(STAMP_SCALE, 0, 0, STAMP_SCALE, 0, 0);
-      sctx.clearRect(0, 0, logicalW, logicalH);
-
-      if (tintBucket === 'sil' || isSil) {
-        Iso.resetRenderModifiers();
-      } else if (tintBucket === 0) {
-        Iso.setSceneTint('#FFE8BA', 0.055);
-        Iso.setEntityFlash(0);
-      } else {
-        Iso.setSceneTint('#6F9CE8', 0.085 * (tintBucket / 4));
-        Iso.setEntityFlash(0);
-      }
-
-      R.emissiveList = stampEmis;
-      bakeFn(sctx);
-
-      if (stampEmis && stampEmis.length > 0) {
-        bakedEmissives = new Array(stampEmis.length);
-        for (let i = 0; i < stampEmis.length; i++) {
-          const e = stampEmis[i];
-          if (e.kind === 'dot') {
-            bakedEmissives[i] = {
-              kind: 'dot',
-              dx: e.p.x - anchorX,
-              dy: e.p.y - anchorY,
-              r: e.r,
-              hex: e.hex,
-              fill: e.fill
-            };
-          } else {
-            const offs = new Array(e.pts.length);
-            for (let k = 0; k < e.pts.length; k++) {
-              offs[k] = {
-                dx: e.pts[k].x - anchorX,
-                dy: e.pts[k].y - anchorY
-              };
-            }
-            bakedEmissives[i] = {
-              kind: 'poly',
-              offsets: offs,
-              hex: e.hex,
-              fill: e.fill
-            };
-          }
-        }
-      }
-    } finally {
-      Iso.setViewport(prevVp.w, prevVp.h);
-      Iso.cam.minZoom = prevMinZoom;
-      Iso.cam.x = prevCamX;
-      Iso.cam.y = prevCamY;
-      Iso.cam.zoom = prevZoom;
-      Iso.setRenderModifiers(prevMods);
-      R.emissiveList = prevEmis;
-    }
-
-    const stamp = {
-      canvas: cv,
-      logicalW,
-      logicalH,
-      anchorX,
-      anchorY,
-      emissives: bakedEmissives
-    };
+    const stamp = R.bakeSpriteStamp(logicalW, logicalH, STAMP_SCALE, anchorX, anchorY, tintBucket, isSil, bakeFn);
     if (structStampCache.size >= STAMP_CACHE_MAX) {
       const oldestKey = structStampCache.keys().next().value;
       if (oldestKey !== undefined) structStampCache.delete(oldestKey);
@@ -134,39 +44,7 @@ window.ZS = window.ZS || {};
   }
 
   function blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil) {
-    const origin = ZS.Iso.projectTo(tx, ty, 0, _stampOrigin);
-    ctx.drawImage(
-      stamp.canvas,
-      origin.x - stamp.anchorX * zScale,
-      origin.y - stamp.anchorY * zScale,
-      stamp.logicalW * zScale,
-      stamp.logicalH * zScale
-    );
-    if (R.emissiveList && !isSil && stamp.emissives) {
-      const ems = stamp.emissives;
-      for (let i = 0; i < ems.length; i++) {
-        const e = ems[i];
-        if (e.kind === 'dot') {
-          R.emissiveList.push({
-            kind: 'dot',
-            p: { x: origin.x + e.dx * zScale, y: origin.y + e.dy * zScale },
-            r: e.r,
-            hex: e.hex,
-            fill: e.fill
-          });
-        } else {
-          const offs = e.offsets;
-          const pts = new Array(offs.length);
-          for (let k = 0; k < offs.length; k++) {
-            pts[k] = {
-              x: origin.x + offs[k].dx * zScale,
-              y: origin.y + offs[k].dy * zScale
-            };
-          }
-          R.emissiveList.push({ kind: 'poly', pts, fill: e.fill, hex: e.hex });
-        }
-      }
-    }
+    R.blitSpriteStamp(ctx, stamp, tx, ty, zScale, isSil);
   }
 
   const WALL_PIECES = {

@@ -2,11 +2,16 @@ window.ZS = window.ZS || {};
 
 (function () {
   const R = ZS._Renderer;
+  const TAU = Math.PI * 2;
+  const ZOMBIE_STAMP_SCALE = 2.0;
+  const ZOMBIE_STAMP_MAX = 640;
+  const zombieStampCache = new Map();
+  R.zombieStampCache = zombieStampCache;
+  if (typeof R.zombieStampBakes !== 'number') R.zombieStampBakes = 0;
+  if (typeof R.zombieStampHits !== 'number') R.zombieStampHits = 0;
 
-  function getZombiePoseMetrics(z, zDef, timeSec) {
-    const sc = zDef.scale || 1.0;
-    const type = z.type || 'walker';
-    const freq = type === 'runner'
+  function getZombieStrideFreq(type, zDef) {
+    return type === 'runner'
       ? 12.5
       : type === 'leaper'
       ? 13.0
@@ -14,10 +19,41 @@ window.ZS = window.ZS || {};
       ? 5.8
       : type === 'shocker'
       ? 6.4
-      : zDef.isBoss
+      : zDef && zDef.isBoss
       ? 4.8
       : 7.8;
-    const stride = z.leapState ? 0 : Math.sin(timeSec * freq + (z.seed || 0));
+  }
+
+  function canUseZombieStamp(z, zDef, opts) {
+    if (!z) return false;
+    if (opts && opts.isGhost) return false;
+    if ((z.hitFlash || 0) > 0.001) return false;
+    if (z.leapState) return false;
+    if (zDef && zDef.isBoss && z.chargeState) return false;
+    return true;
+  }
+
+  function getQuantizedZombieParams(z, zDef, timeSec) {
+    const type = (z && z.type) || 'walker';
+    const ang = typeof (z && z.facingAngle) === 'number' ? z.facingAngle : Math.PI * 0.75;
+    const dirIdx = Math.round((((ang % TAU) + TAU) % TAU) / TAU * 16) % 16;
+    const qAng = (dirIdx / 16) * TAU;
+    const freq = getZombieStrideFreq(type, zDef);
+    const stride = z && z.leapState ? 0 : Math.sin(timeSec * freq + ((z && z.seed) || 0));
+    const strideBucket = Math.max(-3, Math.min(3, Math.round(stride * 3)));
+    const qStride = strideBucket / 3;
+    return { dirIdx, qAng, strideBucket, qStride };
+  }
+
+  function getZombiePoseMetrics(z, zDef, timeSec, quantOverride) {
+    const sc = zDef.scale || 1.0;
+    const type = z.type || 'walker';
+    const freq = getZombieStrideFreq(type, zDef);
+    const stride = quantOverride
+      ? quantOverride.qStride
+      : z.leapState
+      ? 0
+      : Math.sin(timeSec * freq + (z.seed || 0));
     const bobAmp = type === 'runner'
       ? 1.8
       : type === 'leaper'
@@ -42,7 +78,11 @@ window.ZS = window.ZS || {};
     const legZ = 1 + leapLift;
     const bodyBaseZ = Math.max(0.5, 1 + leapLift + crouch + bob);
 
-    const ang = typeof z.facingAngle === 'number' ? z.facingAngle : Math.PI * 0.75;
+    const ang = quantOverride
+      ? quantOverride.qAng
+      : typeof z.facingAngle === 'number'
+      ? z.facingAngle
+      : Math.PI * 0.75;
     const fx = Math.cos(ang);
     const fy = Math.sin(ang);
     const px = -fy;
@@ -95,12 +135,20 @@ window.ZS = window.ZS || {};
     return { sc, type, stride, bob, legZ, bodyBaseZ, leapLift, crouch, ang, fx, fy, px, py, headFwd, headZ, headW, headH, topZ };
   }
 
+  function getQuantizedZombiePoseMetrics(z, zDef, timeSec) {
+    const quant = canUseZombieStamp(z, zDef) ? getQuantizedZombieParams(z, zDef, timeSec) : null;
+    const pose = getZombiePoseMetrics(z, zDef, timeSec, quant);
+    if (quant) pose._quant = quant;
+    return pose;
+  }
+
   const _eyeC = { x: 0, y: 0 };
   const _eyeL = { x: 0, y: 0 };
   const _eyeR = { x: 0, y: 0 };
   const _occTop = { x: 0, y: 0 };
   const _occBot = { x: 0, y: 0 };
   const _zBasePos = { x: 0, y: 0 };
+  const _zCoreShadowPos = { x: 0, y: 0 };
 
   function getZombieEyePositions(z, zDef, timeSec, zScale, prePose) {
     const Iso = ZS.Iso;
@@ -175,124 +223,19 @@ window.ZS = window.ZS || {};
     return false;
   }
 
-  function drawZombie(ctx, z, timeSec, zScale, state, opts) {
+  function drawZombieCore(ctx, z, zDef, m, timeSec, zScale, isNightLit, isGhost, isSil, P) {
     const Iso = ZS.Iso;
-    const P = ZS.DATA.PALETTE;
-    const zDef = ZS.DATA.ZOMBIES[z.type] || ZS.DATA.ZOMBIES.walker;
-    const isGhost = !!(opts && opts.isGhost);
-    const m = !isGhost && z._framePose ? z._framePose : getZombiePoseMetrics(z, zDef, timeSec);
     const { sc, type, stride, legZ, bodyBaseZ, fx, fy, px, py } = m;
-    const isSil = !!window.ZS_SILHOUETTE_MODE;
-    const isNightLit = !!(state && state.nightAlpha > 0.35);
-
-    const basePos = Iso.projectTo(z.x, z.y, 1, _zBasePos);
-
-    // Boss Siege Charge trailing afterimages (3 echoes: alpha 0.18 / 0.30 / 0.42)
-    if (zDef.isBoss && !isGhost && !isSil && z.chargeState && z.chargeState.phase === 'dash') {
-      const cs = z.chargeState;
-      const trailFracs = [0.28, 0.52, 0.76];
-      const alphas = [0.18, 0.30, 0.42];
-      for (let tIdx = 0; tIdx < trailFracs.length; tIdx++) {
-        const f = trailFracs[tIdx];
-        const ghost = {
-          ...z,
-          x: cs.startX + (z.x - cs.startX) * f,
-          y: cs.startY + (z.y - cs.startY) * f,
-          hitFlash: 0,
-          _framePose: null,
-          _frameEyes: null,
-          _frameEyesOccluded: false
-        };
-        ctx.save();
-        ctx.globalAlpha = alphas[tIdx];
-        const prevGhostEm = R.emissiveList;
-        R.emissiveList = null;
-        drawZombie(ctx, ghost, timeSec, zScale, state, { isGhost: true });
-        R.emissiveList = prevGhostEm;
-        ctx.restore();
-      }
-    }
-
-    // Boss: dark abyssal ground shadow ring + pulsing danger threat ring + windup lane / glow (hidden in silhouette mode)
-    if (zDef.isBoss && !isGhost && !isSil) {
-      if (z.chargeState && z.chargeState.phase === 'windup') {
-        const cs = z.chargeState;
-        const cDx = cs.targetX - z.x;
-        const cDy = cs.targetY - z.y;
-        const cLen = Math.max(0.01, Math.hypot(cDx, cDy));
-        const perpX = (-cDy / cLen) * 0.3;
-        const perpY = (cDx / cLen) * 0.3;
-        const p1 = Iso.gridToScreen(z.x + perpX, z.y + perpY, 0.6);
-        const p2 = Iso.gridToScreen(cs.targetX + perpX, cs.targetY + perpY, 0.6);
-        const p3 = Iso.gridToScreen(cs.targetX - perpX, cs.targetY - perpY, 0.6);
-        const p4 = Iso.gridToScreen(z.x - perpX, z.y - perpY, 0.6);
-        ctx.save();
-        ctx.fillStyle = 'rgba(255, 77, 109, 0.14)';
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.lineTo(p3.x, p3.y);
-        ctx.lineTo(p4.x, p4.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.setLineDash([5, 4]);
-        ctx.strokeStyle = P.danger;
-        ctx.lineWidth = 1.8 * zScale;
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        const glowP = Iso.gridToScreen(z.x, z.y, 14);
-        ctx.fillStyle = 'rgba(255, 77, 109, 0.32)';
-        ctx.beginPath();
-        ctx.ellipse(glowP.x, glowP.y, 30 * zScale, 30 * zScale, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      const pulse = 0.94 + 0.09 * Math.sin(timeSec * 5);
-      ctx.fillStyle = 'rgba(18, 6, 26, 0.52)';
-      ctx.strokeStyle = 'rgba(224, 64, 251, 0.45)';
-      ctx.lineWidth = 2.2 * zScale;
-      ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, 18.5 * sc * zScale * pulse, 9.5 * sc * zScale * pulse, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = P.dangerFill;
-      ctx.strokeStyle = P.danger;
-      ctx.lineWidth = 1.9 * zScale;
-      ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, 14.5 * sc * zScale * pulse, 7.4 * sc * zScale * pulse, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    // Leaper landing shadow preview on target tile (grows as leaper approaches landing)
-    if (!isGhost && !isSil && z.leapState) {
-      const ls = z.leapState;
-      const u = ls.phase === 'crouch'
-        ? 0.35 + 0.25 * (ls.timer / (ls.crouchDur || 0.12))
-        : 0.6 + 0.4 * Math.min(1, ls.timer / (ls.airDur || 0.42));
-      const lSh = Iso.gridToScreen(ls.targetX, ls.targetY + 0.05, 0.5);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-      ctx.beginPath();
-      ctx.ellipse(lSh.x, lSh.y, 14 * u * zScale, 7 * u * zScale, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // War Cry frenzy ring (dashed #E040FB r=0.30 around buffed zombie)
-    if (!isGhost && !isSil && z.frenzyTimer > 0) {
-      R.drawIsoCircle(ctx, z.x, z.y, 0.30 * sc, P.zombieBossCrack || '#E040FB', null, [3, 2], 1.5 * zScale);
-    }
 
     // Crisp ground contact shadow (faint when airborne mid-leap)
     if (!isGhost) {
+      const shadowPos = Iso.projectTo(z.x, z.y, 1, _zCoreShadowPos);
       const shadowScale = z.leapState && z.leapState.phase === 'air' ? 0.55 : 1.0;
       const shadowRx = (type === 'brute' ? 11.4 : type === 'runner' ? 10.2 : 9.6) * sc * shadowScale * zScale;
       const shadowRy = (type === 'brute' ? 5.8 : 5.0) * sc * shadowScale * zScale;
       ctx.fillStyle = z.leapState && z.leapState.phase === 'air' ? 'rgba(8, 10, 16, 0.25)' : 'rgba(8, 10, 16, 0.52)';
       ctx.beginPath();
-      ctx.ellipse(basePos.x, basePos.y, shadowRx, shadowRy, 0, 0, Math.PI * 2);
+      ctx.ellipse(shadowPos.x, shadowPos.y, shadowRx, shadowRy, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -594,7 +537,178 @@ window.ZS = window.ZS || {};
     if (!isGhost) {
       const eyes = z._frameEyes || getZombieEyePositions(z, zDef, timeSec, zScale, m);
       drawZombieEyePinpoints(ctx, eyes, zDef, zScale, P);
+    }
+  }
 
+  function ensureZombieStamp(key, stampType, zDef, quant, tintBucket, isNightLit, isSil, P) {
+    const hit = zombieStampCache.get(key);
+    if (hit) {
+      zombieStampCache.delete(key);
+      zombieStampCache.set(key, hit);
+      R.zombieStampHits += 1;
+      return hit;
+    }
+
+    const isBoss = !!(zDef && zDef.isBoss);
+    const logicalW = isBoss ? 128 : 92;
+    const anchorX = isBoss ? 64 : 46;
+    const anchorY = isBoss ? 78 : 56;
+    const logicalH = isBoss ? 104 : 76;
+
+    const fakeZ = {
+      type: stampType,
+      x: 0,
+      y: 0,
+      facingAngle: quant.qAng,
+      seed: 0,
+      hitFlash: 0,
+      leapState: null,
+      chargeState: null,
+      _frameEyes: null
+    };
+    const bakePose = getZombiePoseMetrics(fakeZ, zDef, 0, quant);
+
+    const stamp = R.bakeSpriteStamp(logicalW, logicalH, ZOMBIE_STAMP_SCALE, anchorX, anchorY, tintBucket, isSil, (sctx) => {
+      drawZombieCore(sctx, fakeZ, zDef, bakePose, 0, 1.0, isNightLit, false, isSil, P);
+    });
+
+    if (zombieStampCache.size >= ZOMBIE_STAMP_MAX) {
+      const oldestKey = zombieStampCache.keys().next().value;
+      if (oldestKey !== undefined) zombieStampCache.delete(oldestKey);
+    }
+    zombieStampCache.set(key, stamp);
+    R.zombieStampBakes += 1;
+    return stamp;
+  }
+
+  function drawZombie(ctx, z, timeSec, zScale, state, opts) {
+    const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
+    const zDef = ZS.DATA.ZOMBIES[z.type] || ZS.DATA.ZOMBIES.walker;
+    const isGhost = !!(opts && opts.isGhost);
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
+    const isNightLit = !!(state && state.nightAlpha > 0.35);
+
+    const useStamp = canUseZombieStamp(z, zDef, opts);
+    const quant = useStamp
+      ? ((z._framePose && z._framePose._quant) || getQuantizedZombieParams(z, zDef, timeSec))
+      : null;
+    const m = !isGhost && z._framePose
+      ? z._framePose
+      : getZombiePoseMetrics(z, zDef, timeSec, quant);
+    const { sc } = m;
+
+    const basePos = Iso.projectTo(z.x, z.y, 1, _zBasePos);
+
+    // Boss Siege Charge trailing afterimages (3 echoes: alpha 0.18 / 0.30 / 0.42)
+    if (zDef.isBoss && !isGhost && !isSil && z.chargeState && z.chargeState.phase === 'dash') {
+      const cs = z.chargeState;
+      const trailFracs = [0.28, 0.52, 0.76];
+      const alphas = [0.18, 0.30, 0.42];
+      for (let tIdx = 0; tIdx < trailFracs.length; tIdx++) {
+        const f = trailFracs[tIdx];
+        const ghost = {
+          ...z,
+          x: cs.startX + (z.x - cs.startX) * f,
+          y: cs.startY + (z.y - cs.startY) * f,
+          hitFlash: 0,
+          _framePose: null,
+          _frameEyes: null,
+          _frameEyesOccluded: false
+        };
+        ctx.save();
+        ctx.globalAlpha = alphas[tIdx];
+        const prevGhostEm = R.emissiveList;
+        R.emissiveList = null;
+        drawZombie(ctx, ghost, timeSec, zScale, state, { isGhost: true });
+        R.emissiveList = prevGhostEm;
+        ctx.restore();
+      }
+    }
+
+    // Boss: dark abyssal ground shadow ring + pulsing danger threat ring + windup lane / glow (hidden in silhouette mode)
+    if (zDef.isBoss && !isGhost && !isSil) {
+      if (z.chargeState && z.chargeState.phase === 'windup') {
+        const cs = z.chargeState;
+        const cDx = cs.targetX - z.x;
+        const cDy = cs.targetY - z.y;
+        const cLen = Math.max(0.01, Math.hypot(cDx, cDy));
+        const perpX = (-cDy / cLen) * 0.3;
+        const perpY = (cDx / cLen) * 0.3;
+        const p1 = Iso.gridToScreen(z.x + perpX, z.y + perpY, 0.6);
+        const p2 = Iso.gridToScreen(cs.targetX + perpX, cs.targetY + perpY, 0.6);
+        const p3 = Iso.gridToScreen(cs.targetX - perpX, cs.targetY - perpY, 0.6);
+        const p4 = Iso.gridToScreen(z.x - perpX, z.y - perpY, 0.6);
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 77, 109, 0.14)';
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = P.danger;
+        ctx.lineWidth = 1.8 * zScale;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const glowP = Iso.gridToScreen(z.x, z.y, 14);
+        ctx.fillStyle = 'rgba(255, 77, 109, 0.32)';
+        ctx.beginPath();
+        ctx.ellipse(glowP.x, glowP.y, 30 * zScale, 30 * zScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      const pulse = 0.94 + 0.09 * Math.sin(timeSec * 5);
+      ctx.fillStyle = 'rgba(18, 6, 26, 0.52)';
+      ctx.strokeStyle = 'rgba(224, 64, 251, 0.45)';
+      ctx.lineWidth = 2.2 * zScale;
+      ctx.beginPath();
+      ctx.ellipse(basePos.x, basePos.y, 18.5 * sc * zScale * pulse, 9.5 * sc * zScale * pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = P.dangerFill;
+      ctx.strokeStyle = P.danger;
+      ctx.lineWidth = 1.9 * zScale;
+      ctx.beginPath();
+      ctx.ellipse(basePos.x, basePos.y, 14.5 * sc * zScale * pulse, 7.4 * sc * zScale * pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Leaper landing shadow preview on target tile (grows as leaper approaches landing)
+    if (!isGhost && !isSil && z.leapState) {
+      const ls = z.leapState;
+      const u = ls.phase === 'crouch'
+        ? 0.35 + 0.25 * (ls.timer / (ls.crouchDur || 0.12))
+        : 0.6 + 0.4 * Math.min(1, ls.timer / (ls.airDur || 0.42));
+      const lSh = Iso.gridToScreen(ls.targetX, ls.targetY + 0.05, 0.5);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(lSh.x, lSh.y, 14 * u * zScale, 7 * u * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // War Cry frenzy ring (dashed #E040FB r=0.30 around buffed zombie)
+    if (!isGhost && !isSil && z.frenzyTimer > 0) {
+      R.drawIsoCircle(ctx, z.x, z.y, 0.30 * sc, P.zombieBossCrack || '#E040FB', null, [3, 2], 1.5 * zScale);
+    }
+
+    if (useStamp) {
+      const tintBucket = R.getTintBucket(state, isSil);
+      const stampType = zDef.id || z.type || 'walker';
+      const key = `${stampType}|d${quant.dirIdx}|s${quant.strideBucket}|t${tintBucket}|nl${isNightLit ? 1 : 0}`;
+      const stamp = ensureZombieStamp(key, stampType, zDef, quant, tintBucket, isNightLit, isSil, P);
+      R.blitSpriteStamp(ctx, stamp, z.x, z.y, zScale, isSil);
+    } else {
+      drawZombieCore(ctx, z, zDef, m, timeSec, zScale, isNightLit, isGhost, isSil, P);
+    }
+
+    if (!isGhost) {
       // Slowed EMP cyan tint ring
       if (z.slowTimer > 0) {
         ctx.strokeStyle = P.power;
@@ -1059,6 +1173,10 @@ window.ZS = window.ZS || {};
   }
 
   Object.assign(R, {
+    canUseZombieStamp,
+    getQuantizedZombieParams,
+    getQuantizedZombiePoseMetrics,
+    ensureZombieStamp,
     getZombiePoseMetrics,
     getZombieEyePositions,
     drawZombieEyePinpoints,

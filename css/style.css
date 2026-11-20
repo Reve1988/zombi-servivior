@@ -137,7 +137,7 @@ button, input, select {
   box-shadow: 0 3px 0 #0B1119, 0 10px 26px rgba(0, 0, 0, 0.45);
   z-index: 20;
   flex-wrap: wrap;
-  transition: padding 0.18s ease, background-color 0.18s ease;
+  transition: background-color 0.18s ease;
 }
 
 .hud-group {
@@ -252,7 +252,7 @@ button, input, select {
   border: 1.5px solid #31455B;
   border-radius: 11px;
   box-shadow: 0 2px 0 #0F1722;
-  transition: padding 0.16s ease, gap 0.16s ease;
+  transition: transform 0.12s ease, border-color 0.15s ease;
 }
 
 .res-meta {
@@ -520,7 +520,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
 }
 
 .sys-btn.icon-only {
@@ -635,7 +635,7 @@ button, input, select {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
   white-space: nowrap;
 }
 
@@ -882,7 +882,7 @@ button, input, select {
   box-shadow: 0 3px 0 #0B1119, 0 8px 18px rgba(0, 0, 0, 0.36);
   cursor: pointer;
   text-align: left;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
 }
 
 .tactical-btn span {
@@ -995,7 +995,7 @@ button, input, select {
   padding: 9px 12px;
   box-shadow: 0 3px 0 #0B1119, 0 -8px 28px rgba(0, 0, 0, 0.5);
   z-index: 20;
-  transition: padding 0.18s ease, background-color 0.18s ease;
+  transition: background-color 0.18s ease;
 }
 
 #build-dock .dock-expand-btn {
@@ -1092,7 +1092,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
 }
 
 .tab-btn:hover, .tool-btn:hover {
@@ -1139,7 +1139,7 @@ button, input, select {
   border-radius: 13px;
   box-shadow: 0 2px 0 #0F1722;
   cursor: pointer;
-  transition: all 0.13s ease;
+  transition: transform 0.13s ease, background-color 0.13s ease, border-color 0.13s ease, color 0.13s ease, box-shadow 0.13s ease, opacity 0.13s ease;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1332,7 +1332,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
   white-space: nowrap;
 }
 
