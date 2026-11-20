@@ -455,7 +455,7 @@ window.ZS = window.ZS || {};
     ZS.Iso.resetCamera();
 
     const env = ZS.Game.getEnvInfo ? ZS.Game.getEnvInfo() : { isDevBuild: false, isDevEnvironment: false, isDebugMode: false };
-    const ver = ZS.DATA.VERSION || 'v0.5.0';
+    const ver = ZS.DATA.VERSION || 'v0.5.1';
     const hudVer = document.getElementById('hud-version');
     const guideVer = document.getElementById('guide-version');
     if (hudVer) {
