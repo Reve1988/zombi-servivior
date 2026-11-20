@@ -49,7 +49,8 @@
 zombi-servivior/
 ├── index.html          # 메인 화면 및 HUD / 건설 도크 / 보급 상인 UI
 ├── assets/
-│   └── fonts/          # 번들 웹폰트 (Pretendard-*.subset.woff2) 및 SIL OFL 1.1 전문 (OFL.txt)
+│   ├── fonts/          # 번들 웹폰트 (Pretendard·Chakra Petch .subset.woff2) 및 SIL OFL 1.1 전문
+│   └── icons/          # 전술 디오라마 파비콘 (favicon.svg · ico · png · apple-touch-icon)
 ├── css/
 │   └── style.css       # 모던 택티컬 UI 스타일링
 └── js/
@@ -75,3 +76,4 @@ zombi-servivior/
 ## 오픈소스 라이선스 고지 (Third-Party Licenses)
 
 - **`Pretendard`** — Copyright (c) 2021 Kil Hyung-jin (`https://github.com/orioncactus/pretendard`), licensed under the **SIL Open Font License 1.1** ([`assets/fonts/OFL.txt`](./assets/fonts/OFL.txt)).
+- **`Chakra Petch`** — Copyright 2018 The Chakra Petch Project Authors (Cadson Demak, `https://github.com/m4rc1e/Chakra-Petch`), licensed under the **SIL Open Font License 1.1** ([`assets/fonts/ChakraPetch-OFL.txt`](./assets/fonts/ChakraPetch-OFL.txt)).
