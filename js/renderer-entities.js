@@ -30,10 +30,6 @@ window.ZS = window.ZS || {};
     if ((z.hitFlash || 0) > 0.001) return false;
     if (z.leapState) return false;
     if (zDef && zDef.isBoss && z.chargeState) return false;
-    if (zScale) {
-      const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
-      if (zScale * dpr > ZOMBIE_STAMP_SCALE * 1.08) return false;
-    }
     return true;
   }
 
