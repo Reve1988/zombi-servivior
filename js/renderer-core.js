@@ -9,13 +9,16 @@ window.ZS = window.ZS || {};
   const emissiveStampCache = new Map();
   const thumbnailCache = new Map();
   let punchHoleStamp = null;
+  let cloudShadowStamp = null;
   const bgCache = {
     canvas: document.createElement('canvas'),
     ctx: null,
     w: 0,
     h: 0,
+    dpr: 0,
     isSil: null,
-    isNight: null
+    isNight: null,
+    bakeCount: 0
   };
   const terrainCache = {
     canvas: document.createElement('canvas'),
@@ -41,6 +44,7 @@ window.ZS = window.ZS || {};
     glowStampCache,
     emissiveStampCache,
     thumbnailCache,
+    bgCache,
     terrainCache,
     emissiveList: null,
     activeTrapTiles: null,
@@ -219,6 +223,537 @@ window.ZS = window.ZS || {};
     sctx.fillRect(0, 0, sz, sz);
     punchHoleStamp = stamp;
     return stamp;
+  }
+
+  function getCloudShadowStamp() {
+    if (cloudShadowStamp) return cloudShadowStamp;
+    const sz = 96;
+    const stamp = document.createElement('canvas');
+    stamp.width = sz;
+    stamp.height = sz;
+    const sctx = stamp.getContext('2d');
+    const puffs = [
+      { x: 48, y: 48, r: 44, a: 0.72 },
+      { x: 35, y: 50, r: 30, a: 0.34 },
+      { x: 61, y: 46, r: 28, a: 0.32 }
+    ];
+    for (let i = 0; i < puffs.length; i++) {
+      const pf = puffs[i];
+      const grad = sctx.createRadialGradient(pf.x, pf.y, pf.r * 0.14, pf.x, pf.y, pf.r);
+      grad.addColorStop(0, `rgba(8, 16, 26, ${pf.a})`);
+      grad.addColorStop(0.5, `rgba(8, 16, 26, ${(pf.a * 0.52).toFixed(3)})`);
+      grad.addColorStop(0.82, `rgba(10, 18, 28, ${(pf.a * 0.16).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(10, 18, 28, 0)');
+      sctx.fillStyle = grad;
+      sctx.fillRect(0, 0, sz, sz);
+    }
+    cloudShadowStamp = stamp;
+    return stamp;
+  }
+
+  function drawConiferRidge(bctx, x0, x1, baseY0, baseY1, viewH, minH, maxH, stepPx, seed, fillCol, rimCol) {
+    bctx.save();
+    bctx.fillStyle = fillCol;
+    bctx.beginPath();
+    const goingRight = x1 >= x0;
+    const dir = goingRight ? 1 : -1;
+    const len = Math.abs(x1 - x0);
+    const count = Math.max(5, Math.floor(len / stepPx));
+    bctx.moveTo(x0, viewH + 12);
+    bctx.lineTo(x0, baseY0);
+    for (let i = 0; i <= count; i++) {
+      const f = i / count;
+      const cx = x0 + (x1 - x0) * f;
+      const ridgeY = baseY0 + (baseY1 - baseY0) * f;
+      const r0 = tileHash01(i, seed, 503);
+      const r1 = tileHash01(i, seed, 521);
+      const r2 = tileHash01(i, seed, 541);
+      const treeH = minH + (maxH - minH) * (0.35 + 0.65 * r0) * (1 - f * 0.36);
+      const halfW = stepPx * (0.64 + 0.34 * r1);
+      const t1 = ridgeY - treeH * 0.42;
+      const t2 = ridgeY - treeH * 0.72;
+      const tipY = ridgeY - treeH;
+      const lean = (r2 - 0.5) * 2.6;
+      bctx.lineTo(cx - dir * halfW * 0.52, ridgeY - treeH * 0.14);
+      bctx.lineTo(cx - dir * halfW * 0.24, t1 + 3);
+      bctx.lineTo(cx - dir * halfW * 0.44, t1);
+      bctx.lineTo(cx - dir * halfW * 0.16, t2 + 2.5);
+      bctx.lineTo(cx - dir * halfW * 0.30, t2);
+      bctx.lineTo(cx + lean, tipY);
+      bctx.lineTo(cx + dir * halfW * 0.30, t2);
+      bctx.lineTo(cx + dir * halfW * 0.16, t2 + 2.5);
+      bctx.lineTo(cx + dir * halfW * 0.44, t1);
+      bctx.lineTo(cx + dir * halfW * 0.24, t1 + 3);
+      bctx.lineTo(cx + dir * halfW * 0.52, ridgeY - treeH * 0.10);
+    }
+    bctx.lineTo(x1, baseY1);
+    bctx.lineTo(x1, viewH + 12);
+    bctx.closePath();
+    bctx.fill();
+    if (rimCol) {
+      bctx.strokeStyle = rimCol;
+      bctx.lineWidth = 1;
+      bctx.stroke();
+    }
+    bctx.restore();
+  }
+
+  function drawFarDioramaSilhouettes(bctx, w, h, isNightBg) {
+    const farCol = isNightBg ? '#0B1424' : '#1B2834';
+    const farSub = isNightBg ? '#08101E' : '#16222C';
+    const rimCol = isNightBg ? 'rgba(74, 112, 168, 0.25)' : 'rgba(136, 170, 192, 0.22)';
+
+    bctx.save();
+
+    // Left far horizon ridge + industrial factory + twin smokestacks (framed cleanly in open left flank)
+    bctx.fillStyle = farCol;
+    bctx.beginPath();
+    bctx.moveTo(-10, h + 10);
+    bctx.lineTo(-10, h * 0.53);
+    bctx.lineTo(w * 0.015, h * 0.505);
+    bctx.lineTo(w * 0.032, h * 0.525);
+    bctx.lineTo(w * 0.036, h * 0.508);
+    // Sawtooth factory roofs
+    bctx.lineTo(w * 0.056, h * 0.508);
+    bctx.lineTo(w * 0.058, h * 0.528);
+    bctx.lineTo(w * 0.082, h * 0.506);
+    bctx.lineTo(w * 0.084, h * 0.530);
+    bctx.lineTo(w * 0.108, h * 0.514);
+    bctx.lineTo(w * 0.110, h * 0.545);
+    // Cylindrical silo / tank silhouette
+    bctx.lineTo(w * 0.122, h * 0.542);
+    bctx.lineTo(w * 0.136, h * 0.542);
+    bctx.lineTo(w * 0.140, h * 0.568);
+    bctx.lineTo(w * 0.185, h * 0.598);
+    bctx.lineTo(w * 0.265, h * 0.665);
+    bctx.lineTo(w * 0.295, h + 10);
+    bctx.closePath();
+    bctx.fill();
+
+    // Twin factory smokestacks on left ridge
+    const stacks = [
+      { cx: w * 0.044, topY: h * 0.382, botY: h * 0.525, topW: 5.5, botW: 9.8 },
+      { cx: w * 0.072, topY: h * 0.402, botY: h * 0.530, topW: 5.0, botW: 9.0 }
+    ];
+    for (let i = 0; i < stacks.length; i++) {
+      const s = stacks[i];
+      bctx.fillStyle = farCol;
+      bctx.beginPath();
+      bctx.moveTo(s.cx - s.topW * 0.5, s.topY);
+      bctx.lineTo(s.cx + s.topW * 0.5, s.topY);
+      bctx.lineTo(s.cx + s.botW * 0.5, s.botY);
+      bctx.lineTo(s.cx - s.botW * 0.5, s.botY);
+      bctx.closePath();
+      bctx.fill();
+      bctx.fillRect(s.cx - s.topW * 0.68, s.topY, s.topW * 1.36, 3.2);
+      bctx.strokeStyle = rimCol;
+      bctx.lineWidth = 1.1;
+      bctx.beginPath();
+      bctx.moveTo(s.cx - s.topW * 0.5, s.topY);
+      bctx.lineTo(s.cx - s.botW * 0.5, s.botY);
+      bctx.stroke();
+    }
+
+    // Subtle secondary ruined industrial block behind left ridge
+    bctx.fillStyle = farSub;
+    bctx.fillRect(w * 0.006, h * 0.535, w * 0.030, h * 0.09);
+
+    // Right far horizon ridge + ruined city skyline + radio mast (placed visible to left & below right HUD panel)
+    bctx.fillStyle = farCol;
+    bctx.beginPath();
+    bctx.moveTo(w * 0.70, h + 10);
+    bctx.lineTo(w * 0.725, h * 0.675);
+    bctx.lineTo(w * 0.768, h * 0.618);
+    // Ruined stepped tower & apartment blocks
+    bctx.lineTo(w * 0.774, h * 0.560);
+    bctx.lineTo(w * 0.790, h * 0.560);
+    bctx.lineTo(w * 0.793, h * 0.580);
+    bctx.lineTo(w * 0.808, h * 0.580);
+    bctx.lineTo(w * 0.812, h * 0.538);
+    bctx.lineTo(w * 0.834, h * 0.538);
+    bctx.lineTo(w * 0.837, h * 0.578);
+    bctx.lineTo(w * 0.864, h * 0.592);
+    bctx.lineTo(w * 0.905, h * 0.582);
+    // Right jagged industrial rooftop + tower
+    bctx.lineTo(w * 0.910, h * 0.545);
+    bctx.lineTo(w * 0.930, h * 0.538);
+    bctx.lineTo(w * 0.938, h * 0.566);
+    bctx.lineTo(w * 0.962, h * 0.558);
+    bctx.lineTo(w * 0.968, h * 0.530);
+    bctx.lineTo(w * 0.992, h * 0.538);
+    bctx.lineTo(w + 10, h * 0.560);
+    bctx.lineTo(w + 10, h + 10);
+    bctx.closePath();
+    bctx.fill();
+
+    // Slender radio / transmission mast clearly visible left of HUD panel
+    const mastX = w * 0.822;
+    const mastTop = h * 0.435;
+    const mastBot = h * 0.542;
+    bctx.strokeStyle = farCol;
+    bctx.lineWidth = 2.0;
+    bctx.beginPath();
+    bctx.moveTo(mastX, mastTop);
+    bctx.lineTo(mastX - 3.2, mastBot);
+    bctx.moveTo(mastX, mastTop);
+    bctx.lineTo(mastX + 3.2, mastBot);
+    bctx.moveTo(mastX - 6.5, mastTop + (mastBot - mastTop) * 0.22);
+    bctx.lineTo(mastX + 6.5, mastTop + (mastBot - mastTop) * 0.22);
+    bctx.moveTo(mastX - 4.5, mastTop + (mastBot - mastTop) * 0.46);
+    bctx.lineTo(mastX + 4.5, mastTop + (mastBot - mastTop) * 0.46);
+    bctx.stroke();
+
+    // Distant right smokestack
+    const rStackX = w * 0.946;
+    bctx.fillStyle = farCol;
+    bctx.beginPath();
+    bctx.moveTo(rStackX - 2.6, h * 0.478);
+    bctx.lineTo(rStackX + 2.6, h * 0.478);
+    bctx.lineTo(rStackX + 4.6, h * 0.562);
+    bctx.lineTo(rStackX - 4.6, h * 0.562);
+    bctx.closePath();
+    bctx.fill();
+
+    bctx.restore();
+  }
+
+  function drawBrokenViaducts(bctx, w, h, isNightBg) {
+    const deckCol = isNightBg ? '#060D1A' : '#101A23';
+    const pierCol = isNightBg ? '#040913' : '#0C141C';
+    const rimCol = isNightBg ? 'rgba(72, 108, 162, 0.28)' : 'rgba(138, 174, 196, 0.24)';
+
+    const drawPier = (cx, topY, botY, topW, botW) => {
+      bctx.fillStyle = pierCol;
+      bctx.beginPath();
+      bctx.moveTo(cx - topW * 0.5, topY);
+      bctx.lineTo(cx + topW * 0.5, topY);
+      bctx.lineTo(cx + botW * 0.5, botY);
+      bctx.lineTo(cx - botW * 0.5, botY);
+      bctx.closePath();
+      bctx.fill();
+      bctx.strokeStyle = rimCol;
+      bctx.lineWidth = 1;
+      bctx.beginPath();
+      bctx.moveTo(cx - topW * 0.5, topY);
+      bctx.lineTo(cx - botW * 0.5, botY);
+      bctx.stroke();
+    };
+
+    const drawPosts = (x0, y0, x1, y1, count, postH) => {
+      bctx.strokeStyle = deckCol;
+      bctx.lineWidth = 1.6;
+      bctx.beginPath();
+      for (let i = 0; i < count; i++) {
+        const t = (i + 0.35) / count;
+        const px = x0 + (x1 - x0) * t;
+        const py = y0 + (y1 - y0) * t;
+        bctx.moveTo(px, py);
+        bctx.lineTo(px, py - postH);
+      }
+      bctx.stroke();
+    };
+
+    bctx.save();
+    const deckThick = Math.max(12, h * 0.020);
+
+    // Left Viaduct — Main Span rising from left edge above bottom dock to broken gap
+    const lX0 = -14;
+    const lY0 = h * 0.745;
+    const lX1 = w * 0.128;
+    const lY1 = h * 0.668;
+    drawPier(w * 0.030, h * 0.728, h * 0.95, 13, 17);
+    drawPier(w * 0.096, h * 0.690, h * 0.95, 11, 15);
+    drawPosts(0, h * 0.738, lX1 - 6, lY1 + 2, 6, 6.5);
+
+    bctx.fillStyle = deckCol;
+    bctx.beginPath();
+    bctx.moveTo(lX0, lY0);
+    bctx.lineTo(lX1, lY1);
+    bctx.lineTo(lX1 - 5, lY1 + deckThick * 0.38);
+    bctx.lineTo(lX1 + 2, lY1 + deckThick * 0.72);
+    bctx.lineTo(lX1 - 7, lY1 + deckThick * 1.05);
+    bctx.lineTo(lX0, lY0 + deckThick * 1.18);
+    bctx.closePath();
+    bctx.fill();
+
+    // Jagged rebar stubs on left broken tip
+    bctx.strokeStyle = deckCol;
+    bctx.lineWidth = 1.5;
+    bctx.beginPath();
+    bctx.moveTo(lX1 - 1, lY1 + 3);
+    bctx.lineTo(lX1 + 11, lY1 + 5);
+    bctx.moveTo(lX1 - 3, lY1 + 9);
+    bctx.lineTo(lX1 + 9, lY1 + 14);
+    bctx.stroke();
+
+    // Sunlit top-left edge highlight on main span
+    bctx.strokeStyle = rimCol;
+    bctx.lineWidth = 1.2;
+    bctx.beginPath();
+    bctx.moveTo(lX0, lY0);
+    bctx.lineTo(lX1, lY1);
+    bctx.stroke();
+
+    // Left Viaduct — Broken Counter-Span across the collapsed gap (kept cleanly below floating island)
+    const gX0 = w * 0.156;
+    const gY0 = h * 0.662;
+    const gX1 = w * 0.232;
+    const gY1 = h * 0.640;
+    drawPier(w * 0.194, h * 0.658, h * 0.95, 9, 13);
+    drawPosts(gX0 + 8, gY0 - 2, gX1 - 6, gY1 + 1, 4, 5.5);
+
+    bctx.fillStyle = deckCol;
+    bctx.beginPath();
+    bctx.moveTo(gX0, gY0 + 3);
+    bctx.lineTo(gX1, gY1);
+    bctx.lineTo(gX1 - 4, gY1 + deckThick * 0.85);
+    bctx.lineTo(gX0 - 3, gY0 + deckThick * 0.92);
+    bctx.lineTo(gX0 + 3, gY0 + deckThick * 0.45);
+    bctx.closePath();
+    bctx.fill();
+
+    bctx.strokeStyle = rimCol;
+    bctx.lineWidth = 1.1;
+    bctx.beginPath();
+    bctx.moveTo(gX0, gY0 + 3);
+    bctx.lineTo(gX1, gY1);
+    bctx.stroke();
+
+    // Right Viaduct — Broken Elevated Deck reaching inward from right edge above bottom dock
+    const rX0 = w * 0.785;
+    const rY0 = h * 0.662;
+    const rX1 = w + 14;
+    const rY1 = h * 0.738;
+    drawPier(w * 0.850, h * 0.690, h * 0.95, 11, 15);
+    drawPier(w * 0.942, h * 0.724, h * 0.95, 13, 17);
+    drawPosts(rX0 + 8, rY0 + 2, w - 8, h * 0.732, 7, 6.5);
+
+    bctx.fillStyle = deckCol;
+    bctx.beginPath();
+    bctx.moveTo(rX0, rY0);
+    bctx.lineTo(rX1, rY1);
+    bctx.lineTo(rX1, rY1 + deckThick * 1.16);
+    bctx.lineTo(rX0 + 5, rY0 + deckThick * 1.02);
+    bctx.lineTo(rX0 - 3, rY0 + deckThick * 0.68);
+    bctx.lineTo(rX0 + 4, rY0 + deckThick * 0.34);
+    bctx.closePath();
+    bctx.fill();
+
+    bctx.strokeStyle = deckCol;
+    bctx.lineWidth = 1.5;
+    bctx.beginPath();
+    bctx.moveTo(rX0 + 1, rY0 + 3);
+    bctx.lineTo(rX0 - 10, rY0 + 6);
+    bctx.moveTo(rX0 + 3, rY0 + 9);
+    bctx.lineTo(rX0 - 8, rY0 + 14);
+    bctx.stroke();
+
+    bctx.strokeStyle = rimCol;
+    bctx.lineWidth = 1.1;
+    bctx.beginPath();
+    bctx.moveTo(rX0, rY0);
+    bctx.lineTo(rX1, rY1);
+    bctx.stroke();
+
+    bctx.restore();
+  }
+
+  function drawBakedGodRays(bctx, w, h) {
+    const shafts = [
+      { ox: -36, oy: -12, ang: 0.575, len: Math.hypot(w, h) * 0.64, width: 118, alpha: 0.072 },
+      { ox: w * 0.075, oy: -24, ang: 0.615, len: Math.hypot(w, h) * 0.70, width: 152, alpha: 0.084 },
+      { ox: w * 0.185, oy: -32, ang: 0.650, len: Math.hypot(w, h) * 0.58, width: 102, alpha: 0.056 }
+    ];
+    const bands = [
+      { scale: 1.38, weight: 0.18 },
+      { scale: 0.94, weight: 0.28 },
+      { scale: 0.58, weight: 0.32 },
+      { scale: 0.28, weight: 0.22 }
+    ];
+    bctx.save();
+    for (let i = 0; i < shafts.length; i++) {
+      const sh = shafts[i];
+      bctx.save();
+      bctx.translate(sh.ox, sh.oy);
+      bctx.rotate(sh.ang);
+      for (let b = 0; b < bands.length; b++) {
+        const bd = bands[b];
+        const halfH = (sh.width * bd.scale) * 0.5;
+        const a0 = sh.alpha * bd.weight;
+        const grad = bctx.createLinearGradient(0, 0, sh.len, 0);
+        grad.addColorStop(0, `rgba(255, 224, 165, ${a0.toFixed(4)})`);
+        grad.addColorStop(0.45, `rgba(255, 224, 165, ${(a0 * 0.62).toFixed(4)})`);
+        grad.addColorStop(1, 'rgba(255, 224, 165, 0)');
+        bctx.fillStyle = grad;
+        bctx.beginPath();
+        bctx.moveTo(0, -halfH * 0.78);
+        bctx.lineTo(sh.len, -halfH * 1.45);
+        bctx.lineTo(sh.len, halfH * 1.45);
+        bctx.lineTo(0, halfH * 0.78);
+        bctx.closePath();
+        bctx.fill();
+      }
+      bctx.restore();
+    }
+    bctx.restore();
+  }
+
+  function bakeDioramaBackdrop(bctx, w, h, isSil, isNightBg) {
+    if (isSil) {
+      bctx.fillStyle = '#EEF1F4';
+      bctx.fillRect(0, 0, w, h);
+      return;
+    }
+
+    // 1. Moody Sky & Abyss Mist Gradient (zero #5EF2FF cyan)
+    const skyGrad = bctx.createLinearGradient(0, 0, 0, h);
+    if (isNightBg) {
+      skyGrad.addColorStop(0, '#111C30');
+      skyGrad.addColorStop(0.48, '#08101E');
+      skyGrad.addColorStop(1, '#04070F');
+    } else {
+      skyGrad.addColorStop(0, '#2C3E4C');
+      skyGrad.addColorStop(0.48, '#1B2934');
+      skyGrad.addColorStop(1, '#101922');
+    }
+    bctx.fillStyle = skyGrad;
+    bctx.fillRect(0, 0, w, h);
+
+    // Soft upper-center/left mist halo or distant cool moonlight horizon glow
+    const mistCx = isNightBg ? w * 0.48 : w * 0.36;
+    const mistCy = isNightBg ? h * 0.38 : h * 0.32;
+    const mistRad = Math.max(w, h) * 0.64;
+    const mistGlow = bctx.createRadialGradient(mistCx, mistCy, 24, mistCx, mistCy, mistRad);
+    if (isNightBg) {
+      mistGlow.addColorStop(0, 'rgba(48, 76, 124, 0.28)');
+      mistGlow.addColorStop(0.55, 'rgba(24, 42, 74, 0.14)');
+      mistGlow.addColorStop(1, 'rgba(4, 7, 15, 0)');
+    } else {
+      mistGlow.addColorStop(0, 'rgba(68, 94, 112, 0.38)');
+      mistGlow.addColorStop(0.55, 'rgba(42, 62, 76, 0.18)');
+      mistGlow.addColorStop(1, 'rgba(16, 25, 34, 0)');
+    }
+    bctx.fillStyle = mistGlow;
+    bctx.fillRect(0, 0, w, h);
+
+    // Subtle atmospheric horizon mist band behind far silhouettes so ruins & stacks separate crisply
+    const horizonMist = bctx.createLinearGradient(0, h * 0.34, 0, h * 0.68);
+    if (isNightBg) {
+      horizonMist.addColorStop(0, 'rgba(22, 38, 66, 0)');
+      horizonMist.addColorStop(0.54, 'rgba(28, 48, 84, 0.34)');
+      horizonMist.addColorStop(1, 'rgba(8, 16, 30, 0)');
+    } else {
+      horizonMist.addColorStop(0, 'rgba(54, 76, 92, 0)');
+      horizonMist.addColorStop(0.54, 'rgba(58, 82, 98, 0.38)');
+      horizonMist.addColorStop(1, 'rgba(27, 41, 52, 0)');
+    }
+    bctx.fillStyle = horizonMist;
+    bctx.fillRect(0, h * 0.34, w, h * 0.34);
+
+    // 2. Far-Ground Silhouettes (Left factory & twin smokestacks, Right ruined skyline & radio mast)
+    drawFarDioramaSilhouettes(bctx, w, h, isNightBg);
+
+    // 3. Fog Band 1: separates far horizon from mid-ground viaducts
+    const fogBand1 = bctx.createLinearGradient(0, h * 0.44, 0, h * 0.74);
+    if (isNightBg) {
+      fogBand1.addColorStop(0, 'rgba(16, 28, 52, 0)');
+      fogBand1.addColorStop(0.52, 'rgba(22, 38, 68, 0.38)');
+      fogBand1.addColorStop(1, 'rgba(6, 11, 22, 0)');
+    } else {
+      fogBand1.addColorStop(0, 'rgba(44, 65, 80, 0)');
+      fogBand1.addColorStop(0.52, 'rgba(48, 70, 86, 0.36)');
+      fogBand1.addColorStop(1, 'rgba(18, 28, 38, 0)');
+    }
+    bctx.fillStyle = fogBand1;
+    bctx.fillRect(0, h * 0.44, w, h * 0.32);
+
+    // 4. Mid-Ground Broken Elevated Highway / Viaduct Bridges
+    drawBrokenViaducts(bctx, w, h, isNightBg);
+
+    // 5. Fog Band 2: hugs viaduct piers behind conifer ridges
+    const fogBand2 = bctx.createLinearGradient(0, h * 0.62, 0, h * 0.94);
+    if (isNightBg) {
+      fogBand2.addColorStop(0, 'rgba(10, 20, 38, 0)');
+      fogBand2.addColorStop(0.55, 'rgba(14, 26, 48, 0.40)');
+      fogBand2.addColorStop(1, 'rgba(4, 7, 15, 0.28)');
+    } else {
+      fogBand2.addColorStop(0, 'rgba(30, 46, 58, 0)');
+      fogBand2.addColorStop(0.55, 'rgba(32, 50, 64, 0.38)');
+      fogBand2.addColorStop(1, 'rgba(12, 20, 28, 0.25)');
+    }
+    bctx.fillStyle = fogBand2;
+    bctx.fillRect(0, h * 0.62, w, h * 0.34);
+
+    // 6. Multi-Tier Conifer / Pine Forest Ridges framing lower-left & lower-right corners above bottom dock
+    const backPineCol = isNightBg ? '#060D1A' : '#111B24';
+    const frontPineCol = isNightBg ? '#03070E' : '#091117';
+    const pineRim = isNightBg ? 'rgba(54, 84, 130, 0.18)' : 'rgba(98, 130, 148, 0.16)';
+    drawConiferRidge(bctx, -12, w * 0.34, h * 0.69, h * 0.86, h, 26, 56, 18, 17, backPineCol, pineRim);
+    drawConiferRidge(bctx, w + 12, w * 0.66, h * 0.70, h * 0.86, h, 26, 54, 18, 29, backPineCol, pineRim);
+    drawConiferRidge(bctx, -12, w * 0.25, h * 0.76, h * 0.90, h, 28, 62, 19, 41, frontPineCol, null);
+    drawConiferRidge(bctx, w + 12, w * 0.75, h * 0.77, h * 0.90, h, 28, 60, 19, 53, frontPineCol, null);
+
+    // 7. Baked Daytime Upper-Left God-Rays (zero per-frame cost)
+    if (!isNightBg) {
+      drawBakedGodRays(bctx, w, h);
+    }
+  }
+
+  const _cloudPts = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 }
+  ];
+  const _cloudCenter = { x: 0, y: 0 };
+
+  function drawDriftingCloudShadows(ctx, N, state, timeSec, zScale, w, h) {
+    const Iso = ZS.Iso;
+    const stamp = getCloudShadowStamp();
+    const nightT = Math.max(0, Math.min(1, state.nightAlpha || 0));
+    const tSec = Number.isFinite(timeSec) ? timeSec : 0;
+
+    const periods = [44, 56, 49];
+    const offsets = [0.14, 0.48, 0.81];
+    const lanes = [-5.8, 0.6, 6.2];
+    const baseRadii = [82, 98, 90];
+    const dayAlphas = [0.064, 0.072, 0.058];
+    const nightAlphas = [0.024, 0.027, 0.023];
+
+    Iso.projectTo(0, 0, 0, _cloudPts[0]);
+    Iso.projectTo(N, 0, 0, _cloudPts[1]);
+    Iso.projectTo(N, N, 0, _cloudPts[2]);
+    Iso.projectTo(0, N, 0, _cloudPts[3]);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(_cloudPts[0].x, _cloudPts[0].y);
+    ctx.lineTo(_cloudPts[1].x, _cloudPts[1].y);
+    ctx.lineTo(_cloudPts[2].x, _cloudPts[2].y);
+    ctx.lineTo(_cloudPts[3].x, _cloudPts[3].y);
+    ctx.closePath();
+    ctx.clip();
+
+    for (let i = 0; i < 3; i++) {
+      const phase = (((tSec / periods[i]) + offsets[i]) % 1 + 1) % 1;
+      const edgeFade = Math.min(1, Math.min(phase, 1 - phase) / 0.14);
+      const alpha = (dayAlphas[i] * (1 - nightT) + nightAlphas[i] * nightT) * edgeFade;
+      if (alpha <= 0.002) continue;
+
+      const travel = -5.5 + phase * (N + 11);
+      const lane = lanes[i];
+      const gx = travel + lane * 0.65;
+      const gy = travel * 0.92 - lane * 0.65;
+      const p = Iso.projectTo(gx, gy, 0, _cloudCenter);
+      const rx = baseRadii[i] * 2.4 * zScale;
+      const ry = baseRadii[i] * 1.15 * zScale;
+      if (!isScreenVisible(p.x, p.y, rx, ry, ry, w, h)) continue;
+
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(stamp, p.x - rx, p.y - ry, rx * 2, ry * 2);
+    }
+
+    ctx.restore();
   }
 
   function getEmissiveGlowStamp(hex) {
@@ -610,8 +1145,13 @@ window.ZS = window.ZS || {};
 
           if (fid) {
             drawFloorTile(tctx, x, y, fid, 1.0);
-          } else if (cell.decal && !occ) {
-            drawTerrainDecal(tctx, x, y, cell.decal, 1.0);
+          } else {
+            if (!isSil) {
+              drawTileMicroGrain(tctx, x, y, isEdge, occ);
+            }
+            if (cell.decal && !occ) {
+              drawTerrainDecal(tctx, x, y, cell.decal, 1.0);
+            }
           }
         }
       }
@@ -733,33 +1273,30 @@ window.ZS = window.ZS || {};
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'low';
 
-    // 1. Cached Background Sky / Tactical Tabletop Backdrop
+    // 1. Cached Background Sky / Diorama Silhouette Backdrop (1x offscreen bake at physical DPR)
     const isNightBg = state.nightAlpha > 0.4;
-    if (bgCache.w !== w || bgCache.h !== h || bgCache.isSil !== isSil || bgCache.isNight !== isNightBg) {
+    const bgDpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+    if (
+      bgCache.w !== w ||
+      bgCache.h !== h ||
+      bgCache.dpr !== bgDpr ||
+      bgCache.isSil !== isSil ||
+      bgCache.isNight !== isNightBg
+    ) {
       bgCache.w = w;
       bgCache.h = h;
+      bgCache.dpr = bgDpr;
       bgCache.isSil = isSil;
       bgCache.isNight = isNightBg;
-      bgCache.canvas.width = Math.max(1, w);
-      bgCache.canvas.height = Math.max(1, h);
+      bgCache.canvas.width = Math.max(1, Math.round(w * bgDpr));
+      bgCache.canvas.height = Math.max(1, Math.round(h * bgDpr));
       const bctx = bgCache.ctx || (bgCache.ctx = bgCache.canvas.getContext('2d'));
-      if (isSil) {
-        bctx.fillStyle = '#EEF1F4';
-        bctx.fillRect(0, 0, w, h);
-      } else {
-        const bgGrad = bctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
-        if (isNightBg) {
-          bgGrad.addColorStop(0, '#101B2D');
-          bgGrad.addColorStop(1, '#060A13');
-        } else {
-          bgGrad.addColorStop(0, '#2C3B49');
-          bgGrad.addColorStop(1, '#151E27');
-        }
-        bctx.fillStyle = bgGrad;
-        bctx.fillRect(0, 0, w, h);
-      }
+      bctx.setTransform(bgDpr, 0, 0, bgDpr, 0, 0);
+      bctx.clearRect(0, 0, w, h);
+      bakeDioramaBackdrop(bctx, w, h, isSil, isNightBg);
+      bgCache.bakeCount += 1;
     }
-    ctx.drawImage(bgCache.canvas, 0, 0, w, h);
+    ctx.drawImage(bgCache.canvas, 0, 0, bgCache.canvas.width, bgCache.canvas.height, 0, 0, w, h);
 
     // Optional mild camera shake ONLY on Airstrike, Boss spawn, and HQ hit (#8 + accessibility toggle)
     const shakeActive =
@@ -822,6 +1359,11 @@ window.ZS = window.ZS || {};
     // Fading zombie death ground stains (#8: drawn flat on ground above tiles/floors, below structures)
     if (!isSil && state.groundDecals && state.groundDecals.length > 0) {
       R.drawGroundStains(ctx, state.groundDecals, zScale, w, h);
+    }
+
+    // Lightweight drifting cloud shadows over island terrain (3 pre-baked 96x96 drawImage calls)
+    if (!isSil) {
+      drawDriftingCloudShadows(ctx, N, state, timeSec, zScale, w, h);
     }
 
     // Subtle warm afternoon sunlight wash over the inner base during daytime (pre-baked glow stamp)
@@ -1132,51 +1674,122 @@ window.ZS = window.ZS || {};
     ctx.fill();
     ctx.restore();
 
-    // Stratum 1: Deep Bedrock (-22 .. -12)
-    Iso.drawVoxelBox(ctx, 0, 0, -22, N, N, 10, {
-      top: P.slabRockLeft || '#2B3038',
-      left: P.slabRockLeft || '#2B3038',
-      right: P.slabRockRight || '#1E2229'
+    // Stratum 1: Deep Slate Bedrock Band (-23 .. -14.2, left-top 100%/82%/66%)
+    Iso.drawVoxelBox(ctx, 0, 0, -23, N, N, 8.8, {
+      base: '#363E4B',
+      noTop: true
+    });
+    Iso.drawVoxelBox(ctx, 0, 0, -23, N, N, 1.5, {
+      base: '#252B35',
+      noTop: true
     });
 
     // Protruding bedrock cliff blocks along visible front-left (y = N) and front-right (x = N) faces
     const rockOffsets = N >= 22 ? [2.2, 6.4, 11.1, 14.8, 18.9] : [2.2, 6.4, 11.1, 14.8];
     for (let i = 0; i < rockOffsets.length; i++) {
       const k = rockOffsets[i];
-      Iso.drawVoxelBox(ctx, k, N - 0.16, -20.5 + (i % 2) * 1.5, 1.5, 0.24, 6.5, {
-        base: '#363D47'
+      Iso.drawVoxelBox(ctx, k, N - 0.16, -21.8 + (i % 2) * 1.4, 1.5, 0.24, 6.4, {
+        base: '#434D5D'
       });
-      Iso.drawVoxelBox(ctx, N - 0.16, k + 0.5, -20 + (i % 2) * 1.5, 0.24, 1.4, 6.2, {
-        base: '#2D333C'
+      Iso.drawVoxelBox(ctx, N - 0.16, k + 0.5, -21.3 + (i % 2) * 1.4, 0.24, 1.4, 6.2, {
+        base: '#3E4856'
       });
     }
 
-    // Stratum 2: Subsoil & Clay (-12 .. -3.5)
-    Iso.drawVoxelBox(ctx, 0, 0, -12, N, N, 8.5, {
-      top: P.slabSideLeft || '#3A3027',
-      left: P.slabSideLeft || '#3A3027',
-      right: P.slabSideRight || '#2C241D'
+    // Stratum 2: Mid Ochre-Clay Band (-14.2 .. -8.2)
+    Iso.drawVoxelBox(ctx, 0, 0, -14.2, N, N, 6.0, {
+      base: '#AD7E49',
+      noTop: true
+    });
+    Iso.drawVoxelBox(ctx, 0, 0, -14.2, N, N, 0.8, {
+      base: '#684B2C',
+      noTop: true
     });
 
-    // Embedded cliff stones in soil layer
+    // Stratum 3: Warm Earth Upper Layer (-8.2 .. -3.2)
+    Iso.drawVoxelBox(ctx, 0, 0, -8.2, N, N, 5.0, {
+      base: '#714D39',
+      noTop: true
+    });
+    // Crisp contact AO strip directly beneath the overhanging grass rim
+    Iso.drawVoxelBox(ctx, 0, 0, -4.1, N, N, 0.9, {
+      base: '#38251B',
+      noTop: true
+    });
+
+    // Embedded cliff stones in earth / ochre-clay strata
     const stoneOffsets = N >= 22 ? [1.4, 4.7, 8.3, 12.6, 15.9, 19.3] : [1.4, 4.7, 8.3, 12.6, 15.9];
     for (let i = 0; i < stoneOffsets.length; i++) {
       const k = stoneOffsets[i];
-      Iso.drawVoxelBox(ctx, k, N - 0.06, -9.2 + (i % 2) * 1.8, 0.55, 0.11, 2.6, {
-        base: '#6C737B'
+      Iso.drawVoxelBox(ctx, k, N - 0.06, -12.0 + (i % 2) * 2.4, 0.55, 0.11, 2.6, {
+        base: '#7E8690'
       });
-      Iso.drawVoxelBox(ctx, N - 0.06, k, -8.8 + ((i + 1) % 2) * 1.8, 0.11, 0.55, 2.6, {
-        base: '#5E656D'
+      Iso.drawVoxelBox(ctx, N - 0.06, k, -11.4 + ((i + 1) % 2) * 2.4, 0.11, 0.55, 2.6, {
+        base: '#757D87'
       });
     }
 
-    // Stratum 3: Topsoil & Overgrown Turf Lip (-3.5 .. 0)
-    Iso.drawVoxelBox(ctx, 0, 0, -3.5, N, N, 3.5, {
+    // Stratum 4: Top Grass Lip Rim (-3.2 .. 0)
+    Iso.drawVoxelBox(ctx, 0, 0, -3.2, N, N, 3.2, {
       top: P.terrainEdgeB || P.terrainB,
-      left: P.slabTurfLeft || '#3E4C3B',
-      right: P.slabTurfRight || '#2F3A2D',
+      left: Iso.shadeHex('#5B7351', 0.82),
+      right: Iso.shadeHex('#5B7351', 0.66),
       stroke: 'rgba(255, 255, 255, 0.06)'
     });
+    Iso.drawVoxelBox(ctx, 0, 0, -1.1, N, N, 1.1, {
+      base: '#68825E',
+      noTop: true
+    });
+    for (let i = 0; i < N; i++) {
+      if (tileHash01(i, N, 701) > 0.42) {
+        const wLip = 0.28 + tileHash01(i, N, 709) * 0.34;
+        const off = tileHash01(i, N, 719) * 0.45;
+        Iso.drawVoxelBox(ctx, i + off, N - 0.04, -3.7, wLip, 0.06, 2.9, {
+          base: '#5F7756',
+          noTop: true
+        });
+      }
+      if (tileHash01(N, i, 727) > 0.42) {
+        const dLip = 0.28 + tileHash01(N, i, 733) * 0.34;
+        const off = tileHash01(N, i, 739) * 0.45;
+        Iso.drawVoxelBox(ctx, N - 0.04, i + off, -3.7, 0.06, dLip, 2.9, {
+          base: '#5F7756',
+          noTop: true
+        });
+      }
+    }
+  }
+
+  function drawTileMicroGrain(ctx, x, y, isEdge, occ) {
+    const Iso = ZS.Iso;
+    const count = occ ? 2 : 3;
+    for (let k = 0; k < count; k++) {
+      const rx = 0.16 + tileHash01(x, y, 601 + k * 13) * 0.68;
+      const ry = 0.16 + tileHash01(x, y, 607 + k * 17) * 0.68;
+      const kind = tileHash01(x, y, 613 + k * 19);
+      const p = Iso.gridToScreen(x + rx, y + ry, 0.1);
+      if (isEdge) {
+        ctx.fillStyle = kind > 0.48 ? 'rgba(26, 28, 28, 0.22)' : 'rgba(108, 110, 102, 0.17)';
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 1.5, 0.85, kind * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (kind > 0.68 && !occ) {
+        ctx.strokeStyle = 'rgba(110, 140, 102, 0.25)';
+        ctx.lineWidth = 1.0;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x - 0.8, p.y + 0.5);
+        ctx.lineTo(p.x - 1.3, p.y - 1.5);
+        ctx.moveTo(p.x + 0.7, p.y + 0.4);
+        ctx.lineTo(p.x + 1.2, p.y - 1.3);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = kind > 0.36 ? 'rgba(118, 146, 114, 0.20)' : 'rgba(34, 46, 36, 0.18)';
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 1.35, 0.75, kind * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   function drawTerrainDecal(ctx, x, y, decal, zScale) {
@@ -1248,15 +1861,20 @@ window.ZS = window.ZS || {};
     const p3 = Iso.gridToScreen(1, N - 1, 0.5);
 
     ctx.save();
-    // Subtle dark curb shadow along inner safe-zone edge
-    ctx.strokeStyle = 'rgba(18, 22, 26, 0.48)';
-    ctx.lineWidth = Math.max(1.2, 2.0 * zScale);
+    // Soft outer soil-to-turf edge transition bevel along inner safe-zone perimeter
+    ctx.strokeStyle = 'rgba(26, 32, 26, 0.22)';
+    ctx.lineWidth = Math.max(2.6, 5.2 * zScale);
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
     ctx.lineTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.lineTo(p3.x, p3.y);
     ctx.closePath();
+    ctx.stroke();
+
+    // Subtle dark curb shadow along inner safe-zone edge
+    ctx.strokeStyle = 'rgba(18, 22, 26, 0.48)';
+    ctx.lineWidth = Math.max(1.2, 2.0 * zScale);
     ctx.stroke();
 
     // Dashed tactical quarantine danger line
@@ -2359,6 +2977,7 @@ window.ZS = window.ZS || {};
     ensureLightCanvas,
     getGlowStamp,
     getPunchHoleStamp,
+    getCloudShadowStamp,
     getEmissiveGlowStamp,
     getTintBucket,
     applyStampTint,

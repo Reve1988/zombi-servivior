@@ -954,12 +954,163 @@ window.ZS = window.ZS || {};
     }
   }
 
+  const _aoPts = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 }
+  ];
+
+  function drawIsoShadowQuad(ctx, gx, gy, gw, gd, zPx, fillStyle) {
+    const Iso = ZS.Iso;
+    Iso.projectTo(gx, gy, zPx, _aoPts[0]);
+    Iso.projectTo(gx + gw, gy, zPx, _aoPts[1]);
+    Iso.projectTo(gx + gw, gy + gd, zPx, _aoPts[2]);
+    Iso.projectTo(gx, gy + gd, zPx, _aoPts[3]);
+    ctx.fillStyle = fillStyle;
+    ctx.beginPath();
+    ctx.moveTo(_aoPts[0].x, _aoPts[0].y);
+    ctx.lineTo(_aoPts[1].x, _aoPts[1].y);
+    ctx.lineTo(_aoPts[2].x, _aoPts[2].y);
+    ctx.lineTo(_aoPts[3].x, _aoPts[3].y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawIsoFootprintAO(ctx, gx, gy, gw, gd, zPx, zScale) {
+    drawIsoShadowQuad(ctx, gx - 0.025, gy - 0.025, gw + 0.095, gd + 0.095, zPx, 'rgba(10, 16, 22, 0.22)');
+    drawIsoShadowQuad(ctx, gx - 0.005, gy - 0.005, gw + 0.055, gd + 0.055, zPx, 'rgba(6, 10, 16, 0.36)');
+  }
+
+  function drawWallContactShadow(ctx, tx, ty, mask, tier, isSil, zScale) {
+    if (isSil) return;
+    if (tier <= 1) {
+      const Iso = ZS.Iso;
+      const drawWireBand = (gx, gy, gw, gd) => {
+        drawIsoShadowQuad(ctx, gx - 0.02, gy - 0.02, gw + 0.065, gd + 0.065, 0.15, 'rgba(10, 16, 22, 0.17)');
+        drawIsoShadowQuad(ctx, gx, gy, gw + 0.035, gd + 0.035, 0.15, 'rgba(6, 10, 16, 0.26)');
+      };
+      if (mask === 0) {
+        drawWireBand(tx + 0.16, ty + 0.36, 0.68, 0.28);
+      } else if (mask === 10) {
+        drawWireBand(tx, ty + 0.36, 1.0, 0.28);
+      } else if (mask === 5) {
+        drawWireBand(tx + 0.36, ty, 0.28, 1.0);
+      } else {
+        const sc = Iso.gridToScreen(tx + 0.53, ty + 0.55, 0.15);
+        ctx.fillStyle = 'rgba(10, 16, 22, 0.18)';
+        ctx.beginPath();
+        ctx.ellipse(sc.x, sc.y, 13 * zScale, 6.5 * zScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (mask & 1) drawWireBand(tx + 0.38, ty, 0.24, 0.5);
+        if (mask & 4) drawWireBand(tx + 0.38, ty + 0.5, 0.24, 0.5);
+        if (mask & 8) drawWireBand(tx, ty + 0.38, 0.5, 0.24);
+        if (mask & 2) drawWireBand(tx + 0.5, ty + 0.38, 0.5, 0.24);
+      }
+      return;
+    }
+
+    const boxes = [];
+    if (mask === 0) {
+      if (tier === 2) {
+        boxes.push([tx + 0.17, ty + 0.31, 0.32, 0.38]);
+        boxes.push([tx + 0.51, ty + 0.31, 0.32, 0.38]);
+      } else {
+        const r = WALL_PIECES.iso;
+        boxes.push([tx + r[0], ty + r[1], r[2], r[3]]);
+      }
+    } else {
+      const keys = ['post'];
+      if (mask & 1) keys.push('N');
+      if (mask & 2) keys.push('E');
+      if (mask & 4) keys.push('S');
+      if (mask & 8) keys.push('W');
+      for (let i = 0; i < keys.length; i++) {
+        const r = WALL_PIECES[keys[i]];
+        boxes.push([tx + r[0], ty + r[1], r[2], r[3]]);
+      }
+    }
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      drawIsoShadowQuad(ctx, b[0] - 0.025, b[1] - 0.025, b[2] + 0.09, b[3] + 0.09, 0.15, 'rgba(10, 16, 22, 0.22)');
+    }
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      drawIsoShadowQuad(ctx, b[0] - 0.005, b[1] - 0.005, b[2] + 0.05, b[3] + 0.05, 0.15, 'rgba(6, 10, 16, 0.36)');
+    }
+  }
+
+  function drawGateContactShadow(ctx, tx, ty, mask, lv, isSil, zScale) {
+    if (isSil) return;
+    const alongY = Boolean((mask & 5) && !(mask & 10));
+    const boxes =
+      lv <= 1
+        ? !alongY
+          ? [
+              [tx + 0.02, ty + 0.34, 0.18, 0.32],
+              [tx + 0.80, ty + 0.34, 0.18, 0.32],
+              [tx + 0.20, ty + 0.44, 0.60, 0.12]
+            ]
+          : [
+              [tx + 0.34, ty + 0.02, 0.32, 0.18],
+              [tx + 0.34, ty + 0.80, 0.32, 0.18],
+              [tx + 0.44, ty + 0.20, 0.12, 0.60]
+            ]
+        : !alongY
+        ? [
+            [tx, ty + 0.30, 0.24, 0.40],
+            [tx + 0.76, ty + 0.30, 0.24, 0.40],
+            [tx + 0.24, ty + 0.44, 0.52, 0.12]
+          ]
+        : [
+            [tx + 0.30, ty, 0.40, 0.24],
+            [tx + 0.30, ty + 0.76, 0.40, 0.24],
+            [tx + 0.44, ty + 0.24, 0.12, 0.52]
+          ];
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      drawIsoShadowQuad(ctx, b[0] - 0.025, b[1] - 0.025, b[2] + 0.09, b[3] + 0.09, 0.15, 'rgba(10, 16, 22, 0.22)');
+    }
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      drawIsoShadowQuad(ctx, b[0] - 0.005, b[1] - 0.005, b[2] + 0.05, b[3] + 0.05, 0.15, 'rgba(6, 10, 16, 0.36)');
+    }
+  }
+
+  function drawHqContactShadow(ctx, tx, ty, lv, isSil, zScale) {
+    if (isSil) return;
+    if (lv <= 1) {
+      const Iso = ZS.Iso;
+      const outerC = Iso.gridToScreen(tx + 0.525, ty + 0.555, 0.45);
+      ctx.fillStyle = 'rgba(10, 16, 22, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(outerC.x, outerC.y, 28.5 * zScale, 14.2 * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const coreC = Iso.gridToScreen(tx + 0.535, ty + 0.565, 0.45);
+      ctx.fillStyle = 'rgba(6, 10, 16, 0.36)';
+      ctx.beginPath();
+      ctx.ellipse(coreC.x, coreC.y, 22.5 * zScale, 11.2 * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    const pad = lv === 2 ? 0.08 : lv === 3 ? 0.02 : 0.0;
+    drawIsoFootprintAO(ctx, tx + pad, ty + pad, 1.0 - pad * 2, 1.0 - pad * 2, 0.45, zScale);
+  }
+
   function drawStructGroundShadow(ctx, tx, ty, def, isSil, zScale) {
     if (!(def && def.passable) && !isSil) {
-      const sc = ZS.Iso.gridToScreen(tx + 0.52, ty + 0.55, 0.5);
-      ctx.fillStyle = 'rgba(10, 16, 22, 0.28)';
+      const Iso = ZS.Iso;
+      const outerC = Iso.gridToScreen(tx + 0.525, ty + 0.555, 0.45);
+      ctx.fillStyle = 'rgba(10, 16, 22, 0.22)';
       ctx.beginPath();
-      ctx.ellipse(sc.x, sc.y, 21 * zScale, 10.5 * zScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(outerC.x, outerC.y, 24.5 * zScale, 12.2 * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const coreC = Iso.gridToScreen(tx + 0.535, ty + 0.565, 0.45);
+      ctx.fillStyle = 'rgba(6, 10, 16, 0.36)';
+      ctx.beginPath();
+      ctx.ellipse(coreC.x, coreC.y, 17.8 * zScale, 8.9 * zScale, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -1557,7 +1708,7 @@ window.ZS = window.ZS || {};
         const hasMount = lv >= 2 && !!st.mounted;
         const wallTopZ = hasMount ? (lv >= 3 ? 29.0 : 18.6) : topZ;
         const stamp = ensureStructureStamp(`wall|${lv}|${mask}|${hasMount ? 1 : 0}|${tintBucket}`, wallTopZ, tintBucket, isSil, (sctx) => {
-          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawWallContactShadow(sctx, 0, 0, mask, lv, isSil, 1.0);
           drawConnectedWallTile(sctx, 0, 0, mask, lv, hasMount, P, steelCol, maxAccent, 1.0);
           if (hasMount) drawWallDeck(sctx, lv, 0, 0, 1.0);
         });
@@ -1574,7 +1725,7 @@ window.ZS = window.ZS || {};
         const alongY = Boolean((mask & 5) && !(mask & 10));
         const normMask = alongY ? 5 : 10;
         const stamp = ensureStructureStamp(`gate|${lv}|${alongY ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
-          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawGateContactShadow(sctx, 0, 0, normMask, lv, isSil, 1.0);
           drawTacticalGateTile(sctx, 0, 0, normMask, lv, P, steelCol, 1.0);
         });
         blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
@@ -1776,7 +1927,17 @@ window.ZS = window.ZS || {};
     }
 
     // Soft ground shadow (live fallback / HQ / animating / flashing / preview)
-    drawStructGroundShadow(ctx, tx, ty, def, isSil, zScale);
+    if (id === 'command_hq') {
+      drawHqContactShadow(ctx, tx, ty, Math.max(1, Math.min(4, st.level || state.hqLevel || 1)), isSil, zScale);
+    } else if (id === 'barricade_wall') {
+      const wMask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
+      drawWallContactShadow(ctx, tx, ty, wMask, lv, isSil, zScale);
+    } else if (id === 'tactical_gate') {
+      const gMask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
+      drawGateContactShadow(ctx, tx, ty, gMask, lv, isSil, zScale);
+    } else {
+      drawStructGroundShadow(ctx, tx, ty, def, isSil, zScale);
+    }
 
     // Build placement drop OR collapse drop + landing squash
     let hasBuildTransform = false;
@@ -2226,6 +2387,10 @@ window.ZS = window.ZS || {};
   Object.assign(R, {
     isWallConnectableCell,
     getWallConnectMask,
+    drawStructGroundShadow,
+    drawWallContactShadow,
+    drawGateContactShadow,
+    drawHqContactShadow,
     drawWireXFrame,
     drawWireHub,
     drawWireCoilSpan,
