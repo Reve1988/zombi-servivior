@@ -97,6 +97,14 @@ ZS.Iso = (function () {
     };
   }
 
+  function projectTo(gx, gy, zPx, out) {
+    const wx = (gx - gy) * (TILE_W * 0.5);
+    const wy = (gx + gy) * (TILE_H * 0.5) - (zPx || 0);
+    out.x = (wx - cam.x) * cam.zoom + viewW * 0.5;
+    out.y = (wy - cam.y) * cam.zoom + viewH * 0.5;
+    return out;
+  }
+
   function gridToScreen(gx, gy, zPx) {
     const wx = (gx - gy) * (TILE_W * 0.5);
     const wy = (gx + gy) * (TILE_H * 0.5) - (zPx || 0);
@@ -206,6 +214,14 @@ ZS.Iso = (function () {
     renderModifiers.tintStrength = 0;
   }
 
+  function getRenderModifiers() {
+    return {
+      flash: renderModifiers.flash,
+      tintColor: renderModifiers.tintColor,
+      tintStrength: renderModifiers.tintStrength
+    };
+  }
+
   function resolveFaceColor(rawColor, shadeFactor, isEmissive, boxFlash) {
     if (!rawColor) return null;
     if (window.ZS_SILHOUETTE_MODE) return '#151A20';
@@ -224,19 +240,31 @@ ZS.Iso = (function () {
     return col;
   }
 
+  const _vbBTop = { x: 0, y: 0 };
+  const _vbRTop = { x: 0, y: 0 };
+  const _vbFTop = { x: 0, y: 0 };
+  const _vbLTop = { x: 0, y: 0 };
+  const _vbRBot = { x: 0, y: 0 };
+  const _vbFBot = { x: 0, y: 0 };
+  const _vbLBot = { x: 0, y: 0 };
+  const _tp0 = { x: 0, y: 0 };
+  const _tp1 = { x: 0, y: 0 };
+  const _tp2 = { x: 0, y: 0 };
+  const _tp3 = { x: 0, y: 0 };
+
   // Draws an isometric 3D voxel prism at fractional grid coords.
   // Supports `{ base: '#RRGGBB', emissive, flash, stroke }` with automatic top-left light shading
   // (Top 100%, Left 82%, Right 66%), as well as explicit `{ top, left, right }` overrides.
   function drawVoxelBox(ctx, gx, gy, zBase, wTiles, dTiles, hPx, colors) {
     const zTop = zBase + hPx;
-    const bTop = gridToScreen(gx, gy, zTop);
-    const rTop = gridToScreen(gx + wTiles, gy, zTop);
-    const fTop = gridToScreen(gx + wTiles, gy + dTiles, zTop);
-    const lTop = gridToScreen(gx, gy + dTiles, zTop);
+    const bTop = projectTo(gx, gy, zTop, _vbBTop);
+    const rTop = projectTo(gx + wTiles, gy, zTop, _vbRTop);
+    const fTop = projectTo(gx + wTiles, gy + dTiles, zTop, _vbFTop);
+    const lTop = projectTo(gx, gy + dTiles, zTop, _vbLTop);
 
-    const rBot = gridToScreen(gx + wTiles, gy, zBase);
-    const fBot = gridToScreen(gx + wTiles, gy + dTiles, zBase);
-    const lBot = gridToScreen(gx, gy + dTiles, zBase);
+    const rBot = projectTo(gx + wTiles, gy, zBase, _vbRBot);
+    const fBot = projectTo(gx + wTiles, gy + dTiles, zBase, _vbFBot);
+    const lBot = projectTo(gx, gy + dTiles, zBase, _vbLBot);
 
     const c = colors || {};
     const isEmissive = !!c.emissive;
@@ -305,10 +333,11 @@ ZS.Iso = (function () {
   }
 
   function drawTilePoly(ctx, tx, ty, zPx, fillStyle, strokeStyle, lineWidth) {
-    const p0 = gridToScreen(tx, ty, zPx || 0);
-    const p1 = gridToScreen(tx + 1, ty, zPx || 0);
-    const p2 = gridToScreen(tx + 1, ty + 1, zPx || 0);
-    const p3 = gridToScreen(tx, ty + 1, zPx || 0);
+    const z = zPx || 0;
+    const p0 = projectTo(tx, ty, z, _tp0);
+    const p1 = projectTo(tx + 1, ty, z, _tp1);
+    const p2 = projectTo(tx + 1, ty + 1, z, _tp2);
+    const p3 = projectTo(tx, ty + 1, z, _tp3);
 
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
@@ -342,6 +371,7 @@ ZS.Iso = (function () {
     panByScreen,
     zoomAtScreen,
     gridToWorld,
+    projectTo,
     gridToScreen,
     screenToGrid,
     shadeHex,
@@ -351,6 +381,7 @@ ZS.Iso = (function () {
     setEntityFlash,
     setRenderModifiers,
     resetRenderModifiers,
+    getRenderModifiers,
     drawVoxelBox,
     drawTilePoly
   };

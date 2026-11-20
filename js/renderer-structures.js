@@ -2,6 +2,172 @@ window.ZS = window.ZS || {};
 
 (function () {
   const R = ZS._Renderer;
+  const STAMP_SCALE = 2.0;
+  const STAMP_CACHE_MAX = 512;
+  const structStampCache = new Map();
+  const _stampOrigin = { x: 0, y: 0 };
+  R.structStampCache = structStampCache;
+
+  function getTintBucket(state, isSil) {
+    if (isSil) return 'sil';
+    if (!state || state.nightAlpha <= 0.02) return 0;
+    return Math.round(state.nightAlpha * 4);
+  }
+
+  function isNodeAnimatingOrFlashing(node) {
+    return !!(
+      node &&
+      (node.isPreview ||
+        (node.hitFlash || 0) > 0.001 ||
+        (node.buildAnimTimer || 0) > 0 ||
+        (node.upgradeAnimTimer || 0) > 0 ||
+        (node.fallAnimTimer || 0) > 0)
+    );
+  }
+
+  function ensureStructureStamp(key, topZ, tintBucket, isSil, bakeFn) {
+    const hit = structStampCache.get(key);
+    if (hit) {
+      structStampCache.delete(key);
+      structStampCache.set(key, hit);
+      R.stampCacheHits += 1;
+      return hit;
+    }
+
+    const logicalW = 88;
+    const anchorX = 44;
+    const anchorY = Math.max(44, Math.ceil((topZ || 24) + 22));
+    const logicalH = anchorY + 42;
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(logicalW * STAMP_SCALE);
+    cv.height = Math.round(logicalH * STAMP_SCALE);
+    const sctx = cv.getContext('2d');
+
+    const Iso = ZS.Iso;
+    const prevVp = Iso.getViewport();
+    const prevMinZoom = Iso.cam.minZoom;
+    const prevCamX = Iso.cam.x;
+    const prevCamY = Iso.cam.y;
+    const prevZoom = Iso.cam.zoom;
+    const prevMods = Iso.getRenderModifiers();
+    const prevEmis = R.emissiveList;
+    const stampEmis = isSil ? null : [];
+    let bakedEmissives = null;
+
+    try {
+      Iso.setViewport(logicalW, logicalH);
+      Iso.cam.zoom = 1.0;
+      Iso.cam.x = logicalW * 0.5 - anchorX;
+      Iso.cam.y = logicalH * 0.5 - anchorY;
+
+      sctx.setTransform(STAMP_SCALE, 0, 0, STAMP_SCALE, 0, 0);
+      sctx.clearRect(0, 0, logicalW, logicalH);
+
+      if (tintBucket === 'sil' || isSil) {
+        Iso.resetRenderModifiers();
+      } else if (tintBucket === 0) {
+        Iso.setSceneTint('#FFE8BA', 0.055);
+        Iso.setEntityFlash(0);
+      } else {
+        Iso.setSceneTint('#6F9CE8', 0.085 * (tintBucket / 4));
+        Iso.setEntityFlash(0);
+      }
+
+      R.emissiveList = stampEmis;
+      bakeFn(sctx);
+
+      if (stampEmis && stampEmis.length > 0) {
+        bakedEmissives = new Array(stampEmis.length);
+        for (let i = 0; i < stampEmis.length; i++) {
+          const e = stampEmis[i];
+          if (e.kind === 'dot') {
+            bakedEmissives[i] = {
+              kind: 'dot',
+              dx: e.p.x - anchorX,
+              dy: e.p.y - anchorY,
+              r: e.r,
+              hex: e.hex,
+              fill: e.fill
+            };
+          } else {
+            const offs = new Array(e.pts.length);
+            for (let k = 0; k < e.pts.length; k++) {
+              offs[k] = {
+                dx: e.pts[k].x - anchorX,
+                dy: e.pts[k].y - anchorY
+              };
+            }
+            bakedEmissives[i] = {
+              kind: 'poly',
+              offsets: offs,
+              hex: e.hex,
+              fill: e.fill
+            };
+          }
+        }
+      }
+    } finally {
+      Iso.setViewport(prevVp.w, prevVp.h);
+      Iso.cam.minZoom = prevMinZoom;
+      Iso.cam.x = prevCamX;
+      Iso.cam.y = prevCamY;
+      Iso.cam.zoom = prevZoom;
+      Iso.setRenderModifiers(prevMods);
+      R.emissiveList = prevEmis;
+    }
+
+    const stamp = {
+      canvas: cv,
+      logicalW,
+      logicalH,
+      anchorX,
+      anchorY,
+      emissives: bakedEmissives
+    };
+    if (structStampCache.size >= STAMP_CACHE_MAX) {
+      const oldestKey = structStampCache.keys().next().value;
+      if (oldestKey !== undefined) structStampCache.delete(oldestKey);
+    }
+    structStampCache.set(key, stamp);
+    R.stampCacheBakes += 1;
+    return stamp;
+  }
+
+  function blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil) {
+    const origin = ZS.Iso.projectTo(tx, ty, 0, _stampOrigin);
+    ctx.drawImage(
+      stamp.canvas,
+      origin.x - stamp.anchorX * zScale,
+      origin.y - stamp.anchorY * zScale,
+      stamp.logicalW * zScale,
+      stamp.logicalH * zScale
+    );
+    if (R.emissiveList && !isSil && stamp.emissives) {
+      const ems = stamp.emissives;
+      for (let i = 0; i < ems.length; i++) {
+        const e = ems[i];
+        if (e.kind === 'dot') {
+          R.emissiveList.push({
+            kind: 'dot',
+            p: { x: origin.x + e.dx * zScale, y: origin.y + e.dy * zScale },
+            r: e.r,
+            hex: e.hex,
+            fill: e.fill
+          });
+        } else {
+          const offs = e.offsets;
+          const pts = new Array(offs.length);
+          for (let k = 0; k < offs.length; k++) {
+            pts[k] = {
+              x: origin.x + offs[k].dx * zScale,
+              y: origin.y + offs[k].dy * zScale
+            };
+          }
+          R.emissiveList.push({ kind: 'poly', pts, fill: e.fill, hex: e.hex });
+        }
+      }
+    }
+  }
 
   const WALL_PIECES = {
     post: [0.30, 0.30, 0.40, 0.40],
@@ -459,6 +625,76 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function drawMountedBunkerBack(ctx, tx, ty, baseZ, lv, zScale) {
+    const rh = lv >= 3 ? 5.5 : 4;
+    R.drawSandbagRing(ctx, tx + 0.5, ty + 0.5, baseZ, 0.22, rh, 'back', zScale);
+  }
+
+  function drawMountedBunkerFront(ctx, tx, ty, baseZ, lv, steelCol, zScale) {
+    const rh = lv >= 3 ? 5.5 : 4;
+    R.drawSandbagRing(ctx, tx + 0.5, ty + 0.5, baseZ, 0.22, rh, 'front', zScale);
+    if (lv >= 2) {
+      R.drawCyl(ctx, tx + 0.5, ty + 0.5, baseZ + (lv >= 3 ? 4.3 : 2.8), 0.224, 1.2, steelCol, { noTop: true, n: 16 }, zScale);
+    }
+  }
+
+  function drawMountedShotgunFront(ctx, tx, ty, baseZ, lv, steelCol, maxAccent, zScale) {
+    R.drawIsoBox(ctx, tx + 0.30, ty + 0.68, baseZ, 0.40, 0.05, 11, '#3A4654', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.297, ty + 0.677, baseZ + 7, 0.406, 0.056, 1.8, lv >= 3 ? maxAccent : '#EBA834', { noTop: true }, zScale);
+    if (lv >= 2) {
+      R.drawIsoBox(ctx, tx + 0.297, ty + 0.677, baseZ + 3.0, 0.406, 0.056, 1.6, steelCol, { noTop: true }, zScale);
+    }
+    R.drawIsoBox(ctx, tx + 0.44, ty + 0.677, baseZ + 9, 0.12, 0.056, 1.1, '#1B2430', { noTop: true }, zScale);
+  }
+
+  function drawMountedVulcanStatic(ctx, tx, ty, baseZ, lv, isUnpowered, steelCol, zScale) {
+    const cx = tx + 0.5;
+    const cy = ty + 0.5;
+    R.drawCyl(ctx, cx, cy, baseZ, 0.20, 3, '#4E5A68', { n: 16 }, zScale);
+    R.drawPowerStripCyl(ctx, cx, cy, baseZ + 1.8, 0.204, isUnpowered, zScale);
+    let domeZ = baseZ + 3;
+    if (lv >= 2) {
+      R.drawCyl(ctx, cx, cy, domeZ, 0.18, 1.4, steelCol, { n: 16 }, zScale);
+      domeZ += 1.4;
+    }
+    R.drawDome(ctx, cx, cy, domeZ, 0.17, 9, isUnpowered ? '#8B949E' : '#E8EEF4', { n: 16 }, zScale);
+  }
+
+  function drawMountedVulcanBarrels(ctx, cx, cy, baseZ, lv, isUnpowered, aim, P, zScale) {
+    const Iso = ZS.Iso;
+    const domeZ = baseZ + (lv >= 2 ? 4.4 : 3);
+    const px = -Math.sin(aim);
+    const py = Math.cos(aim);
+    const len = lv >= 3 ? 0.46 : 0.40;
+    for (let k = -1; k <= 1; k++) {
+      const ox = cx + px * 0.028 * k;
+      const oy = cy + py * 0.028 * k;
+      R.drawIsoLine(
+        ctx,
+        Iso.gridToScreen(ox, oy, domeZ + 4),
+        Iso.gridToScreen(ox + Math.cos(aim) * len, oy + Math.sin(aim) * len, domeZ + 4),
+        '#2B333D',
+        1.6,
+        true,
+        zScale
+      );
+    }
+    if (lv >= 3) {
+      const mid = Iso.gridToScreen(cx + Math.cos(aim) * 0.25, cy + Math.sin(aim) * 0.25, domeZ + 4);
+      R.drawIsoDot(ctx, mid, 2.0, isUnpowered ? P.powerDim : P.power, !isUnpowered, zScale);
+    }
+  }
+
+  function drawMountedFloodlight(ctx, tx, ty, baseZ, lv, isUnpowered, steelCol, zScale) {
+    const cx = tx + 0.5;
+    const cy = ty + 0.5;
+    R.drawCyl(ctx, cx, cy, baseZ, 0.11, 2, '#59636E', { n: 12 }, zScale);
+    R.drawPowerStripCyl(ctx, cx, cy, baseZ + 0.6, 0.114, isUnpowered, zScale);
+    R.drawIsoBox(ctx, cx - 0.025, cy - 0.025, baseZ + 2, 0.05, 0.05, 9, lv >= 2 ? steelCol : '#8A99A8', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.34, ty + 0.40, baseZ + 11, 0.32, 0.20, 5, '#59636E', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.36, ty + 0.595, baseZ + 12, 0.28, 0.012, 3.2, isUnpowered ? '#4B5563' : '#FFF6DA', { emissive: !isUnpowered }, zScale);
+  }
+
   function drawMountedUnit(ctx, unit, tx, ty, baseZ, state, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
@@ -470,6 +706,48 @@ window.ZS = window.ZS || {};
     const aim = unit.aimAngle != null ? unit.aimAngle : 0.8;
     const cx = tx + 0.5;
     const cy = ty + 0.5;
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
+
+    if (!isNodeAnimatingOrFlashing(unit)) {
+      const tintBucket = getTintBucket(state, isSil);
+      const mountTopZ = baseZ + getMountedVisualTopZ(unit.id);
+      if (unit.id === 'rifle_bunker') {
+        const bStamp = ensureStructureStamp(`m|bunker_b|${lv}|${baseZ}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
+          drawMountedBunkerBack(sctx, 0, 0, baseZ, lv, 1.0);
+        });
+        blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
+        drawOperatorFigure(ctx, cx, cy, baseZ + 0.4, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        const fStamp = ensureStructureStamp(`m|bunker_f|${lv}|${baseZ}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
+          drawMountedBunkerFront(sctx, 0, 0, baseZ, lv, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, fStamp, tx, ty, zScale, isSil);
+        return;
+      }
+      if (unit.id === 'shotgun_post') {
+        drawOperatorFigure(ctx, cx, cy - 0.04, baseZ + 0.3, '#3A4654', '#2F3945', aim, zScale, false, false);
+        const fStamp = ensureStructureStamp(`m|shotgun_f|${lv}|${baseZ}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
+          drawMountedShotgunFront(sctx, 0, 0, baseZ, lv, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, fStamp, tx, ty, zScale, isSil);
+        return;
+      }
+      if (unit.id === 'vulcan_turret') {
+        const vStamp = ensureStructureStamp(`m|vulcan|${lv}|${baseZ}|${isUnpowered ? 1 : 0}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
+          drawMountedVulcanStatic(sctx, 0, 0, baseZ, lv, isUnpowered, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, vStamp, tx, ty, zScale, isSil);
+        drawMountedVulcanBarrels(ctx, cx, cy, baseZ, lv, isUnpowered, aim, P, zScale);
+        return;
+      }
+      if (unit.id === 'led_floodlight') {
+        const flLv = lv >= 2 ? 2 : 1;
+        const lStamp = ensureStructureStamp(`m|flood|${flLv}|${baseZ}|${isUnpowered ? 1 : 0}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
+          drawMountedFloodlight(sctx, 0, 0, baseZ, flLv, isUnpowered, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, lStamp, tx, ty, zScale, isSil);
+        return;
+      }
+    }
 
     let hasMountAnim = false;
     let prevEmissives = R.emissiveList;
@@ -502,65 +780,26 @@ window.ZS = window.ZS || {};
 
     switch (unit.id) {
       case 'rifle_bunker': {
-        const rh = lv >= 3 ? 5.5 : 4;
-        R.drawSandbagRing(ctx, cx, cy, baseZ, 0.22, rh, 'back', zScale);
+        drawMountedBunkerBack(ctx, tx, ty, baseZ, lv, zScale);
         drawOperatorFigure(ctx, cx, cy, baseZ + 0.4, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
-        R.drawSandbagRing(ctx, cx, cy, baseZ, 0.22, rh, 'front', zScale);
-        if (lv >= 2) {
-          R.drawCyl(ctx, cx, cy, baseZ + (lv >= 3 ? 4.3 : 2.8), 0.224, 1.2, steelCol, { noTop: true, n: 16 }, zScale);
-        }
+        drawMountedBunkerFront(ctx, tx, ty, baseZ, lv, steelCol, zScale);
         break;
       }
 
       case 'shotgun_post': {
         drawOperatorFigure(ctx, cx, cy - 0.04, baseZ + 0.3, '#3A4654', '#2F3945', aim, zScale, false, false);
-        R.drawIsoBox(ctx, tx + 0.30, ty + 0.68, baseZ, 0.40, 0.05, 11, '#3A4654', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.297, ty + 0.677, baseZ + 7, 0.406, 0.056, 1.8, lv >= 3 ? maxAccent : '#EBA834', { noTop: true }, zScale);
-        if (lv >= 2) {
-          R.drawIsoBox(ctx, tx + 0.297, ty + 0.677, baseZ + 3.0, 0.406, 0.056, 1.6, steelCol, { noTop: true }, zScale);
-        }
-        R.drawIsoBox(ctx, tx + 0.44, ty + 0.677, baseZ + 9, 0.12, 0.056, 1.1, '#1B2430', { noTop: true }, zScale);
+        drawMountedShotgunFront(ctx, tx, ty, baseZ, lv, steelCol, maxAccent, zScale);
         break;
       }
 
       case 'vulcan_turret': {
-        R.drawCyl(ctx, cx, cy, baseZ, 0.20, 3, '#4E5A68', { n: 16 }, zScale);
-        R.drawPowerStripCyl(ctx, cx, cy, baseZ + 1.8, 0.204, isUnpowered, zScale);
-        let domeZ = baseZ + 3;
-        if (lv >= 2) {
-          R.drawCyl(ctx, cx, cy, domeZ, 0.18, 1.4, steelCol, { n: 16 }, zScale);
-          domeZ += 1.4;
-        }
-        R.drawDome(ctx, cx, cy, domeZ, 0.17, 9, isUnpowered ? '#8B949E' : '#E8EEF4', { n: 16 }, zScale);
-        const px = -Math.sin(aim);
-        const py = Math.cos(aim);
-        const len = lv >= 3 ? 0.46 : 0.40;
-        for (let k = -1; k <= 1; k++) {
-          const ox = cx + px * 0.028 * k;
-          const oy = cy + py * 0.028 * k;
-          R.drawIsoLine(
-            ctx,
-            Iso.gridToScreen(ox, oy, domeZ + 4),
-            Iso.gridToScreen(ox + Math.cos(aim) * len, oy + Math.sin(aim) * len, domeZ + 4),
-            '#2B333D',
-            1.6,
-            true,
-            zScale
-          );
-        }
-        if (lv >= 3) {
-          const mid = Iso.gridToScreen(cx + Math.cos(aim) * 0.25, cy + Math.sin(aim) * 0.25, domeZ + 4);
-          R.drawIsoDot(ctx, mid, 2.0, isUnpowered ? P.powerDim : P.power, !isUnpowered, zScale);
-        }
+        drawMountedVulcanStatic(ctx, tx, ty, baseZ, lv, isUnpowered, steelCol, zScale);
+        drawMountedVulcanBarrels(ctx, cx, cy, baseZ, lv, isUnpowered, aim, P, zScale);
         break;
       }
 
       case 'led_floodlight': {
-        R.drawCyl(ctx, cx, cy, baseZ, 0.11, 2, '#59636E', { n: 12 }, zScale);
-        R.drawPowerStripCyl(ctx, cx, cy, baseZ + 0.6, 0.114, isUnpowered, zScale);
-        R.drawIsoBox(ctx, cx - 0.025, cy - 0.025, baseZ + 2, 0.05, 0.05, 9, lv >= 2 ? steelCol : '#8A99A8', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.34, ty + 0.40, baseZ + 11, 0.32, 0.20, 5, '#59636E', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.36, ty + 0.595, baseZ + 12, 0.28, 0.012, 3.2, isUnpowered ? '#4B5563' : '#FFF6DA', { emissive: !isUnpowered }, zScale);
+        drawMountedFloodlight(ctx, tx, ty, baseZ, lv, isUnpowered, steelCol, zScale);
         break;
       }
     }
@@ -652,9 +891,61 @@ window.ZS = window.ZS || {};
     return rec.releaseThrust;
   }
 
-  function drawRazorPadTile(ctx, st, tx, ty, lv, P, state, timeSec, zScale) {
+  function drawRazorPadT3Static(ctx, tx, ty, P, zScale) {
     const Iso = ZS.Iso;
-    const thrust = getTrapThrustAmount(st, tx, ty, state, timeSec);
+    const copper = P.piezoCopper || '#B87333';
+    const arcA = P.piezoArc || '#FF8A3D';
+    R.drawFrustum(ctx, tx + 0.04, ty + 0.04, 0.4, 0.92, 0.92, 1.5, 0.025, '#343C46', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.045, ty + 0.045, 0.75, 0.91, 0.91, 0.85, copper, { noTop: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.9, 0.85, 0.85, 0.50, copper, null, zScale);
+    R.drawIsoBox(ctx, tx + 0.135, ty + 0.135, 2.4, 0.73, 0.73, 0.25, '#1D232C', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.18, ty + 0.475, 2.65, 0.64, 0.05, 0.22, copper, { edge: false }, zScale);
+    R.drawIsoBox(ctx, tx + 0.475, ty + 0.18, 2.65, 0.05, 0.64, 0.22, copper, { edge: false }, zScale);
+
+    const drawCornerElectrode = (ex, ey) => {
+      R.drawIsoBox(ctx, tx + ex - 0.045, ty + ey - 0.045, 2.4, 0.09, 0.09, 1.5, copper, null, zScale);
+      R.drawIsoBox(ctx, tx + ex - 0.048, ty + ey - 0.048, 3.4, 0.096, 0.096, 0.5, '#A84232', { noTop: true }, zScale);
+      R.drawIsoBox(ctx, tx + ex - 0.032, ty + ey - 0.032, 3.9, 0.064, 0.064, 0.8, arcA, { emissive: true }, zScale);
+    };
+    drawCornerElectrode(0.145, 0.145);
+    drawCornerElectrode(0.855, 0.145);
+    drawCornerElectrode(0.145, 0.855);
+
+    const tPos = [0.29, 0.50, 0.71];
+    for (let j = 0; j < tPos.length; j++) {
+      for (let i = 0; i < tPos.length; i++) {
+        const sx = tx + tPos[i];
+        const sy = ty + tPos[j];
+        const isCenter = i === 1 && j === 1;
+        const rBase = isCenter ? 0.102 : 0.078;
+        const hSpike = isCenter ? 3.25 : 2.60;
+        R.drawFrustum(ctx, sx - rBase * 0.88, sy - rBase * 0.88, 2.65, rBase * 1.76, rBase * 1.76, 0.75, 0.015, copper, null, zScale);
+        R.drawPyramidSpike(ctx, sx, sy, 3.20, rBase, rBase, hSpike, isCenter ? '#EEF4FA' : '#D5DFE9', null, zScale);
+        if (isCenter) {
+          R.drawIsoDot(ctx, Iso.gridToScreen(sx, sy, 3.20 + hSpike), 1.3, arcA, true, zScale);
+        }
+      }
+    }
+    drawCornerElectrode(0.855, 0.855);
+  }
+
+  function drawRazorPadT3Arcs(ctx, st, tx, ty, P, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const arcA = P.piezoArc || '#FF8A3D';
+    const arcB = P.piezoSpark || '#FFD08A';
+    const jA = st.isPreview ? 1.8 : 1.5 + 0.8 * Math.sin(timeSec * 19 + tx * 2.1 + ty);
+    const jB = st.isPreview ? -1.8 : -1.5 + 0.8 * Math.cos(timeSec * 23 + tx + ty * 1.7);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.15, 4.3), Iso.gridToScreen(tx + 0.85, ty + 0.15, 4.3), jA * 0.65, arcA, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.15, 4.3), Iso.gridToScreen(tx + 0.15, ty + 0.85, 4.3), jB * 0.65, arcA, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.18, 3.35), Iso.gridToScreen(tx + 0.82, ty + 0.82, 3.35), jA * 0.55, arcB, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.82, ty + 0.18, 3.35), Iso.gridToScreen(tx + 0.18, ty + 0.82, 3.35), jB * 0.55, arcA, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.85, ty + 0.15, 4.3), Iso.gridToScreen(tx + 0.85, ty + 0.85, 4.3), jA * 0.65, arcB, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.85, 4.3), Iso.gridToScreen(tx + 0.85, ty + 0.85, 4.3), jB * 0.65, arcB, true, zScale);
+  }
+
+  function drawRazorPadTile(ctx, st, tx, ty, lv, P, state, timeSec, zScale, preThrust) {
+    const Iso = ZS.Iso;
+    const thrust = preThrust !== undefined ? preThrust : getTrapThrustAmount(st, tx, ty, state, timeSec);
 
     if (lv <= 1) {
       // T1: Beveled riveted steel hatch base plate + 3x3 sharp 3D pyramid steel spikes
@@ -785,6 +1076,582 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function drawStructGroundShadow(ctx, tx, ty, def, isSil, zScale) {
+    if (!(def && def.passable) && !isSil) {
+      const sc = ZS.Iso.gridToScreen(tx + 0.52, ty + 0.55, 0.5);
+      ctx.fillStyle = 'rgba(10, 16, 22, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(sc.x, sc.y, 21 * zScale, 10.5 * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawRifleBunkerBack(ctx, tx, ty, lv, zScale) {
+    const rh = lv >= 3 ? 10 : 7;
+    R.drawSandbagRing(ctx, tx + 0.5, ty + 0.5, 0.5, 0.40, rh, 'back', zScale);
+  }
+
+  function drawRifleBunkerFront(ctx, tx, ty, lv, steelCol, zScale) {
+    const rh = lv >= 3 ? 10 : 7;
+    R.drawSandbagRing(ctx, tx + 0.5, ty + 0.5, 0.5, 0.40, rh, 'front', zScale);
+    if (lv >= 2) {
+      R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5 + rh - 1.6, 0.406, 1.6, steelCol, { noTop: true, n: 16 }, zScale);
+    }
+  }
+
+  function drawShotgunPostBack(ctx, tx, ty, zScale) {
+    R.drawSandbagRing(ctx, tx + 0.5, ty + 0.44, 0.5, 0.34, 6, 'back', zScale);
+  }
+
+  function drawShotgunPostFront(ctx, tx, ty, lv, steelCol, maxAccent, zScale) {
+    R.drawSandbagRing(ctx, tx + 0.5, ty + 0.44, 0.5, 0.34, 6, 'front', zScale);
+    R.drawIsoBox(ctx, tx + 0.16, ty + 0.80, 0.5, 0.68, 0.07, 17, '#3A4654', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.155, ty + 0.795, 11.5, 0.69, 0.08, 2.2, lv >= 3 ? maxAccent : '#EBA834', { noTop: true }, zScale);
+    if (lv >= 2) {
+      R.drawIsoBox(ctx, tx + 0.155, ty + 0.795, 4.5, 0.69, 0.08, 2.0, steelCol, { noTop: true }, zScale);
+    }
+    R.drawIsoBox(ctx, tx + 0.42, ty + 0.795, 14.1, 0.16, 0.08, 1.4, '#1B2430', { noTop: true }, zScale);
+  }
+
+  function drawSniperTowerBack(ctx, tx, ty, lv, steelCol, zScale) {
+    const Iso = ZS.Iso;
+    const legs = [
+      [0.14, 0.14],
+      [0.76, 0.14],
+      [0.14, 0.76],
+      [0.76, 0.76]
+    ];
+    for (let i = 0; i < legs.length; i++) {
+      R.drawIsoBox(ctx, tx + legs[i][0], ty + legs[i][1], 0.5, 0.08, 0.08, 24, '#7C8B99', null, zScale);
+    }
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.84, 2.5), Iso.gridToScreen(tx + 0.80, ty + 0.84, 21.5), '#5B6875', 1.15, false, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.84, 21.5), Iso.gridToScreen(tx + 0.80, ty + 0.84, 2.5), '#5B6875', 1.15, false, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.84, ty + 0.18, 2.5), Iso.gridToScreen(tx + 0.84, ty + 0.80, 21.5), '#5B6875', 1.15, false, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.84, ty + 0.18, 21.5), Iso.gridToScreen(tx + 0.84, ty + 0.80, 2.5), '#5B6875', 1.15, false, zScale);
+    R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 24.5, 0.84, 0.84, 3, lv >= 2 ? steelCol : '#6C7B8B', null, zScale);
+    const backPosts = [
+      [0.10, 0.10],
+      [0.86, 0.10],
+      [0.10, 0.86]
+    ];
+    for (let i = 0; i < backPosts.length; i++) {
+      R.drawIsoBox(ctx, tx + backPosts[i][0], ty + backPosts[i][1], 27.5, 0.04, 0.04, 18, '#5B6875', null, zScale);
+    }
+  }
+
+  function drawSniperTowerFront(ctx, tx, ty, lv, maxAccent, zScale) {
+    const Iso = ZS.Iso;
+    R.drawIsoBox(ctx, tx + 0.86, ty + 0.86, 27.5, 0.04, 0.04, 18, '#5B6875', null, zScale);
+    R.drawHipRoof(ctx, tx + 0.04, ty + 0.04, 45.5, 0.92, 0.92, 7, '#4F5D4B', zScale);
+    if (lv >= 3) {
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.5, ty + 0.5, 53.0), 2.3, maxAccent, true, zScale);
+    }
+  }
+
+  function drawVulcanStatic(ctx, tx, ty, lv, isUnpowered, steelCol, zScale) {
+    R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.36, 7, '#4E5A68', { n: 16 }, zScale);
+    R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 5.9, 0.366, isUnpowered, zScale);
+    let z0 = 7.5;
+    if (lv >= 2) {
+      R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.32, 2.6, steelCol, { n: 16 }, zScale);
+      z0 = 10.1;
+    }
+    R.drawDome(ctx, tx + 0.5, ty + 0.5, z0, 0.26, 13, isUnpowered ? '#8B949E' : '#E8EEF4', { n: 16 }, zScale);
+  }
+
+  function drawVulcanBarrels(ctx, tx, ty, lv, isUnpowered, aim, P, zScale) {
+    const Iso = ZS.Iso;
+    const z0 = lv >= 2 ? 10.1 : 7.5;
+    const len = lv >= 3 ? 0.62 : 0.50;
+    const px = -Math.sin(aim);
+    const py = Math.cos(aim);
+    for (let k = -1; k <= 1; k++) {
+      const ox = tx + 0.5 + px * 0.035 * k;
+      const oy = ty + 0.5 + py * 0.035 * k;
+      R.drawIsoLine(
+        ctx,
+        Iso.gridToScreen(ox, oy, z0 + 5),
+        Iso.gridToScreen(ox + Math.cos(aim) * len, oy + Math.sin(aim) * len, z0 + 5),
+        '#2B333D',
+        1.9,
+        true,
+        zScale
+      );
+    }
+    if (lv >= 3) {
+      const mid = Iso.gridToScreen(tx + 0.5 + Math.cos(aim) * 0.36, ty + 0.5 + Math.sin(aim) * 0.36, z0 + 5);
+      R.drawIsoDot(ctx, mid, 2.5, isUnpowered ? P.powerDim : P.power, !isUnpowered, zScale);
+    }
+  }
+
+  function drawEmpCoilStatic(ctx, tx, ty, lv, isUnpowered, steelCol, maxAccent, zScale) {
+    R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.32, 6, '#3E4A59', { n: 16 }, zScale);
+    R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 4.9, 0.326, isUnpowered, zScale);
+    if (lv >= 2) {
+      R.drawCyl(ctx, tx + 0.5, ty + 0.5, 6.5, 0.25, 1.8, steelCol, { n: 14 }, zScale);
+    }
+    R.drawCyl(ctx, tx + 0.5, ty + 0.5, 6.5, 0.09, 20, '#60748A', { n: 10 }, zScale);
+    const coilZs = lv >= 3 ? [9.5, 13.5, 17.5, 21.5] : [10.5, 15.5, 20.5];
+    for (let r = 0; r < coilZs.length; r++) {
+      R.drawCyl(
+        ctx,
+        tx + 0.5,
+        ty + 0.5,
+        coilZs[r],
+        0.19,
+        2.0,
+        lv >= 3 && r === coilZs.length - 1 ? maxAccent : '#B87333',
+        { n: 14 },
+        zScale
+      );
+    }
+  }
+
+  function drawEmpCoilOrb(ctx, tx, ty, isUnpowered, P, timeSec, zScale) {
+    const pulse = isUnpowered ? 0.85 : 0.94 + 0.10 * Math.sin(timeSec * 7);
+    R.drawBlob(ctx, tx + 0.5, ty + 0.5, 25.5, 0.14 * pulse, 9, isUnpowered ? P.powerDim : P.power, { emissive: !isUnpowered, n: 14 }, zScale);
+  }
+
+  function drawWindTurbineStatic(ctx, tx, ty, lv, P, zScale) {
+    const Iso = ZS.Iso;
+    if (lv <= 1) {
+      R.drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 3.0, '#647280', null, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 3.5, 0.13, 2.0, P.power, { n: 12, emissive: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 5.5, 0.042, 22.0, '#DCE5EE', { n: 10 }, zScale);
+    } else if (lv === 2) {
+      R.drawIsoBox(ctx, tx + 0.34, ty + 0.34, 0.5, 0.32, 0.32, 3.5, '#6C7B8A', null, zScale);
+      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 3.8, 0.125, false, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.0, 0.048, 31.0, '#E4ECF4', { n: 10 }, zScale);
+      R.drawIsoBox(ctx, tx + 0.44, ty + 0.38, 35.0, 0.12, 0.24, 3.8, '#C7D2DD', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.48, ty + 0.18, 35.6, 0.04, 0.20, 4.4, '#7B8FA2', null, zScale);
+    } else if (lv === 3) {
+      R.drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 4.0, '#758594', null, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.5, 0.058, 42.0, '#EEF3F8', { n: 10 }, zScale);
+      R.drawIsoBox(ctx, tx + 0.42, ty + 0.36, 46.5, 0.16, 0.28, 5.0, '#D0DBE6', null, zScale);
+    } else {
+      R.drawFrustum(ctx, tx + 0.30, ty + 0.30, 0.5, 0.40, 0.40, 6.5, 0.08, '#5E6E7E', null, zScale);
+      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 5.4, 0.145, false, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.066, 47.0, '#EEF3F8', { n: 12 }, zScale);
+      R.drawIsoBox(ctx, tx + 0.40, ty + 0.28, 54.0, 0.20, 0.38, 5.6, '#DCE5EE', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.395, ty + 0.275, 56.0, 0.21, 0.39, 1.3, P.power, { noTop: true, emissive: true }, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.46, 61.0), 1.9, P.power, true, zScale);
+    }
+  }
+
+  function drawWindTurbineRotors(ctx, tx, ty, lv, bladeAngle, P, zScale) {
+    const Iso = ZS.Iso;
+    if (lv <= 1) {
+      const rx = 0.21 * Math.cos(bladeAngle);
+      const ry = 0.21 * Math.sin(bladeAngle);
+      const bx1 = tx + 0.50 + rx;
+      const by1 = ty + 0.50 + ry;
+      const bx2 = tx + 0.50 - rx;
+      const by2 = ty + 0.50 - ry;
+      R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 14.0), Iso.gridToScreen(bx1, by1, 14.0), '#9AA8B6', 1.7, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 24.5), Iso.gridToScreen(bx1, by1, 24.5), '#9AA8B6', 1.7, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(bx1, by1, 12.2), Iso.gridToScreen(bx1, by1, 26.5), '#F5F9FC', 2.8, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 12.2), Iso.gridToScreen(bx2, by2, 26.5), '#F5F9FC', 2.8, true, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, 28.0), 2.2, '#C7D2DD', false, zScale);
+    } else if (lv === 2) {
+      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.64, 37.0);
+      for (let b = 0; b < 3; b++) {
+        const a = bladeAngle + (b * Math.PI * 2) / 3;
+        R.drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 15.5 * zScale, y: hub.y + Math.sin(a) * 15.5 * zScale }, '#F5F9FC', 2.2, true, zScale);
+      }
+      R.drawIsoDot(ctx, hub, 2.4, '#C7D2DD', false, zScale);
+    } else if (lv === 3) {
+      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.66, 49.0);
+      for (let b = 0; b < 3; b++) {
+        const a = bladeAngle + (b * Math.PI * 2) / 3;
+        R.drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 23.0 * zScale, y: hub.y + Math.sin(a) * 23.0 * zScale }, '#F5F9FC', 2.7, true, zScale);
+      }
+      R.drawIsoDot(ctx, hub, 3.0, '#C7D2DD', false, zScale);
+    } else {
+      const hubB = Iso.gridToScreen(tx + 0.50, ty + 0.26, 56.8);
+      for (let b = 0; b < 3; b++) {
+        const a = -bladeAngle + 0.52 + (b * Math.PI * 2) / 3;
+        R.drawIsoLine(ctx, hubB, { x: hubB.x + Math.cos(a) * 13.5 * zScale, y: hubB.y + Math.sin(a) * 13.5 * zScale }, '#CBD7E3', 2.1, true, zScale);
+      }
+      const hubF = Iso.gridToScreen(tx + 0.50, ty + 0.68, 56.8);
+      for (let b = 0; b < 3; b++) {
+        const a = bladeAngle + (b * Math.PI * 2) / 3;
+        const tip = { x: hubF.x + Math.cos(a) * 26.0 * zScale, y: hubF.y + Math.sin(a) * 26.0 * zScale };
+        R.drawIsoLine(ctx, hubF, tip, '#F5F9FC', 2.9, true, zScale);
+        R.drawIsoDot(ctx, tip, 1.5, P.power, true, zScale);
+      }
+      R.drawIsoDot(ctx, hubF, 3.2, '#B6C3D0', false, zScale);
+    }
+  }
+
+  function drawRepairBayLv2Static(ctx, tx, ty, zScale) {
+    R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 3, '#475361', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.07, ty + 0.07, 0.5, 0.86, 0.86, 1.2, '#F0A93A', { noTop: true }, zScale);
+    R.drawCyl(ctx, tx + 0.32, ty + 0.32, 3.5, 0.11, 5, '#5D6B7A', { n: 12 }, zScale);
+  }
+
+  function drawRepairBayLv2Arm(ctx, st, tx, ty, healCol, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const sway = st.isPreview ? 0 : Math.sin(timeSec * 3.2) * 0.8;
+    const a = Iso.gridToScreen(tx + 0.32, ty + 0.32, 8.5);
+    const b = Iso.gridToScreen(tx + 0.46, ty + 0.42, 22.5);
+    const c = Iso.gridToScreen(tx + 0.66, ty + 0.62, 15.5 + sway);
+    R.drawIsoLine(ctx, a, b, '#F0A93A', 3.2, true, zScale);
+    R.drawIsoLine(ctx, b, c, '#F0A93A', 3.2, true, zScale);
+    R.drawIsoDot(ctx, b, 2.2, '#5D6B7A', false, zScale);
+    R.drawIsoDot(ctx, c, 2.6, healCol, true, zScale);
+  }
+
+  function drawRepairBayLv3Static(ctx, tx, ty, healCol, zScale) {
+    const Iso = ZS.Iso;
+    R.drawIsoBox(ctx, tx + 0.05, ty + 0.05, 0.5, 0.90, 0.90, 3.6, '#3E4956', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.045, ty + 0.045, 1.2, 0.91, 0.91, 1.2, '#F0A93A', { noTop: true }, zScale);
+    R.drawRingGlow(ctx, tx + 0.50, ty + 0.58, 4.2, 0.25, 1.2, healCol, true, 20, zScale);
+    R.drawIsoRibbon(ctx, Iso.gridToScreen(tx + 0.42, ty + 0.58, 4.2), Iso.gridToScreen(tx + 0.58, ty + 0.58, 4.2), 1.0, healCol, true, zScale);
+    R.drawIsoRibbon(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, 4.2), Iso.gridToScreen(tx + 0.50, ty + 0.66, 4.2), 1.0, healCol, true, zScale);
+    R.drawIsoBox(ctx, tx + 0.14, ty + 0.10, 4.1, 0.72, 0.20, 10.5, '#596673', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.28, ty + 0.305, 6.2, 0.44, 0.015, 5.2, healCol, { emissive: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.16, ty + 0.14, 14.6, 0.06, 0.06, 5.2, '#F0A93A', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.78, ty + 0.14, 14.6, 0.06, 0.06, 5.2, '#F0A93A', null, zScale);
+  }
+
+  function drawRepairBayLv3Drone(ctx, st, tx, ty, healCol, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const bob = st.isPreview ? 0 : Math.sin(timeSec * 3.0 + tx + ty) * 0.8;
+    const dz = 23.8 + bob;
+    const rotors = [[-0.16, -0.16], [0.16, -0.16], [-0.16, 0.16], [0.16, 0.16]];
+    for (let i = 0; i < rotors.length; i++) {
+      const ox = rotors[i][0];
+      const oy = rotors[i][1];
+      R.drawIsoLine(
+        ctx,
+        Iso.gridToScreen(tx + 0.50, ty + 0.56, dz + 1.4),
+        Iso.gridToScreen(tx + 0.50 + ox, ty + 0.56 + oy, dz + 2.2),
+        '#6B7A8A',
+        1.6,
+        true,
+        zScale
+      );
+      R.drawRingGlow(ctx, tx + 0.50 + ox, ty + 0.56 + oy, dz + 2.4, 0.075, 0.7, '#C9D3DE', false, 12, zScale);
+    }
+    R.drawIsoBox(ctx, tx + 0.41, ty + 0.47, dz, 0.18, 0.18, 3.2, '#E3EBF2', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.45, ty + 0.51, dz + 3.2, 0.10, 0.10, 1.4, healCol, { emissive: true }, zScale);
+    R.drawIsoRibbon(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.56, dz), Iso.gridToScreen(tx + 0.50, ty + 0.56, 4.4), 0.75, healCol, true, zScale);
+  }
+
+  function drawBossTrophyStatic(ctx, tx, ty, zScale) {
+    R.drawFrustum(ctx, tx + 0.18, ty + 0.18, 0.5, 0.64, 0.64, 10, 0.06, '#2E3744', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.24, ty + 0.24, 10.5, 0.52, 0.52, 1.5, '#D4AF37', null, zScale);
+  }
+
+  function drawBossTrophyOrb(ctx, tx, ty, timeSec, zScale) {
+    const bobZ = 25.5 + Math.sin(timeSec * 3.2) * 1.8;
+    R.drawOctahedron(ctx, tx + 0.5, ty + 0.5, bobZ, 0.14, 9, '#FFE066', true, zScale);
+  }
+
+  function drawBatteryBankBody(ctx, tx, ty, lv, ratio, hasCharge, ledColor, P, zScale) {
+    if (lv <= 1) {
+      R.drawIsoBox(ctx, tx + 0.24, ty + 0.28, 0.5, 0.52, 0.44, 2.0, '#3E4854', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.27, ty + 0.31, 2.5, 0.46, 0.38, 8.2, '#6A7B8C', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.30, ty + 0.34, 10.7, 0.40, 0.32, 1.5, '#475361', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.36, ty + 0.46, 12.2, 0.06, 0.06, 1.6, '#DCE5EE', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.58, ty + 0.46, 12.2, 0.06, 0.06, 1.6, '#DCE5EE', null, zScale);
+      for (let k = 0; k < 2; k++) {
+        const lit = ratio > k * 0.4 && hasCharge;
+        R.drawIsoBox(ctx, tx + 0.34, ty + 0.695, 4.0 + k * 3.1, 0.32, 0.015, 2.0, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
+      }
+    } else if (lv === 2) {
+      const posts = [[0.18, 0.26], [0.76, 0.26], [0.18, 0.66], [0.76, 0.66]];
+      for (let i = 0; i < posts.length; i++) {
+        R.drawIsoBox(ctx, tx + posts[i][0], ty + posts[i][1], 0.5, 0.06, 0.06, 20.5, '#475361', null, zScale);
+      }
+      const shelves = [0.5, 10.5, 20.0];
+      for (let i = 0; i < shelves.length; i++) {
+        R.drawIsoBox(ctx, tx + 0.18, ty + 0.26, shelves[i], 0.64, 0.46, 1.2, '#596673', null, zScale);
+      }
+      const modZs = [2.0, 12.0];
+      for (let mi = 0; mi < modZs.length; mi++) {
+        const mz = modZs[mi];
+        R.drawIsoBox(ctx, tx + 0.24, ty + 0.30, mz, 0.52, 0.38, 7.8, '#C9D4DF', null, zScale);
+        for (let k = 0; k < 3; k++) {
+          const lit = (mi * 3 + k) / 6 < ratio && hasCharge;
+          R.drawIsoBox(ctx, tx + 0.28 + k * 0.16, ty + 0.685, mz + 1.8, 0.11, 0.015, 4.2, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
+        }
+      }
+    } else if (lv === 3) {
+      const cabXs = [0.14, 0.58];
+      for (let c = 0; c < cabXs.length; c++) {
+        const cx = tx + cabXs[c];
+        R.drawIsoBox(ctx, cx, ty + 0.32, 0.5, 0.24, 0.34, 30.0, '#DDE5EC', null, zScale);
+        R.drawIsoBox(ctx, cx + 0.03, ty + 0.35, 30.5, 0.18, 0.28, 1.8, '#9AA8B6', null, zScale);
+        const litSlots = hasCharge ? Math.max(1, Math.round(ratio * 4)) : 0;
+        for (let k = 0; k < 4; k++) {
+          const lit = k < litSlots;
+          R.drawIsoBox(ctx, cx + 0.04, ty + 0.655, 5.2 + k * 5.6, 0.16, 0.014, 3.6, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
+        }
+      }
+    } else {
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 0.5, 0.40, 4.5, '#3B4654', { n: 8 }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 5.0, 0.31, 2.0, '#596878', { n: 8 }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.17, 25.0, P.powerDim, { n: 14 }, zScale);
+      if (hasCharge) {
+        const litH = Math.max(4.0, 25.0 * ratio);
+        R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.174, litH, ledColor, { n: 14, emissive: true, noTop: true }, zScale);
+      }
+      const ringZs = [11.0, 18.5, 26.0];
+      for (let i = 0; i < ringZs.length; i++) {
+        R.drawCyl(ctx, tx + 0.50, ty + 0.50, ringZs[i], 0.22, 1.6, '#DCE5EE', { n: 14 }, zScale);
+      }
+      const fins = [[0.17, 0.46], [0.75, 0.46], [0.46, 0.17], [0.46, 0.75]];
+      for (let i = 0; i < fins.length; i++) {
+        R.drawIsoBox(ctx, tx + fins[i][0], ty + fins[i][1], 5.0, 0.08, 0.08, 29.0, '#475361', null, zScale);
+      }
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 32.0, 0.24, 3.0, '#DCE5EE', { n: 12 }, zScale);
+      R.drawDome(ctx, tx + 0.50, ty + 0.50, 35.0, 0.12, 4.5, hasCharge ? ledColor : P.powerDim, { emissive: hasCharge }, zScale);
+    }
+  }
+
+  function drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, solarOff, P, steelCol, maxAccent, zScale) {
+    const Iso = ZS.Iso;
+    switch (id) {
+      case 'hesco_wall': {
+        const s = 0.37;
+        const gp = 0.12;
+        const o = 0.07;
+        const h = 12.5;
+        const cells = [[o, o], [o + s + gp, o], [o, o + s + gp], [o + s + gp, o + s + gp]];
+        for (let i = 0; i < cells.length; i++) {
+          const cx = tx + cells[i][0];
+          const cy = ty + cells[i][1];
+          R.drawIsoBox(ctx, cx, cy, 0.5, s, s, h, '#C9B48A', null, zScale);
+          R.drawIsoBox(ctx, cx + 0.05, cy + 0.05, 0.5 + h, s - 0.10, s - 0.10, 0.6, '#9E8758', null, zScale);
+          if (lv >= 2) {
+            R.drawIsoBox(ctx, cx - 0.006, cy - 0.006, 4.8, s + 0.012, s + 0.012, 2.2, steelCol, { noTop: true }, zScale);
+          }
+        }
+        if (lv >= 3) {
+          R.drawIsoBox(ctx, tx + 0.055, ty + 0.055, 0.5 + h + 0.6, 0.89, 0.89, 1.2, maxAccent, { noTop: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.06, ty + 0.06, 0.5 + h + 1.8, 0.88, 0.88, 2.4, steelCol, null, zScale);
+        }
+        break;
+      }
+
+      case 'blast_wall': {
+        R.drawFrustum(ctx, tx + 0.06, ty + 0.06, 0.5, 0.88, 0.88, 24, 0.21, '#6B7686', null, zScale);
+        const i4 = (0.21 * 4) / 24;
+        const i8 = (0.21 * 8) / 24;
+        R.drawFrustum(ctx, tx + 0.06 + i4, ty + 0.06 + i4, 4.5, 0.88 - 2 * i4, 0.88 - 2 * i4, 4, i8 - i4, '#F0BD35', { noTop: true }, zScale);
+        if (lv >= 2) {
+          const i12 = (0.21 * 12) / 24;
+          const i15 = (0.21 * 15) / 24;
+          R.drawFrustum(ctx, tx + 0.055 + i12, ty + 0.055 + i12, 12.5, 0.89 - 2 * i12, 0.89 - 2 * i12, 3, i15 - i12, steelCol, { noTop: true }, zScale);
+        }
+        if (lv >= 3) {
+          R.drawIsoBox(ctx, tx + 0.23, ty + 0.23, 24.5, 0.54, 0.54, 1.3, maxAccent, { noTop: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.24, ty + 0.24, 25.8, 0.52, 0.52, 2.4, steelCol, null, zScale);
+        }
+        break;
+      }
+
+      case 'missile_pod': {
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.36, 6.5, '#4C574A', { n: 16 }, zScale);
+        R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 5.4, 0.366, isUnpowered, zScale);
+        if (lv >= 2) {
+          R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.0, 0.31, 1.8, steelCol, { n: 16 }, zScale);
+        }
+        const podCol = isUnpowered ? '#596159' : '#6C7D65';
+        const x0 = tx + 0.21, x1 = tx + 0.79, y0 = ty + 0.20, y1 = ty + 0.76;
+        const bA = Iso.gridToScreen(x0, y0, 8.2), bB = Iso.gridToScreen(x1, y0, 8.2);
+        const bC = Iso.gridToScreen(x1, y1, 12.0), bD = Iso.gridToScreen(x0, y1, 12.0);
+        const tA = Iso.gridToScreen(x0, y0, 17.5), tB = Iso.gridToScreen(x1, y0, 17.5);
+        const tC = Iso.gridToScreen(x1, y1, 21.8), tD = Iso.gridToScreen(x0, y1, 21.8);
+        R.drawPolyFace(ctx, [tD, tC, bC, bD], podCol, 0.82, false, true, zScale);
+        R.drawPolyFace(ctx, [tC, tB, bB, bC], podCol, 0.66, false, true, zScale);
+        R.drawPolyFace(ctx, [tA, tB, tC, tD], lv >= 3 ? maxAccent : podCol, 1.0, false, true, zScale);
+
+        const tubeXs = [0.35, 0.61];
+        const tubeZs = [14.6, 19.0];
+        for (let ix = 0; ix < tubeXs.length; ix++) {
+          for (let iz = 0; iz < tubeZs.length; iz++) {
+            const c = Iso.gridToScreen(tx + tubeXs[ix], ty + 0.765, tubeZs[iz]);
+            ctx.beginPath();
+            ctx.ellipse(c.x, c.y, 3.1 * zScale, 2.7 * zScale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = Iso.resolveFaceColor('#20261D', 1.0, false, 0);
+            ctx.fill();
+            R.drawIsoDot(ctx, c, 1.3, isUnpowered ? '#5A3A32' : '#E0603A', !isUnpowered, zScale);
+          }
+        }
+        break;
+      }
+
+      case 'solar_array': {
+        if (lv <= 1) {
+          R.drawIsoBox(ctx, tx + 0.22, ty + 0.28, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.22, ty + 0.72, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.45, ty + 0.30, 1.7, 0.10, 0.08, 7.6, '#7B8996', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.12, ty + 0.52, 0.5, 0.12, 0.20, 4.2, '#475361', null, zScale);
+          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.72, 3.2), 1.4, solarOff ? P.powerDim : P.power, !solarOff, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.22, ty + 0.24, 0.58, 0.54, 11.2, 5.4, 1.1, '#9AA8B6', '#2466B5', '#6E9FE0', 2, 2, zScale);
+        } else if (lv === 2) {
+          R.drawIsoBox(ctx, tx + 0.44, ty + 0.44, 0.5, 0.12, 0.12, 9.0, '#7B8996', null, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.12, 0.88, 0.76, 15.5, 8.5, 1.5, '#A9B6C4', '#2466B5', '#6E9FE0', 3, 2, zScale);
+        } else if (lv === 3) {
+          R.drawCyl(ctx, tx + 0.50, ty + 0.44, 0.5, 0.22, 3.6, '#596673', { n: 14 }, zScale);
+          R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.44, 2.5, 0.225, solarOff, zScale);
+          R.drawCyl(ctx, tx + 0.50, ty + 0.44, 4.1, 0.07, 11.4, '#8C9AA8', { n: 10 }, zScale);
+          R.drawIsoBox(ctx, tx + 0.18, ty + 0.40, 14.8, 0.64, 0.08, 1.8, '#7B8996', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.34, ty + 0.66, 0.5, 0.32, 0.20, 7.2, '#DDE5EC', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.37, ty + 0.855, 4.6, 0.26, 0.015, 1.4, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.54, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+        } else {
+          R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 3.0, '#475361', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.7, 0.85, 0.85, 1.0, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
+          R.drawIsoBox(ctx, tx + 0.38, ty + 0.34, 3.5, 0.24, 0.24, 26.0, '#607080', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.375, ty + 0.335, 17.5, 0.25, 0.25, 1.5, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
+          R.drawIsoBox(ctx, tx + 0.41, ty + 0.37, 29.5, 0.18, 0.18, 3.5, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.06, 0.88, 0.42, 28.0, 20.5, 1.4, '#B6C3D0', '#1D5AA8', '#6E9FE0', 4, 2, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.63, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+        }
+        break;
+      }
+
+      case 'field_tent':
+      case 'shelter_pod': {
+        const effTier = id === 'shelter_pod' ? 3 : lv;
+        if (effTier <= 1) {
+          R.drawDome(ctx, tx + 0.5, ty + 0.5, 0.5, 0.42, 15.0, '#6E8466', { n: 16 }, zScale);
+          R.drawPolyFace(
+            ctx,
+            [
+              Iso.gridToScreen(tx + 0.40, ty + 0.915, 0.5),
+              Iso.gridToScreen(tx + 0.60, ty + 0.915, 0.5),
+              Iso.gridToScreen(tx + 0.50, ty + 0.915, 10.5)
+            ],
+            '#2E3A2B', 1.0, false, false, zScale
+          );
+          R.drawPolyFace(
+            ctx,
+            [
+              Iso.gridToScreen(tx + 0.44, ty + 0.92, 0.5),
+              Iso.gridToScreen(tx + 0.56, ty + 0.92, 0.5),
+              Iso.gridToScreen(tx + 0.50, ty + 0.92, 7.5)
+            ],
+            P.baseLight, 1.0, true, false, zScale
+          );
+        } else if (effTier === 2) {
+          R.drawIsoBox(ctx, tx + 0.05, ty + 0.12, 0.5, 0.90, 0.76, 1.6, '#7A5E42', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.07, ty + 0.16, 2.1, 0.41, 0.66, 8.8, '#5F7758', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.50, ty + 0.16, 2.1, 0.43, 0.66, 8.8, '#5F7758', null, zScale);
+          R.drawGable(ctx, tx + 0.06, ty + 0.14, 10.9, 0.43, 0.70, 5.8, '#768F6D', '#5F7758', zScale);
+          R.drawGable(ctx, tx + 0.49, ty + 0.14, 10.9, 0.45, 0.70, 5.8, '#768F6D', '#5F7758', zScale);
+          R.drawIsoBox(ctx, tx + 0.14, ty + 0.825, 4.8, 0.22, 0.015, 4.0, P.baseLight, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.64, ty + 0.825, 4.8, 0.22, 0.015, 4.0, P.baseLight, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.43, ty + 0.825, 2.1, 0.14, 0.015, 7.2, '#2E3A2B', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.76, ty + 0.28, 14.0, 0.05, 0.05, 5.0, '#8C96A3', null, zScale);
+        } else if (effTier === 3) {
+          R.drawIsoBox(ctx, tx + 0.06, ty + 0.14, 0.5, 0.88, 0.72, 13.0, '#DCE5ED', null, zScale);
+          R.drawGable(ctx, tx + 0.03, ty + 0.11, 13.5, 0.94, 0.78, 8.0, '#EA6A3B', '#DCE5ED', zScale);
+          R.drawIsoBox(ctx, tx + 0.18, ty + 0.86, 4.5, 0.46, 0.015, 5.0, P.baseLight, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.72, ty + 0.86, 0.5, 0.13, 0.015, 9.0, '#556370', null, zScale);
+        } else {
+          R.drawIsoBox(ctx, tx + 0.05, ty + 0.12, 0.5, 0.90, 0.76, 12.0, '#C8D4E0', null, zScale);
+          const pillars = [[0.05, 0.12], [0.89, 0.12], [0.05, 0.82], [0.89, 0.82]];
+          for (let i = 0; i < pillars.length; i++) {
+            R.drawIsoBox(ctx, tx + pillars[i][0], ty + pillars[i][1], 0.5, 0.06, 0.06, 12.0, '#4E5B68', null, zScale);
+          }
+          R.drawIsoBox(ctx, tx + 0.14, ty + 0.885, 4.2, 0.42, 0.015, 4.8, P.baseLight, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.66, ty + 0.885, 0.5, 0.15, 0.015, 9.2, '#475361', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.07, ty + 0.14, 12.5, 0.70, 0.68, 10.5, '#DCE5ED', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.77, ty + 0.16, 12.5, 0.18, 0.64, 1.2, '#596673', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.77, ty + 0.77, 13.7, 0.18, 0.03, 3.0, '#475361', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.92, ty + 0.16, 13.7, 0.03, 0.64, 3.0, '#475361', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.15, ty + 0.825, 15.8, 0.50, 0.015, 4.6, P.baseLight, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.775, ty + 0.28, 15.8, 0.015, 0.34, 4.6, P.baseLight, { emissive: true }, zScale);
+          R.drawGable(ctx, tx + 0.05, ty + 0.11, 23.0, 0.74, 0.74, 6.5, P.habitatRoof || '#D96B38', '#DCE5ED', zScale);
+          R.drawIsoBox(ctx, tx + 0.18, ty + 0.24, 27.8, 0.18, 0.16, 3.4, '#7B8996', null, zScale);
+        }
+        break;
+      }
+
+      case 'gas_heater': {
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.14, 2, '#5D6873', { n: 12 }, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 2.5, 0.045, 17, '#9AA6B2', { n: 8 }, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.08, 8, '#FFB347', { emissive: true, n: 10 }, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 19.5, 0.30, 1.5, '#D5DEE7', { n: 16 }, zScale);
+        R.drawCone(ctx, tx + 0.5, ty + 0.5, 21.0, 0.30, 4, '#D5DEE7', { n: 16 }, zScale);
+        break;
+      }
+
+      case 'led_floodlight': {
+        const top = Iso.gridToScreen(tx + 0.5, ty + 0.5, 15.5);
+        R.drawIsoLine(ctx, top, Iso.gridToScreen(tx + 0.55, ty + 0.16, 0.5), '#EBA834', 1.8, true, zScale);
+        R.drawIsoLine(ctx, top, Iso.gridToScreen(tx + 0.84, ty + 0.66, 0.5), '#EBA834', 1.8, true, zScale);
+        R.drawIsoBox(ctx, tx + 0.28, ty + 0.38, 15.3, 0.44, 0.26, 1.3, isUnpowered ? P.powerDim : P.power, { emissive: !isUnpowered, noTop: true }, zScale);
+        R.drawIsoBox(ctx, tx + 0.28, ty + 0.38, 16.5, 0.44, 0.26, 7, '#59636E', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.31, ty + 0.635, 17.5, 0.38, 0.015, 5, isUnpowered ? '#4B5563' : '#FFF6DA', { emissive: !isUnpowered }, zScale);
+        R.drawIsoLine(ctx, top, Iso.gridToScreen(tx + 0.18, ty + 0.78, 0.5), '#EBA834', 1.8, true, zScale);
+        break;
+      }
+
+      case 'urban_planter': {
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.30, 7, '#B8C0C7', { n: 16 }, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.26, 0.02, '#5E493A', { n: 16, noSides: true, topEdge: false }, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.045, 6, '#6B4A33', { n: 8 }, zScale);
+        R.drawBlob(ctx, tx + 0.5, ty + 0.5, 12.5, 0.32, 15, '#5DBB63', { n: 14 }, zScale);
+        R.drawBlob(ctx, tx + 0.52, ty + 0.48, 22.5, 0.20, 9, '#77D27A', { n: 12 }, zScale);
+        break;
+      }
+
+      case 'vending_machine': {
+        R.drawIsoBox(ctx, tx + 0.24, ty + 0.27, 0.5, 0.52, 0.46, 22, '#2E86DE', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.28, ty + 0.725, 8.5, 0.30, 0.015, 11, '#FFF3D6', { emissive: true }, zScale);
+        R.drawIsoBox(ctx, tx + 0.62, ty + 0.725, 10.5, 0.08, 0.015, 6, '#1B4F86', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.30, ty + 0.725, 3.0, 0.32, 0.015, 3, '#14365C', null, zScale);
+        break;
+      }
+
+      case 'repair_bay': {
+        const healCol = P.repairNano || P.heal || '#4ADE80';
+        R.drawIsoBox(ctx, tx + 0.14, ty + 0.16, 0.5, 0.72, 0.68, 2.2, '#475361', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.18, ty + 0.18, 2.7, 0.42, 0.09, 11.5, '#5D6B7A', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.18, ty + 0.18, 14.2, 0.42, 0.09, 1.2, '#F0A93A', null, zScale);
+        R.drawCyl(ctx, tx + 0.70, ty + 0.28, 2.7, 0.055, 10.2, '#D97724', { n: 10 }, zScale);
+        R.drawCyl(ctx, tx + 0.78, ty + 0.38, 2.7, 0.055, 9.2, '#7B8996', { n: 10 }, zScale);
+        R.drawIsoBox(ctx, tx + 0.22, ty + 0.52, 2.7, 0.30, 0.22, 5.2, '#3A4450', null, zScale);
+        const a = Iso.gridToScreen(tx + 0.42, ty + 0.26, 14.5);
+        const b = Iso.gridToScreen(tx + 0.44, ty + 0.50, 17.5);
+        const c = Iso.gridToScreen(tx + 0.38, ty + 0.58, 12.2);
+        R.drawIsoLine(ctx, a, b, '#F0A93A', 2.4, true, zScale);
+        R.drawIsoLine(ctx, b, c, '#F0A93A', 2.4, true, zScale);
+        R.drawIsoDot(ctx, b, 1.8, '#5D6B7A', false, zScale);
+        R.drawIsoDot(ctx, c, 2.1, healCol, true, zScale);
+        break;
+      }
+
+      case 'lounge_set': {
+        R.drawIsoBox(ctx, tx + 0.16, ty + 0.58, 0.5, 0.16, 0.16, 5, '#C9D3DD', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.62, ty + 0.18, 0.5, 0.16, 0.16, 5, '#C9D3DD', null, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.17, 7, '#E8EEF5', { n: 16 }, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.025, 15, '#A0AEC0', { n: 6 }, zScale);
+        R.drawCone(ctx, tx + 0.5, ty + 0.5, 21.5, 0.44, 6, '#F4E6C8', { alt: '#E8A04A', n: 12 }, zScale);
+        break;
+      }
+
+      case 'arcade_neon': {
+        R.drawIsoBox(ctx, tx + 0.255, ty + 0.215, 1.4, 0.49, 0.45, 1.3, isUnpowered ? P.powerDim : P.power, { emissive: !isUnpowered, noTop: true }, zScale);
+        R.drawIsoBox(ctx, tx + 0.26, ty + 0.22, 0.5, 0.48, 0.44, 20, '#3A2C54', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.27, ty + 0.66, 0.5, 0.46, 0.20, 9, '#2B2040', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.29, ty + 0.855, 2.5, 0.42, 0.015, 5, isUnpowered ? '#4D3B59' : '#FF5CE1', { emissive: !isUnpowered }, zScale);
+        R.drawIsoBox(ctx, tx + 0.30, ty + 0.655, 10.5, 0.40, 0.015, 8, isUnpowered ? '#354856' : '#52E8FF', { emissive: !isUnpowered }, zScale);
+        R.drawIsoBox(ctx, tx + 0.24, ty + 0.20, 20.5, 0.52, 0.62, 2, '#2B2040', null, zScale);
+        R.drawIsoBox(ctx, tx + 0.25, ty + 0.81, 21.0, 0.50, 0.015, 3.4, isUnpowered ? '#4D3B59' : '#C742E8', { emissive: !isUnpowered }, zScale);
+        R.drawIsoBox(ctx, tx + 0.26, ty + 0.22, 22.5, 0.48, 0.30, 4, '#3A2C54', null, zScale);
+        break;
+      }
+    }
+  }
+
   function drawStructure(ctx, st, tx, ty, state, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
@@ -794,15 +1661,244 @@ window.ZS = window.ZS || {};
     const maxAccent = P.levelMax || '#FF9F43';
     const def = id === 'command_hq' ? ZS.DATA.HQ_STATS : ZS.DATA.ITEMS[id];
     const isUnpowered = (state.isNight && def && def.requiresPower && !powered) || !!(def && def.requiresPower && (st.empStunTimer || 0) > 0);
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
+    const healCol = P.repairNano || P.heal || '#4ADE80';
 
-    // Soft ground shadow
-    if (!(def && def.passable) && !window.ZS_SILHOUETTE_MODE) {
-      const sc = Iso.gridToScreen(tx + 0.52, ty + 0.55, 0.5);
-      ctx.fillStyle = 'rgba(10, 16, 22, 0.28)';
-      ctx.beginPath();
-      ctx.ellipse(sc.x, sc.y, 21 * zScale, 10.5 * zScale, 0, 0, Math.PI * 2);
-      ctx.fill();
+    const canTryStamp =
+      id !== 'command_hq' &&
+      !isNodeAnimatingOrFlashing(st) &&
+      !(st.mounted && isNodeAnimatingOrFlashing(st.mounted));
+
+    if (canTryStamp) {
+      const tintBucket = getTintBucket(state, isSil);
+      const topZ = R.getStructVisualTopZ(id, lv);
+      const aim = st.aimAngle != null ? st.aimAngle : 0.8;
+
+      if (id === 'barricade_wall') {
+        const mask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
+        const hasMount = lv >= 2 && !!st.mounted;
+        const wallTopZ = hasMount ? (lv >= 3 ? 29.0 : 18.6) : topZ;
+        const stamp = ensureStructureStamp(`wall|${lv}|${mask}|${hasMount ? 1 : 0}|${tintBucket}`, wallTopZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawConnectedWallTile(sctx, 0, 0, mask, lv, hasMount, P, steelCol, maxAccent, 1.0);
+          if (hasMount) drawWallDeck(sctx, lv, 0, 0, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        if (hasMount) {
+          const mBaseZ = lv >= 3 ? 25.4 : 15.2;
+          drawMountedUnit(ctx, st.mounted, tx, ty, mBaseZ, state, powered, timeSec, zScale);
+        }
+        return;
+      }
+
+      if (id === 'tactical_gate') {
+        const mask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
+        const alongY = Boolean((mask & 5) && !(mask & 10));
+        const normMask = alongY ? 5 : 10;
+        const stamp = ensureStructureStamp(`gate|${lv}|${alongY ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawTacticalGateTile(sctx, 0, 0, normMask, lv, P, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'razor_pad') {
+        const thrust = getTrapThrustAmount(st, tx, ty, state, timeSec);
+        if (thrust <= 0.001) {
+          if (lv <= 2) {
+            const stamp = ensureStructureStamp(`razor|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+              drawRazorPadTile(sctx, { id: 'razor_pad', level: lv, isPreview: true }, 0, 0, lv, P, state, 0, 1.0, 0);
+            });
+            blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+            return;
+          }
+          const stamp = ensureStructureStamp(`razor|3|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+            drawRazorPadT3Static(sctx, 0, 0, P, 1.0);
+          });
+          blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+          drawRazorPadT3Arcs(ctx, st, tx, ty, P, timeSec, zScale);
+          return;
+        }
+        // Thrusting trap: fall through to dynamic live rendering
+        drawRazorPadTile(ctx, st, tx, ty, lv, P, state, timeSec, zScale, thrust);
+        return;
+      }
+
+      if (id === 'battery_bank') {
+        const ratio = Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0.78));
+        const hasCharge = ratio > 0.01;
+        const chargeBucket = !hasCharge ? 0 : Math.max(1, Math.min(10, Math.round(ratio * 10)));
+        const ledTier = ratio > 0.35 ? 2 : ratio > 0.05 ? 1 : 0;
+        const qRatio = chargeBucket / 10;
+        const qHasCharge = chargeBucket > 0;
+        const qLedColor = ledTier === 2 ? P.power : ledTier === 1 ? P.healthMid : P.danger;
+        const stamp = ensureStructureStamp(`battery|${lv}|${chargeBucket}|${ledTier}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawBatteryBankBody(sctx, 0, 0, lv, qRatio, qHasCharge, qLedColor, P, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'solar_array') {
+        const solarOff = !powered;
+        const stamp = ensureStructureStamp(`solar|${lv}|${solarOff ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawFullStaticStructBody(sctx, id, lv, 0, 0, isUnpowered, solarOff, P, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'field_tent' || id === 'shelter_pod') {
+        const effTier = id === 'shelter_pod' ? 3 : lv;
+        const stamp = ensureStructureStamp(`housing|${effTier}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawFullStaticStructBody(sctx, id, lv, 0, 0, false, false, P, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'hesco_wall' || id === 'blast_wall') {
+        const stamp = ensureStructureStamp(`${id}|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawFullStaticStructBody(sctx, id, lv, 0, 0, false, false, P, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'missile_pod' || id === 'led_floodlight' || id === 'arcade_neon') {
+        const keyLv = id === 'missile_pod' ? lv : 1;
+        const stamp = ensureStructureStamp(`${id}|${keyLv}|${isUnpowered ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawFullStaticStructBody(sctx, id, lv, 0, 0, isUnpowered, false, P, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'gas_heater' || id === 'urban_planter' || id === 'vending_machine' || id === 'lounge_set') {
+        const stamp = ensureStructureStamp(`${id}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawFullStaticStructBody(sctx, id, lv, 0, 0, false, false, P, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'wind_turbine') {
+        const stamp = ensureStructureStamp(`wind|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawWindTurbineStatic(sctx, 0, 0, lv, P, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        drawWindTurbineRotors(ctx, tx, ty, lv, timeSec * 2.6 + (tx + ty), P, zScale);
+        return;
+      }
+
+      if (id === 'vulcan_turret') {
+        const stamp = ensureStructureStamp(`vulcan|${lv}|${isUnpowered ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawVulcanStatic(sctx, 0, 0, lv, isUnpowered, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        drawVulcanBarrels(ctx, tx, ty, lv, isUnpowered, aim, P, zScale);
+        return;
+      }
+
+      if (id === 'emp_coil') {
+        const stamp = ensureStructureStamp(`emp|${lv}|${isUnpowered ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawEmpCoilStatic(sctx, 0, 0, lv, isUnpowered, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        drawEmpCoilOrb(ctx, tx, ty, isUnpowered, P, timeSec, zScale);
+        return;
+      }
+
+      if (id === 'rifle_bunker') {
+        const bStamp = ensureStructureStamp(`bunker_b|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawRifleBunkerBack(sctx, 0, 0, lv, 1.0);
+        });
+        blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 2.2, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        const fStamp = ensureStructureStamp(`bunker_f|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawRifleBunkerFront(sctx, 0, 0, lv, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, fStamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'shotgun_post') {
+        const bStamp = ensureStructureStamp(`shotgun_b|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawShotgunPostBack(sctx, 0, 0, 1.0);
+        });
+        blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.44, 1.8, '#3A4654', '#2F3945', aim, zScale, false, false);
+        const fStamp = ensureStructureStamp(`shotgun_f|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawShotgunPostFront(sctx, 0, 0, lv, steelCol, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, fStamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'sniper_tower') {
+        const bStamp = ensureStructureStamp(`sniper_b|${lv}|${tintBucket}`, 46, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawSniperTowerBack(sctx, 0, 0, lv, steelCol, 1.0);
+        });
+        blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
+        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 27.5, '#3D4D42', '#2F3B33', aim, zScale, true, false);
+        const fStamp = ensureStructureStamp(`sniper_f|${lv}|${tintBucket}`, 54, tintBucket, isSil, (sctx) => {
+          drawSniperTowerFront(sctx, 0, 0, lv, maxAccent, 1.0);
+        });
+        blitStructureStamp(ctx, fStamp, tx, ty, zScale, isSil);
+        return;
+      }
+
+      if (id === 'repair_bay') {
+        if (lv <= 1) {
+          const stamp = ensureStructureStamp(`repair|1|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+            drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+            drawFullStaticStructBody(sctx, id, 1, 0, 0, false, false, P, steelCol, maxAccent, 1.0);
+          });
+          blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        } else if (lv === 2) {
+          const stamp = ensureStructureStamp(`repair|2|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+            drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+            drawRepairBayLv2Static(sctx, 0, 0, 1.0);
+          });
+          blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+          drawRepairBayLv2Arm(ctx, st, tx, ty, healCol, timeSec, zScale);
+        } else {
+          const stamp = ensureStructureStamp(`repair|3|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+            drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+            drawRepairBayLv3Static(sctx, 0, 0, healCol, 1.0);
+          });
+          blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+          drawRepairBayLv3Drone(ctx, st, tx, ty, healCol, timeSec, zScale);
+        }
+        return;
+      }
+
+      if (id === 'boss_trophy') {
+        const stamp = ensureStructureStamp(`boss_trophy|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+          drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
+          drawBossTrophyStatic(sctx, 0, 0, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        drawBossTrophyOrb(ctx, tx, ty, timeSec, zScale);
+        return;
+      }
     }
+
+    // Soft ground shadow (live fallback / HQ / animating / flashing / preview)
+    drawStructGroundShadow(ctx, tx, ty, def, isSil, zScale);
 
     // Build placement drop OR collapse drop + landing squash
     let hasBuildTransform = false;
@@ -883,305 +1979,48 @@ window.ZS = window.ZS || {};
         break;
       }
 
-      case 'hesco_wall': {
-        // 2×2 gabion blocks (low & wide segmented silhouette) + Lv.2 steel bands + Lv.3 orange-rimmed armor plate
-        const s = 0.37;
-        const gp = 0.12;
-        const o = 0.07;
-        const h = 12.5;
-        const cells = [
-          [o, o],
-          [o + s + gp, o],
-          [o, o + s + gp],
-          [o + s + gp, o + s + gp]
-        ];
-        for (let i = 0; i < cells.length; i++) {
-          const cx = tx + cells[i][0];
-          const cy = ty + cells[i][1];
-          R.drawIsoBox(ctx, cx, cy, 0.5, s, s, h, '#C9B48A', null, zScale);
-          R.drawIsoBox(ctx, cx + 0.05, cy + 0.05, 0.5 + h, s - 0.10, s - 0.10, 0.6, '#9E8758', null, zScale);
-          if (lv >= 2) {
-            R.drawIsoBox(ctx, cx - 0.006, cy - 0.006, 4.8, s + 0.012, s + 0.012, 2.2, steelCol, { noTop: true }, zScale);
-          }
-        }
-        if (lv >= 3) {
-          R.drawIsoBox(ctx, tx + 0.055, ty + 0.055, 0.5 + h + 0.6, 0.89, 0.89, 1.2, maxAccent, { noTop: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.06, ty + 0.06, 0.5 + h + 1.8, 0.88, 0.88, 2.4, steelCol, null, zScale);
-        }
-        break;
-      }
-
-      case 'blast_wall': {
-        // Trapezoidal T-wall frustum + amber hazard stripe + Lv.2 steel band + Lv.3 shock-reflect armor crown
-        R.drawFrustum(ctx, tx + 0.06, ty + 0.06, 0.5, 0.88, 0.88, 24, 0.21, '#6B7686', null, zScale);
-        const i4 = (0.21 * 4) / 24;
-        const i8 = (0.21 * 8) / 24;
-        R.drawFrustum(ctx, tx + 0.06 + i4, ty + 0.06 + i4, 4.5, 0.88 - 2 * i4, 0.88 - 2 * i4, 4, i8 - i4, '#F0BD35', { noTop: true }, zScale);
-        if (lv >= 2) {
-          const i12 = (0.21 * 12) / 24;
-          const i15 = (0.21 * 15) / 24;
-          R.drawFrustum(ctx, tx + 0.055 + i12, ty + 0.055 + i12, 12.5, 0.89 - 2 * i12, 0.89 - 2 * i12, 3, i15 - i12, steelCol, { noTop: true }, zScale);
-        }
-        if (lv >= 3) {
-          R.drawIsoBox(ctx, tx + 0.23, ty + 0.23, 24.5, 0.54, 0.54, 1.3, maxAccent, { noTop: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.24, ty + 0.24, 25.8, 0.52, 0.52, 2.4, steelCol, null, zScale);
-        }
-        break;
-      }
-
       case 'razor_pad': {
         drawRazorPadTile(ctx, st, tx, ty, lv, P, state, timeSec, zScale);
         break;
       }
 
       case 'rifle_bunker': {
-        // Round sandbag ring + entrenched 2.2-head rifleman (unmistakable circular pit silhouette)
-        const rh = lv >= 3 ? 10 : 7;
-        R.drawSandbagRing(ctx, tx + 0.5, ty + 0.5, 0.5, 0.40, rh, 'back', zScale);
+        drawRifleBunkerBack(ctx, tx, ty, lv, zScale);
         drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 2.2, '#55684F', '#3E4D3A', st.aimAngle != null ? st.aimAngle : 0.8, zScale, false, lv >= 3);
-        R.drawSandbagRing(ctx, tx + 0.5, ty + 0.5, 0.5, 0.40, rh, 'front', zScale);
-        if (lv >= 2) {
-          R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5 + rh - 1.6, 0.406, 1.6, steelCol, { noTop: true, n: 16 }, zScale);
-        }
+        drawRifleBunkerFront(ctx, tx, ty, lv, steelCol, zScale);
         break;
       }
 
       case 'shotgun_post': {
-        // Compact sandbag ring + tall front ballistic shield plate with amber band & vision slit
-        R.drawSandbagRing(ctx, tx + 0.5, ty + 0.44, 0.5, 0.34, 6, 'back', zScale);
+        drawShotgunPostBack(ctx, tx, ty, zScale);
         drawOperatorFigure(ctx, tx + 0.5, ty + 0.44, 1.8, '#3A4654', '#2F3945', st.aimAngle != null ? st.aimAngle : 0.8, zScale, false, false);
-        R.drawSandbagRing(ctx, tx + 0.5, ty + 0.44, 0.5, 0.34, 6, 'front', zScale);
-        R.drawIsoBox(ctx, tx + 0.16, ty + 0.80, 0.5, 0.68, 0.07, 17, '#3A4654', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.155, ty + 0.795, 11.5, 0.69, 0.08, 2.2, lv >= 3 ? maxAccent : '#EBA834', { noTop: true }, zScale);
-        if (lv >= 2) {
-          R.drawIsoBox(ctx, tx + 0.155, ty + 0.795, 4.5, 0.69, 0.08, 2.0, steelCol, { noTop: true }, zScale);
-        }
-        R.drawIsoBox(ctx, tx + 0.42, ty + 0.795, 14.1, 0.16, 0.08, 1.4, '#1B2430', { noTop: true }, zScale);
+        drawShotgunPostFront(ctx, tx, ty, lv, steelCol, maxAccent, zScale);
         break;
       }
 
       case 'sniper_tower': {
-        // Tall lattice truss watchtower + platform + hip roof (h=52, tallest manned structure)
-        const legs = [
-          [0.14, 0.14],
-          [0.76, 0.14],
-          [0.14, 0.76],
-          [0.76, 0.76]
-        ];
-        for (let i = 0; i < legs.length; i++) {
-          R.drawIsoBox(ctx, tx + legs[i][0], ty + legs[i][1], 0.5, 0.08, 0.08, 24, '#7C8B99', null, zScale);
-        }
-        R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.84, 2.5), Iso.gridToScreen(tx + 0.80, ty + 0.84, 21.5), '#5B6875', 1.15, false, zScale);
-        R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.84, 21.5), Iso.gridToScreen(tx + 0.80, ty + 0.84, 2.5), '#5B6875', 1.15, false, zScale);
-        R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.84, ty + 0.18, 2.5), Iso.gridToScreen(tx + 0.84, ty + 0.80, 21.5), '#5B6875', 1.15, false, zScale);
-        R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.84, ty + 0.18, 21.5), Iso.gridToScreen(tx + 0.84, ty + 0.80, 2.5), '#5B6875', 1.15, false, zScale);
-        R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 24.5, 0.84, 0.84, 3, lv >= 2 ? steelCol : '#6C7B8B', null, zScale);
-        const backPosts = [
-          [0.10, 0.10],
-          [0.86, 0.10],
-          [0.10, 0.86]
-        ];
-        for (let i = 0; i < backPosts.length; i++) {
-          R.drawIsoBox(ctx, tx + backPosts[i][0], ty + backPosts[i][1], 27.5, 0.04, 0.04, 18, '#5B6875', null, zScale);
-        }
+        drawSniperTowerBack(ctx, tx, ty, lv, steelCol, zScale);
         drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 27.5, '#3D4D42', '#2F3B33', st.aimAngle != null ? st.aimAngle : 0.8, zScale, true, false);
-        R.drawIsoBox(ctx, tx + 0.86, ty + 0.86, 27.5, 0.04, 0.04, 18, '#5B6875', null, zScale);
-        R.drawHipRoof(ctx, tx + 0.04, ty + 0.04, 45.5, 0.92, 0.92, 7, '#4F5D4B', zScale);
-        if (lv >= 3) {
-          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.5, ty + 0.5, 53.0), 2.3, maxAccent, true, zScale);
-        }
+        drawSniperTowerFront(ctx, tx, ty, lv, maxAccent, zScale);
         break;
       }
 
       case 'vulcan_turret': {
-        // Circular pedestal + cyan power strip + white CIWS radar dome + rotating tri-barrel gatling
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.36, 7, '#4E5A68', { n: 16 }, zScale);
-        R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 5.9, 0.366, isUnpowered, zScale);
-        let z0 = 7.5;
-        if (lv >= 2) {
-          R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.32, 2.6, steelCol, { n: 16 }, zScale);
-          z0 = 10.1;
-        }
-        R.drawDome(ctx, tx + 0.5, ty + 0.5, z0, 0.26, 13, isUnpowered ? '#8B949E' : '#E8EEF4', { n: 16 }, zScale);
-        const aim = st.aimAngle != null ? st.aimAngle : 0.8;
-        const len = lv >= 3 ? 0.62 : 0.50;
-        const px = -Math.sin(aim);
-        const py = Math.cos(aim);
-        for (let k = -1; k <= 1; k++) {
-          const ox = tx + 0.5 + px * 0.035 * k;
-          const oy = ty + 0.5 + py * 0.035 * k;
-          R.drawIsoLine(
-            ctx,
-            Iso.gridToScreen(ox, oy, z0 + 5),
-            Iso.gridToScreen(ox + Math.cos(aim) * len, oy + Math.sin(aim) * len, z0 + 5),
-            '#2B333D',
-            1.9,
-            true,
-            zScale
-          );
-        }
-        if (lv >= 3) {
-          const mid = Iso.gridToScreen(tx + 0.5 + Math.cos(aim) * 0.36, ty + 0.5 + Math.sin(aim) * 0.36, z0 + 5);
-          R.drawIsoDot(ctx, mid, 2.5, isUnpowered ? P.powerDim : P.power, !isUnpowered, zScale);
-        }
-        break;
-      }
-
-      case 'missile_pod': {
-        // Circular pedestal + cyan power strip + tilted 4-tube MLRS rocket pod (angled rack silhouette)
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.36, 6.5, '#4C574A', { n: 16 }, zScale);
-        R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 5.4, 0.366, isUnpowered, zScale);
-        if (lv >= 2) {
-          R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.0, 0.31, 1.8, steelCol, { n: 16 }, zScale);
-        }
-        // Tilted MLRS pod body (rises forward from z=8.5 back to z=13.5 front)
-        const podCol = isUnpowered ? '#596159' : '#6C7D65';
-        const x0 = tx + 0.21, x1 = tx + 0.79, y0 = ty + 0.20, y1 = ty + 0.76;
-        const bA = Iso.gridToScreen(x0, y0, 8.2), bB = Iso.gridToScreen(x1, y0, 8.2);
-        const bC = Iso.gridToScreen(x1, y1, 12.0), bD = Iso.gridToScreen(x0, y1, 12.0);
-        const tA = Iso.gridToScreen(x0, y0, 17.5), tB = Iso.gridToScreen(x1, y0, 17.5);
-        const tC = Iso.gridToScreen(x1, y1, 21.8), tD = Iso.gridToScreen(x0, y1, 21.8);
-        R.drawPolyFace(ctx, [tD, tC, bC, bD], podCol, 0.82, false, true, zScale);
-        R.drawPolyFace(ctx, [tC, tB, bB, bC], podCol, 0.66, false, true, zScale);
-        R.drawPolyFace(ctx, [tA, tB, tC, tD], lv >= 3 ? maxAccent : podCol, 1.0, false, true, zScale);
-
-        const tubeXs = [0.35, 0.61];
-        const tubeZs = [14.6, 19.0];
-        for (let ix = 0; ix < tubeXs.length; ix++) {
-          for (let iz = 0; iz < tubeZs.length; iz++) {
-            const c = Iso.gridToScreen(tx + tubeXs[ix], ty + 0.765, tubeZs[iz]);
-            ctx.beginPath();
-            ctx.ellipse(c.x, c.y, 3.1 * zScale, 2.7 * zScale, 0, 0, Math.PI * 2);
-            ctx.fillStyle = Iso.resolveFaceColor('#20261D', 1.0, false, 0);
-            ctx.fill();
-            R.drawIsoDot(ctx, c, 1.3, isUnpowered ? '#5A3A32' : '#E0603A', !isUnpowered, zScale);
-          }
-        }
+        drawVulcanStatic(ctx, tx, ty, lv, isUnpowered, steelCol, zScale);
+        drawVulcanBarrels(ctx, tx, ty, lv, isUnpowered, st.aimAngle != null ? st.aimAngle : 0.8, P, zScale);
         break;
       }
 
       case 'emp_coil': {
-        // Circular pedestal + cyan power strip + slender pylon + copper coil rings + glowing cyan energy orb
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.32, 6, '#3E4A59', { n: 16 }, zScale);
-        R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 4.9, 0.326, isUnpowered, zScale);
-        if (lv >= 2) {
-          R.drawCyl(ctx, tx + 0.5, ty + 0.5, 6.5, 0.25, 1.8, steelCol, { n: 14 }, zScale);
-        }
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 6.5, 0.09, 20, '#60748A', { n: 10 }, zScale);
-        const coilZs = lv >= 3 ? [9.5, 13.5, 17.5, 21.5] : [10.5, 15.5, 20.5];
-        for (let r = 0; r < coilZs.length; r++) {
-          R.drawCyl(
-            ctx,
-            tx + 0.5,
-            ty + 0.5,
-            coilZs[r],
-            0.19,
-            2.0,
-            lv >= 3 && r === coilZs.length - 1 ? maxAccent : '#B87333',
-            { n: 14 },
-            zScale
-          );
-        }
-        const pulse = isUnpowered ? 0.85 : 0.94 + 0.10 * Math.sin(timeSec * 7);
-        R.drawBlob(ctx, tx + 0.5, ty + 0.5, 25.5, 0.14 * pulse, 9, isUnpowered ? P.powerDim : P.power, { emissive: !isUnpowered, n: 14 }, zScale);
-        break;
-      }
-
-      case 'solar_array': {
-        const solarOff = !powered;
-        if (lv <= 1) {
-          R.drawIsoBox(ctx, tx + 0.22, ty + 0.28, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.22, ty + 0.72, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.45, ty + 0.30, 1.7, 0.10, 0.08, 7.6, '#7B8996', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.12, ty + 0.52, 0.5, 0.12, 0.20, 4.2, '#475361', null, zScale);
-          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.72, 3.2), 1.4, solarOff ? P.powerDim : P.power, !solarOff, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.22, ty + 0.24, 0.58, 0.54, 11.2, 5.4, 1.1, '#9AA8B6', '#2466B5', '#6E9FE0', 2, 2, zScale);
-        } else if (lv === 2) {
-          R.drawIsoBox(ctx, tx + 0.44, ty + 0.44, 0.5, 0.12, 0.12, 9.0, '#7B8996', null, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.12, 0.88, 0.76, 15.5, 8.5, 1.5, '#A9B6C4', '#2466B5', '#6E9FE0', 3, 2, zScale);
-        } else if (lv === 3) {
-          R.drawCyl(ctx, tx + 0.50, ty + 0.44, 0.5, 0.22, 3.6, '#596673', { n: 14 }, zScale);
-          R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.44, 2.5, 0.225, solarOff, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.44, 4.1, 0.07, 11.4, '#8C9AA8', { n: 10 }, zScale);
-          R.drawIsoBox(ctx, tx + 0.18, ty + 0.40, 14.8, 0.64, 0.08, 1.8, '#7B8996', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.34, ty + 0.66, 0.5, 0.32, 0.20, 7.2, '#DDE5EC', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.37, ty + 0.855, 4.6, 0.26, 0.015, 1.4, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.54, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
-        } else {
-          R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 3.0, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.7, 0.85, 0.85, 1.0, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
-          R.drawIsoBox(ctx, tx + 0.38, ty + 0.34, 3.5, 0.24, 0.24, 26.0, '#607080', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.375, ty + 0.335, 17.5, 0.25, 0.25, 1.5, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
-          R.drawIsoBox(ctx, tx + 0.41, ty + 0.37, 29.5, 0.18, 0.18, 3.5, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.06, 0.88, 0.42, 28.0, 20.5, 1.4, '#B6C3D0', '#1D5AA8', '#6E9FE0', 4, 2, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.63, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
-        }
+        drawEmpCoilStatic(ctx, tx, ty, lv, isUnpowered, steelCol, maxAccent, zScale);
+        drawEmpCoilOrb(ctx, tx, ty, isUnpowered, P, timeSec, zScale);
         break;
       }
 
       case 'wind_turbine': {
-        const windOff = false;
         const bladeAngle = st.isPreview ? 0.45 + (tx + ty) * 0.4 : timeSec * 2.6 + (tx + ty);
-        if (lv <= 1) {
-          R.drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 3.0, '#647280', null, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 3.5, 0.13, 2.0, windOff ? P.powerDim : P.power, { n: 12, emissive: !windOff }, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 5.5, 0.042, 22.0, '#DCE5EE', { n: 10 }, zScale);
-          const rx = 0.21 * Math.cos(bladeAngle);
-          const ry = 0.21 * Math.sin(bladeAngle);
-          const bx1 = tx + 0.50 + rx;
-          const by1 = ty + 0.50 + ry;
-          const bx2 = tx + 0.50 - rx;
-          const by2 = ty + 0.50 - ry;
-          R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 14.0), Iso.gridToScreen(bx1, by1, 14.0), '#9AA8B6', 1.7, true, zScale);
-          R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 24.5), Iso.gridToScreen(bx1, by1, 24.5), '#9AA8B6', 1.7, true, zScale);
-          R.drawIsoLine(ctx, Iso.gridToScreen(bx1, by1, 12.2), Iso.gridToScreen(bx1, by1, 26.5), '#F5F9FC', 2.8, true, zScale);
-          R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 12.2), Iso.gridToScreen(bx2, by2, 26.5), '#F5F9FC', 2.8, true, zScale);
-          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, 28.0), 2.2, '#C7D2DD', false, zScale);
-        } else if (lv === 2) {
-          R.drawIsoBox(ctx, tx + 0.34, ty + 0.34, 0.5, 0.32, 0.32, 3.5, '#6C7B8A', null, zScale);
-          R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 3.8, 0.125, windOff, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.0, 0.048, 31.0, '#E4ECF4', { n: 10 }, zScale);
-          R.drawIsoBox(ctx, tx + 0.44, ty + 0.38, 35.0, 0.12, 0.24, 3.8, '#C7D2DD', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.48, ty + 0.18, 35.6, 0.04, 0.20, 4.4, '#7B8FA2', null, zScale);
-          const hub = Iso.gridToScreen(tx + 0.50, ty + 0.64, 37.0);
-          for (let b = 0; b < 3; b++) {
-            const a = bladeAngle + (b * Math.PI * 2) / 3;
-            R.drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 15.5 * zScale, y: hub.y + Math.sin(a) * 15.5 * zScale }, '#F5F9FC', 2.2, true, zScale);
-          }
-          R.drawIsoDot(ctx, hub, 2.4, '#C7D2DD', false, zScale);
-        } else if (lv === 3) {
-          R.drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 4.0, '#758594', null, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.5, 0.058, 42.0, '#EEF3F8', { n: 10 }, zScale);
-          R.drawIsoBox(ctx, tx + 0.42, ty + 0.36, 46.5, 0.16, 0.28, 5.0, '#D0DBE6', null, zScale);
-          const hub = Iso.gridToScreen(tx + 0.50, ty + 0.66, 49.0);
-          for (let b = 0; b < 3; b++) {
-            const a = bladeAngle + (b * Math.PI * 2) / 3;
-            R.drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 23.0 * zScale, y: hub.y + Math.sin(a) * 23.0 * zScale }, '#F5F9FC', 2.7, true, zScale);
-          }
-          R.drawIsoDot(ctx, hub, 3.0, '#C7D2DD', false, zScale);
-        } else {
-          R.drawFrustum(ctx, tx + 0.30, ty + 0.30, 0.5, 0.40, 0.40, 6.5, 0.08, '#5E6E7E', null, zScale);
-          R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 5.4, 0.145, windOff, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.066, 47.0, '#EEF3F8', { n: 12 }, zScale);
-          R.drawIsoBox(ctx, tx + 0.40, ty + 0.28, 54.0, 0.20, 0.38, 5.6, '#DCE5EE', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.395, ty + 0.275, 56.0, 0.21, 0.39, 1.3, windOff ? P.powerDim : P.power, { noTop: true, emissive: !windOff }, zScale);
-          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.46, 61.0), 1.9, windOff ? P.powerDim : P.power, !windOff, zScale);
-          const hubB = Iso.gridToScreen(tx + 0.50, ty + 0.26, 56.8);
-          for (let b = 0; b < 3; b++) {
-            const a = -bladeAngle + 0.52 + (b * Math.PI * 2) / 3;
-            R.drawIsoLine(ctx, hubB, { x: hubB.x + Math.cos(a) * 13.5 * zScale, y: hubB.y + Math.sin(a) * 13.5 * zScale }, '#CBD7E3', 2.1, true, zScale);
-          }
-          const hubF = Iso.gridToScreen(tx + 0.50, ty + 0.68, 56.8);
-          for (let b = 0; b < 3; b++) {
-            const a = bladeAngle + (b * Math.PI * 2) / 3;
-            const tip = { x: hubF.x + Math.cos(a) * 26.0 * zScale, y: hubF.y + Math.sin(a) * 26.0 * zScale };
-            R.drawIsoLine(ctx, hubF, tip, '#F5F9FC', 2.9, true, zScale);
-            R.drawIsoDot(ctx, tip, 1.5, windOff ? P.powerDim : P.power, !windOff, zScale);
-          }
-          R.drawIsoDot(ctx, hubF, 3.2, '#B6C3D0', false, zScale);
-        }
+        drawWindTurbineStatic(ctx, tx, ty, lv, P, zScale);
+        drawWindTurbineRotors(ctx, tx, ty, lv, bladeAngle, P, zScale);
         break;
       }
 
@@ -1189,266 +2028,31 @@ window.ZS = window.ZS || {};
         const ratio = st.isPreview ? 0.78 : Math.max(0, Math.min(1, state.powerCap > 0 ? state.power / state.powerCap : 0.78));
         const ledColor = ratio > 0.35 ? P.power : ratio > 0.05 ? P.healthMid : P.danger;
         const hasCharge = ratio > 0.01;
-        if (lv <= 1) {
-          R.drawIsoBox(ctx, tx + 0.24, ty + 0.28, 0.5, 0.52, 0.44, 2.0, '#3E4854', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.27, ty + 0.31, 2.5, 0.46, 0.38, 8.2, '#6A7B8C', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.30, ty + 0.34, 10.7, 0.40, 0.32, 1.5, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.36, ty + 0.46, 12.2, 0.06, 0.06, 1.6, '#DCE5EE', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.58, ty + 0.46, 12.2, 0.06, 0.06, 1.6, '#DCE5EE', null, zScale);
-          for (let k = 0; k < 2; k++) {
-            const lit = ratio > k * 0.4 && hasCharge;
-            R.drawIsoBox(ctx, tx + 0.34, ty + 0.695, 4.0 + k * 3.1, 0.32, 0.015, 2.0, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
-          }
-        } else if (lv === 2) {
-          const posts = [[0.18, 0.26], [0.76, 0.26], [0.18, 0.66], [0.76, 0.66]];
-          for (let i = 0; i < posts.length; i++) {
-            R.drawIsoBox(ctx, tx + posts[i][0], ty + posts[i][1], 0.5, 0.06, 0.06, 20.5, '#475361', null, zScale);
-          }
-          const shelves = [0.5, 10.5, 20.0];
-          for (let i = 0; i < shelves.length; i++) {
-            R.drawIsoBox(ctx, tx + 0.18, ty + 0.26, shelves[i], 0.64, 0.46, 1.2, '#596673', null, zScale);
-          }
-          const modZs = [2.0, 12.0];
-          for (let mi = 0; mi < modZs.length; mi++) {
-            const mz = modZs[mi];
-            R.drawIsoBox(ctx, tx + 0.24, ty + 0.30, mz, 0.52, 0.38, 7.8, '#C9D4DF', null, zScale);
-            for (let k = 0; k < 3; k++) {
-              const lit = (mi * 3 + k) / 6 < ratio && hasCharge;
-              R.drawIsoBox(ctx, tx + 0.28 + k * 0.16, ty + 0.685, mz + 1.8, 0.11, 0.015, 4.2, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
-            }
-          }
-        } else if (lv === 3) {
-          const cabXs = [0.14, 0.58];
-          for (let c = 0; c < cabXs.length; c++) {
-            const cx = tx + cabXs[c];
-            R.drawIsoBox(ctx, cx, ty + 0.32, 0.5, 0.24, 0.34, 30.0, '#DDE5EC', null, zScale);
-            R.drawIsoBox(ctx, cx + 0.03, ty + 0.35, 30.5, 0.18, 0.28, 1.8, '#9AA8B6', null, zScale);
-            const litSlots = hasCharge ? Math.max(1, Math.round(ratio * 4)) : 0;
-            for (let k = 0; k < 4; k++) {
-              const lit = k < litSlots;
-              R.drawIsoBox(ctx, cx + 0.04, ty + 0.655, 5.2 + k * 5.6, 0.16, 0.014, 3.6, lit ? ledColor : P.powerDim, { emissive: lit }, zScale);
-            }
-          }
-        } else {
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 0.5, 0.40, 4.5, '#3B4654', { n: 8 }, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 5.0, 0.31, 2.0, '#596878', { n: 8 }, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.17, 25.0, P.powerDim, { n: 14 }, zScale);
-          if (hasCharge) {
-            const litH = Math.max(4.0, 25.0 * ratio);
-            R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.174, litH, ledColor, { n: 14, emissive: true, noTop: true }, zScale);
-          }
-          const ringZs = [11.0, 18.5, 26.0];
-          for (let i = 0; i < ringZs.length; i++) {
-            R.drawCyl(ctx, tx + 0.50, ty + 0.50, ringZs[i], 0.22, 1.6, '#DCE5EE', { n: 14 }, zScale);
-          }
-          const fins = [[0.17, 0.46], [0.75, 0.46], [0.46, 0.17], [0.46, 0.75]];
-          for (let i = 0; i < fins.length; i++) {
-            R.drawIsoBox(ctx, tx + fins[i][0], ty + fins[i][1], 5.0, 0.08, 0.08, 29.0, '#475361', null, zScale);
-          }
-          R.drawCyl(ctx, tx + 0.50, ty + 0.50, 32.0, 0.24, 3.0, '#DCE5EE', { n: 12 }, zScale);
-          R.drawDome(ctx, tx + 0.50, ty + 0.50, 35.0, 0.12, 4.5, hasCharge ? ledColor : P.powerDim, { emissive: hasCharge }, zScale);
-        }
-        break;
-      }
-
-      case 'field_tent':
-      case 'shelter_pod': {
-        const effTier = id === 'shelter_pod' ? 3 : lv;
-        if (effTier <= 1) {
-          R.drawDome(ctx, tx + 0.5, ty + 0.5, 0.5, 0.42, 15.0, '#6E8466', { n: 16 }, zScale);
-          R.drawPolyFace(
-            ctx,
-            [
-              Iso.gridToScreen(tx + 0.40, ty + 0.915, 0.5),
-              Iso.gridToScreen(tx + 0.60, ty + 0.915, 0.5),
-              Iso.gridToScreen(tx + 0.50, ty + 0.915, 10.5)
-            ],
-            '#2E3A2B',
-            1.0,
-            false,
-            false,
-            zScale
-          );
-          R.drawPolyFace(
-            ctx,
-            [
-              Iso.gridToScreen(tx + 0.44, ty + 0.92, 0.5),
-              Iso.gridToScreen(tx + 0.56, ty + 0.92, 0.5),
-              Iso.gridToScreen(tx + 0.50, ty + 0.92, 7.5)
-            ],
-            P.baseLight,
-            1.0,
-            true,
-            false,
-            zScale
-          );
-        } else if (effTier === 2) {
-          R.drawIsoBox(ctx, tx + 0.05, ty + 0.12, 0.5, 0.90, 0.76, 1.6, '#7A5E42', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.07, ty + 0.16, 2.1, 0.41, 0.66, 8.8, '#5F7758', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.50, ty + 0.16, 2.1, 0.43, 0.66, 8.8, '#5F7758', null, zScale);
-          R.drawGable(ctx, tx + 0.06, ty + 0.14, 10.9, 0.43, 0.70, 5.8, '#768F6D', '#5F7758', zScale);
-          R.drawGable(ctx, tx + 0.49, ty + 0.14, 10.9, 0.45, 0.70, 5.8, '#768F6D', '#5F7758', zScale);
-          R.drawIsoBox(ctx, tx + 0.14, ty + 0.825, 4.8, 0.22, 0.015, 4.0, P.baseLight, { emissive: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.64, ty + 0.825, 4.8, 0.22, 0.015, 4.0, P.baseLight, { emissive: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.43, ty + 0.825, 2.1, 0.14, 0.015, 7.2, '#2E3A2B', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.76, ty + 0.28, 14.0, 0.05, 0.05, 5.0, '#8C96A3', null, zScale);
-        } else if (effTier === 3) {
-          R.drawIsoBox(ctx, tx + 0.06, ty + 0.14, 0.5, 0.88, 0.72, 13.0, '#DCE5ED', null, zScale);
-          R.drawGable(ctx, tx + 0.03, ty + 0.11, 13.5, 0.94, 0.78, 8.0, '#EA6A3B', '#DCE5ED', zScale);
-          R.drawIsoBox(ctx, tx + 0.18, ty + 0.86, 4.5, 0.46, 0.015, 5.0, P.baseLight, { emissive: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.72, ty + 0.86, 0.5, 0.13, 0.015, 9.0, '#556370', null, zScale);
-        } else {
-          R.drawIsoBox(ctx, tx + 0.05, ty + 0.12, 0.5, 0.90, 0.76, 12.0, '#C8D4E0', null, zScale);
-          const pillars = [[0.05, 0.12], [0.89, 0.12], [0.05, 0.82], [0.89, 0.82]];
-          for (let i = 0; i < pillars.length; i++) {
-            R.drawIsoBox(ctx, tx + pillars[i][0], ty + pillars[i][1], 0.5, 0.06, 0.06, 12.0, '#4E5B68', null, zScale);
-          }
-          R.drawIsoBox(ctx, tx + 0.14, ty + 0.885, 4.2, 0.42, 0.015, 4.8, P.baseLight, { emissive: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.66, ty + 0.885, 0.5, 0.15, 0.015, 9.2, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.07, ty + 0.14, 12.5, 0.70, 0.68, 10.5, '#DCE5ED', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.77, ty + 0.16, 12.5, 0.18, 0.64, 1.2, '#596673', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.77, ty + 0.77, 13.7, 0.18, 0.03, 3.0, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.92, ty + 0.16, 13.7, 0.03, 0.64, 3.0, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.15, ty + 0.825, 15.8, 0.50, 0.015, 4.6, P.baseLight, { emissive: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.775, ty + 0.28, 15.8, 0.015, 0.34, 4.6, P.baseLight, { emissive: true }, zScale);
-          R.drawGable(ctx, tx + 0.05, ty + 0.11, 23.0, 0.74, 0.74, 6.5, P.habitatRoof || '#D96B38', '#DCE5ED', zScale);
-          R.drawIsoBox(ctx, tx + 0.18, ty + 0.24, 27.8, 0.18, 0.16, 3.4, '#7B8996', null, zScale);
-        }
-        break;
-      }
-
-      case 'gas_heater': {
-        // Mushroom-hood outdoor gas patio heater + glowing amber flame column (unpowered)
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.14, 2, '#5D6873', { n: 12 }, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 2.5, 0.045, 17, '#9AA6B2', { n: 8 }, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.08, 8, '#FFB347', { emissive: true, n: 10 }, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 19.5, 0.30, 1.5, '#D5DEE7', { n: 16 }, zScale);
-        R.drawCone(ctx, tx + 0.5, ty + 0.5, 21.0, 0.30, 4, '#D5DEE7', { n: 16 }, zScale);
-        break;
-      }
-
-      case 'led_floodlight': {
-        // Yellow tactical tripod + cyan power band + floodlight lamp head
-        const top = Iso.gridToScreen(tx + 0.5, ty + 0.5, 15.5);
-        R.drawIsoLine(ctx, top, Iso.gridToScreen(tx + 0.55, ty + 0.16, 0.5), '#EBA834', 1.8, true, zScale);
-        R.drawIsoLine(ctx, top, Iso.gridToScreen(tx + 0.84, ty + 0.66, 0.5), '#EBA834', 1.8, true, zScale);
-        R.drawIsoBox(ctx, tx + 0.28, ty + 0.38, 15.3, 0.44, 0.26, 1.3, isUnpowered ? P.powerDim : P.power, { emissive: !isUnpowered, noTop: true }, zScale);
-        R.drawIsoBox(ctx, tx + 0.28, ty + 0.38, 16.5, 0.44, 0.26, 7, '#59636E', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.31, ty + 0.635, 17.5, 0.38, 0.015, 5, isUnpowered ? '#4B5563' : '#FFF6DA', { emissive: !isUnpowered }, zScale);
-        R.drawIsoLine(ctx, top, Iso.gridToScreen(tx + 0.18, ty + 0.78, 0.5), '#EBA834', 1.8, true, zScale);
-        break;
-      }
-
-      case 'urban_planter': {
-        // Cylindrical concrete pot + soil + rounded organic lush tree canopy
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.30, 7, '#B8C0C7', { n: 16 }, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.26, 0.02, '#5E493A', { n: 16, noSides: true, topEdge: false }, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.045, 6, '#6B4A33', { n: 8 }, zScale);
-        R.drawBlob(ctx, tx + 0.5, ty + 0.5, 12.5, 0.32, 15, '#5DBB63', { n: 14 }, zScale);
-        R.drawBlob(ctx, tx + 0.52, ty + 0.48, 22.5, 0.20, 9, '#77D27A', { n: 12 }, zScale);
-        break;
-      }
-
-      case 'vending_machine': {
-        // Vertical smart drink cabinet + warm glowing showcase window + coin slot & pickup bin
-        R.drawIsoBox(ctx, tx + 0.24, ty + 0.27, 0.5, 0.52, 0.46, 22, '#2E86DE', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.28, ty + 0.725, 8.5, 0.30, 0.015, 11, '#FFF3D6', { emissive: true }, zScale);
-        R.drawIsoBox(ctx, tx + 0.62, ty + 0.725, 10.5, 0.08, 0.015, 6, '#1B4F86', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.30, ty + 0.725, 3.0, 0.32, 0.015, 3, '#14365C', null, zScale);
+        drawBatteryBankBody(ctx, tx, ty, lv, ratio, hasCharge, ledColor, P, zScale);
         break;
       }
 
       case 'repair_bay': {
-        const healCol = P.repairNano || P.heal || '#4ADE80';
         if (lv <= 1) {
-          R.drawIsoBox(ctx, tx + 0.14, ty + 0.16, 0.5, 0.72, 0.68, 2.2, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.18, ty + 0.18, 2.7, 0.42, 0.09, 11.5, '#5D6B7A', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.18, ty + 0.18, 14.2, 0.42, 0.09, 1.2, '#F0A93A', null, zScale);
-          R.drawCyl(ctx, tx + 0.70, ty + 0.28, 2.7, 0.055, 10.2, '#D97724', { n: 10 }, zScale);
-          R.drawCyl(ctx, tx + 0.78, ty + 0.38, 2.7, 0.055, 9.2, '#7B8996', { n: 10 }, zScale);
-          R.drawIsoBox(ctx, tx + 0.22, ty + 0.52, 2.7, 0.30, 0.22, 5.2, '#3A4450', null, zScale);
-          const a = Iso.gridToScreen(tx + 0.42, ty + 0.26, 14.5);
-          const b = Iso.gridToScreen(tx + 0.44, ty + 0.50, 17.5);
-          const c = Iso.gridToScreen(tx + 0.38, ty + 0.58, 12.2);
-          R.drawIsoLine(ctx, a, b, '#F0A93A', 2.4, true, zScale);
-          R.drawIsoLine(ctx, b, c, '#F0A93A', 2.4, true, zScale);
-          R.drawIsoDot(ctx, b, 1.8, '#5D6B7A', false, zScale);
-          R.drawIsoDot(ctx, c, 2.1, healCol, true, zScale);
+          drawFullStaticStructBody(ctx, id, 1, tx, ty, isUnpowered, false, P, steelCol, maxAccent, zScale);
         } else if (lv === 2) {
-          R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 3, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.07, ty + 0.07, 0.5, 0.86, 0.86, 1.2, '#F0A93A', { noTop: true }, zScale);
-          R.drawCyl(ctx, tx + 0.32, ty + 0.32, 3.5, 0.11, 5, '#5D6B7A', { n: 12 }, zScale);
-          const sway = st.isPreview ? 0 : Math.sin(timeSec * 3.2) * 0.8;
-          const a = Iso.gridToScreen(tx + 0.32, ty + 0.32, 8.5);
-          const b = Iso.gridToScreen(tx + 0.46, ty + 0.42, 22.5);
-          const c = Iso.gridToScreen(tx + 0.66, ty + 0.62, 15.5 + sway);
-          R.drawIsoLine(ctx, a, b, '#F0A93A', 3.2, true, zScale);
-          R.drawIsoLine(ctx, b, c, '#F0A93A', 3.2, true, zScale);
-          R.drawIsoDot(ctx, b, 2.2, '#5D6B7A', false, zScale);
-          R.drawIsoDot(ctx, c, 2.6, healCol, true, zScale);
+          drawRepairBayLv2Static(ctx, tx, ty, zScale);
+          drawRepairBayLv2Arm(ctx, st, tx, ty, healCol, timeSec, zScale);
         } else {
-          R.drawIsoBox(ctx, tx + 0.05, ty + 0.05, 0.5, 0.90, 0.90, 3.6, '#3E4956', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.045, ty + 0.045, 1.2, 0.91, 0.91, 1.2, '#F0A93A', { noTop: true }, zScale);
-          R.drawRingGlow(ctx, tx + 0.50, ty + 0.58, 4.2, 0.25, 1.2, healCol, true, 20, zScale);
-          R.drawIsoRibbon(ctx, Iso.gridToScreen(tx + 0.42, ty + 0.58, 4.2), Iso.gridToScreen(tx + 0.58, ty + 0.58, 4.2), 1.0, healCol, true, zScale);
-          R.drawIsoRibbon(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, 4.2), Iso.gridToScreen(tx + 0.50, ty + 0.66, 4.2), 1.0, healCol, true, zScale);
-          R.drawIsoBox(ctx, tx + 0.14, ty + 0.10, 4.1, 0.72, 0.20, 10.5, '#596673', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.28, ty + 0.305, 6.2, 0.44, 0.015, 5.2, healCol, { emissive: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.16, ty + 0.14, 14.6, 0.06, 0.06, 5.2, '#F0A93A', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.78, ty + 0.14, 14.6, 0.06, 0.06, 5.2, '#F0A93A', null, zScale);
-          const bob = st.isPreview ? 0 : Math.sin(timeSec * 3.0 + tx + ty) * 0.8;
-          const dz = 23.8 + bob;
-          const rotors = [[-0.16, -0.16], [0.16, -0.16], [-0.16, 0.16], [0.16, 0.16]];
-          for (let i = 0; i < rotors.length; i++) {
-            const ox = rotors[i][0];
-            const oy = rotors[i][1];
-            R.drawIsoLine(
-              ctx,
-              Iso.gridToScreen(tx + 0.50, ty + 0.56, dz + 1.4),
-              Iso.gridToScreen(tx + 0.50 + ox, ty + 0.56 + oy, dz + 2.2),
-              '#6B7A8A',
-              1.6,
-              true,
-              zScale
-            );
-            R.drawRingGlow(ctx, tx + 0.50 + ox, ty + 0.56 + oy, dz + 2.4, 0.075, 0.7, '#C9D3DE', false, 12, zScale);
-          }
-          R.drawIsoBox(ctx, tx + 0.41, ty + 0.47, dz, 0.18, 0.18, 3.2, '#E3EBF2', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.45, ty + 0.51, dz + 3.2, 0.10, 0.10, 1.4, healCol, { emissive: true }, zScale);
-          R.drawIsoRibbon(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.56, dz), Iso.gridToScreen(tx + 0.50, ty + 0.56, 4.4), 0.75, healCol, true, zScale);
+          drawRepairBayLv3Static(ctx, tx, ty, healCol, zScale);
+          drawRepairBayLv3Drone(ctx, st, tx, ty, healCol, timeSec, zScale);
         }
         break;
       }
 
-      case 'lounge_set': {
-        // Striped conical parasol + round patio table + 2 lounge stools
-        R.drawIsoBox(ctx, tx + 0.16, ty + 0.58, 0.5, 0.16, 0.16, 5, '#C9D3DD', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.62, ty + 0.18, 0.5, 0.16, 0.16, 5, '#C9D3DD', null, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.5, 0.17, 7, '#E8EEF5', { n: 16 }, zScale);
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 7.5, 0.025, 15, '#A0AEC0', { n: 6 }, zScale);
-        R.drawCone(ctx, tx + 0.5, ty + 0.5, 21.5, 0.44, 6, '#F4E6C8', { alt: '#E8A04A', n: 12 }, zScale);
-        break;
-      }
-
-      case 'arcade_neon': {
-        // Protruding control deck + overhanging top marquee ('ㄷ' side profile) + cyan power band
-        R.drawIsoBox(ctx, tx + 0.255, ty + 0.215, 1.4, 0.49, 0.45, 1.3, isUnpowered ? P.powerDim : P.power, { emissive: !isUnpowered, noTop: true }, zScale);
-        R.drawIsoBox(ctx, tx + 0.26, ty + 0.22, 0.5, 0.48, 0.44, 20, '#3A2C54', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.27, ty + 0.66, 0.5, 0.46, 0.20, 9, '#2B2040', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.29, ty + 0.855, 2.5, 0.42, 0.015, 5, isUnpowered ? '#4D3B59' : '#FF5CE1', { emissive: !isUnpowered }, zScale);
-        R.drawIsoBox(ctx, tx + 0.30, ty + 0.655, 10.5, 0.40, 0.015, 8, isUnpowered ? '#354856' : '#52E8FF', { emissive: !isUnpowered }, zScale);
-        R.drawIsoBox(ctx, tx + 0.24, ty + 0.20, 20.5, 0.52, 0.62, 2, '#2B2040', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.25, ty + 0.81, 21.0, 0.50, 0.015, 3.4, isUnpowered ? '#4D3B59' : '#C742E8', { emissive: !isUnpowered }, zScale);
-        R.drawIsoBox(ctx, tx + 0.26, ty + 0.22, 22.5, 0.48, 0.30, 4, '#3A2C54', null, zScale);
-        break;
-      }
-
       case 'boss_trophy': {
-        // Tapered dark pedestal + gold trim + levitating golden octahedron hologram
-        R.drawFrustum(ctx, tx + 0.18, ty + 0.18, 0.5, 0.64, 0.64, 10, 0.06, '#2E3744', null, zScale);
-        R.drawIsoBox(ctx, tx + 0.24, ty + 0.24, 10.5, 0.52, 0.52, 1.5, '#D4AF37', null, zScale);
-        const bobZ = 25.5 + Math.sin(timeSec * 3.2) * 1.8;
-        R.drawOctahedron(ctx, tx + 0.5, ty + 0.5, bobZ, 0.14, 9, '#FFE066', true, zScale);
+        drawBossTrophyStatic(ctx, tx, ty, zScale);
+        drawBossTrophyOrb(ctx, tx, ty, timeSec, zScale);
+        break;
+      }
+
+      default: {
+        drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, !powered, P, steelCol, maxAccent, zScale);
         break;
       }
     }

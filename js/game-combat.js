@@ -4,6 +4,31 @@ window.ZS = window.ZS || {};
   const G = ZS._Game;
   const { DATA, N, PROD_SAVE_KEY, DEV_SAVE_KEY, SETTINGS_KEY, state } = G;
 
+  const BUCKET_CELLS = N * N;
+  const zombieBucketHead = new Int16Array(BUCKET_CELLS);
+  let zombieBucketNext = new Int16Array(256);
+  G._zombieBucketsDirty = true;
+
+  function rebuildZombieSpatialBuckets() {
+    const zList = state.zombies;
+    const count = zList.length;
+    if (count > zombieBucketNext.length) {
+      let nextCap = zombieBucketNext.length;
+      while (nextCap < count) nextCap *= 2;
+      zombieBucketNext = new Int16Array(nextCap);
+    }
+    zombieBucketHead.fill(-1);
+    for (let i = 0; i < count; i++) {
+      const z = zList[i];
+      const bx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
+      const by = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
+      const cell = by * N + bx;
+      zombieBucketNext[i] = zombieBucketHead[cell];
+      zombieBucketHead[cell] = i;
+    }
+    G._zombieBucketsDirty = false;
+  }
+
   // ================= NIGHT WAVE & COMBAT =================
   function allocateSidesByWeights(totalCount, weights) {
     const out = [];
@@ -213,6 +238,7 @@ window.ZS = window.ZS || {};
       facingAngle: Math.atan2(hqCy - gy, hqCx - gx),
       seed: Math.random() * 10
     });
+    G._zombieBucketsDirty = true;
 
     if (def.isBoss) {
       G.triggerScreenShake(5.5, 0.36);
@@ -433,7 +459,8 @@ window.ZS = window.ZS || {};
         }
       }
 
-      // 4. Update Defenders & Auto-Turrets + Delayed Burst Shots
+      // 4. Rebuild 22x22 Spatial Zombie Buckets, Update Defenders & Auto-Turrets + Delayed Burst Shots
+      rebuildZombieSpatialBuckets();
       updateDefenders(dt);
       updateBurstQueue(dt);
 
@@ -589,22 +616,37 @@ window.ZS = window.ZS || {};
         walker: 0
       };
 
-      // Acquire target
+      // Acquire target via 22x22 spatial zombie buckets
+      if (G._zombieBucketsDirty) rebuildZombieSpatialBuckets();
+      const range = eff.range;
+      const rMinX = Math.max(0, Math.floor(cx - range));
+      const rMaxX = Math.min(N - 1, Math.floor(cx + range));
+      const rMinY = Math.max(0, Math.floor(cy - range));
+      const rMaxY = Math.min(N - 1, Math.floor(cy + range));
+      const hqCx = DATA.HQ_POS.x + 0.5;
+      const hqCy = DATA.HQ_POS.y + 0.5;
       let bestIdx = -1;
       let bestScore = -1e9;
-      for (let i = 0; i < state.zombies.length; i++) {
-        const z = state.zombies[i];
-        const d = Math.hypot(z.x - cx, z.y - cy);
-        if (d > eff.range) continue;
-
-        // Priority table for sniper (boss > spitter > shocker > brute > leaper > runner > walker), else closest to HQ / turret
-        const hqDist = Math.hypot(z.x - (DATA.HQ_POS.x + 0.5), z.y - (DATA.HQ_POS.y + 0.5));
-        const score = def.targetMode === 'strongest'
-          ? (SNIPER_PRIORITY[z.type] || 0) * 100000 + z.hp * 10 - hqDist
-          : -hqDist * 2 - d;
-        if (score > bestScore) {
-          bestScore = score;
-          bestIdx = i;
+      for (let by = rMinY; by <= rMaxY; by++) {
+        const rowOff = by * N;
+        for (let bx = rMinX; bx <= rMaxX; bx++) {
+          let i = zombieBucketHead[rowOff + bx];
+          while (i !== -1) {
+            const z = state.zombies[i];
+            const d = Math.hypot(z.x - cx, z.y - cy);
+            if (d <= range) {
+              // Priority table for sniper (boss > spitter > shocker > brute > leaper > runner > walker), else closest to HQ / turret
+              const hqDist = Math.hypot(z.x - hqCx, z.y - hqCy);
+              const score = def.targetMode === 'strongest'
+                ? (SNIPER_PRIORITY[z.type] || 0) * 100000 + z.hp * 10 - hqDist
+                : -hqDist * 2 - d;
+              if (score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
+              }
+            }
+            i = zombieBucketNext[i];
+          }
         }
       }
 
@@ -1019,23 +1061,42 @@ window.ZS = window.ZS || {};
 
       const hitList = p.hitUids || [];
 
-      // Hit detection against zombies (swept segment prevents fast sniper rounds from tunneling at dt=0.05)
+      // Hit detection against zombies (22x22 spatial bucket neighborhood + swept segment)
+      if (G._zombieBucketsDirty) rebuildZombieSpatialBuckets();
       const segDx = p.x - prevX;
       const segDy = p.y - prevY;
       const segLenSq = segDx * segDx + segDy * segDy;
+      const minX = (prevX < p.x ? prevX : p.x) - 0.42;
+      const maxX = (prevX > p.x ? prevX : p.x) + 0.42;
+      const minY = (prevY < p.y ? prevY : p.y) - 0.42;
+      const maxY = (prevY > p.y ? prevY : p.y) + 0.42;
+      const cMinX = Math.max(0, Math.floor(minX));
+      const cMaxX = Math.min(N - 1, Math.floor(maxX));
+      const cMinY = Math.max(0, Math.floor(minY));
+      const cMaxY = Math.min(N - 1, Math.floor(maxY));
       let hitIdx = -1;
       let bestT = 2;
-      for (let zIdx = 0; zIdx < state.zombies.length; zIdx++) {
-        const z = state.zombies[zIdx];
-        if (z.uid && hitList.includes(z.uid)) continue;
-        const t = segLenSq > 1e-8
-          ? Math.max(0, Math.min(1, ((z.x - prevX) * segDx + (z.y - prevY) * segDy) / segLenSq))
-          : 0;
-        const nearX = prevX + segDx * t;
-        const nearY = prevY + segDy * t;
-        if (Math.hypot(z.x - nearX, z.y - nearY) <= 0.42 && t < bestT) {
-          bestT = t;
-          hitIdx = zIdx;
+      for (let cy = cMinY; cy <= cMaxY; cy++) {
+        const rowOff = cy * N;
+        for (let cx = cMinX; cx <= cMaxX; cx++) {
+          let zIdx = zombieBucketHead[rowOff + cx];
+          while (zIdx !== -1) {
+            const z = state.zombies[zIdx];
+            if (!(z.uid && hitList.indexOf(z.uid) !== -1)) {
+              const t = segLenSq > 1e-8
+                ? Math.max(0, Math.min(1, ((z.x - prevX) * segDx + (z.y - prevY) * segDy) / segLenSq))
+                : 0;
+              const nearX = prevX + segDx * t;
+              const nearY = prevY + segDy * t;
+              const dx = z.x - nearX;
+              const dy = z.y - nearY;
+              if (dx * dx + dy * dy <= 0.1764 && t < bestT) {
+                bestT = t;
+                hitIdx = zIdx;
+              }
+            }
+            zIdx = zombieBucketNext[zIdx];
+          }
         }
       }
 
@@ -1125,6 +1186,7 @@ window.ZS = window.ZS || {};
   }
 
   Object.assign(G, {
+    rebuildZombieSpatialBuckets,
     allocateSidesByWeights,
     computeWaveHpScale,
     computeBossHpScale,

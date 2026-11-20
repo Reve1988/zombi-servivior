@@ -4,6 +4,8 @@ window.ZS = window.ZS || {};
   const R = ZS._Renderer;
   const { lightCanvas, lightCtx, eyeHaloCache, thumbnailCache } = R;
   const coldRimCache = new Map();
+  const _holePt = { x: 0, y: 0 };
+  const _glowPt = { x: 0, y: 0 };
 
   function getColdRimStamp(rimRatio) {
     const key = rimRatio.toFixed(3);
@@ -49,7 +51,7 @@ window.ZS = window.ZS || {};
     function punchHole(gx, gy, zPx, radiusTiles, strength) {
       const rPx = radiusTiles * 36 * zScale;
       if (rPx <= 0 || strength <= 0.002) return;
-      const p = Iso.gridToScreen(gx, gy, zPx);
+      const p = Iso.projectTo(gx, gy, zPx, _holePt);
       if (p.x + rPx < 0 || p.x - rPx > w || p.y + rPx < 0 || p.y - rPx > h) return;
       const lx = p.x * scaleX;
       const ly = p.y * scaleY;
@@ -191,22 +193,60 @@ window.ZS = window.ZS || {};
       ctx.restore();
     }
 
-    // Subtle colored atmospheric bloom (pre-baked 64x64 glow stamps + radius culling)
+    // Subtle colored atmospheric bloom (cluster-merged pre-baked 64x64 glow stamps + radius culling)
     const bloomAlpha = state.nightAlpha * 0.60;
     if (bloomAlpha > 0.005 && colorGlows.length > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = bloomAlpha;
+      const mergeR = 40 * zScale;
+      const mergeR2 = mergeR * mergeR;
+      const glowClusters = [];
       for (let i = 0; i < colorGlows.length; i++) {
         const g = colorGlows[i];
         const rPx = g.r * 34 * zScale;
         if (rPx <= 0) continue;
-        const p = Iso.gridToScreen(g.gx, g.gy, g.z);
+        const p = Iso.projectTo(g.gx, g.gy, g.z, _glowPt);
         if (p.x + rPx < 0 || p.x - rPx > w || p.y + rPx < 0 || p.y - rPx > h) continue;
-        const stamp = R.getGlowStamp(g.color, 0.04);
-        ctx.drawImage(stamp, p.x - rPx, p.y - rPx, rPx * 2, rPx * 2);
+        let matched = null;
+        for (let j = glowClusters.length - 1; j >= 0; j--) {
+          const cl = glowClusters[j];
+          if (cl.color !== g.color) continue;
+          const dx = p.x - cl.x;
+          const dy = p.y - cl.y;
+          if (dx * dx + dy * dy <= mergeR2) {
+            matched = cl;
+            break;
+          }
+        }
+        if (matched) {
+          const n = matched.count;
+          matched.x = (matched.x * n + p.x) / (n + 1);
+          matched.y = (matched.y * n + p.y) / (n + 1);
+          matched.count = n + 1;
+          if (rPx > matched.maxR) matched.maxR = rPx;
+        } else {
+          glowClusters.push({
+            color: g.color,
+            x: p.x,
+            y: p.y,
+            maxR: rPx,
+            count: 1
+          });
+        }
       }
-      ctx.restore();
+      if (glowClusters.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < glowClusters.length; i++) {
+          const cl = glowClusters[i];
+          const rad = cl.count === 1
+            ? cl.maxR
+            : Math.min(cl.maxR * 1.35, cl.maxR + (cl.count - 1) * 7 * zScale);
+          const boost = cl.count === 1 ? 1.0 : Math.min(1.85, 1 + (cl.count - 1) * 0.22);
+          const stamp = R.getGlowStamp(cl.color, 0.04);
+          ctx.globalAlpha = Math.min(1, bloomAlpha * boost);
+          ctx.drawImage(stamp, cl.x - rad, cl.y - rad, rad * 2, rad * 2);
+        }
+        ctx.restore();
+      }
     }
   }
 
@@ -705,11 +745,14 @@ window.ZS = window.ZS || {};
       } else if (item.kind === 'zombie') {
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
-        const m = R.getZombiePoseMetrics(z, zDef, timeSec);
+        const m = z._framePose || R.getZombiePoseMetrics(z, zDef, timeSec);
 
         if (state.nightAlpha > 0.05) {
-          const eyes = R.getZombieEyePositions(z, zDef, timeSec, zScale);
-          if (!R.isZombieEyesOccluded(state, z, eyes, zScale)) {
+          const eyes = z._frameEyes || R.getZombieEyePositions(z, zDef, timeSec, zScale, m);
+          const occluded = z._frameEyes != null && z._frameEyesOccluded !== undefined
+            ? z._frameEyesOccluded
+            : R.isZombieEyesOccluded(state, z, eyes, zScale);
+          if (!occluded) {
             nightEyes.push({ eyes, zDef });
           }
         }

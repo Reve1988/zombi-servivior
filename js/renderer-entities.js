@@ -95,17 +95,24 @@ window.ZS = window.ZS || {};
     return { sc, type, stride, bob, legZ, bodyBaseZ, leapLift, crouch, ang, fx, fy, px, py, headFwd, headZ, headW, headH, topZ };
   }
 
-  function getZombieEyePositions(z, zDef, timeSec, zScale) {
+  const _eyeC = { x: 0, y: 0 };
+  const _eyeL = { x: 0, y: 0 };
+  const _eyeR = { x: 0, y: 0 };
+  const _occTop = { x: 0, y: 0 };
+  const _occBot = { x: 0, y: 0 };
+  const _zBasePos = { x: 0, y: 0 };
+
+  function getZombieEyePositions(z, zDef, timeSec, zScale, prePose) {
     const Iso = ZS.Iso;
-    const m = getZombiePoseMetrics(z, zDef, timeSec);
+    const m = prePose || getZombiePoseMetrics(z, zDef, timeSec);
     const eyeWorldX = z.x + m.fx * (m.headFwd + m.headW * 0.44);
     const eyeWorldY = z.y + m.fy * (m.headFwd + m.headW * 0.44);
     const eyeWorldZ = m.headZ + m.headH * 0.46;
 
     const sepWorld = m.headW * 0.24;
-    const cPos = Iso.gridToScreen(eyeWorldX, eyeWorldY, eyeWorldZ);
-    const lPos = Iso.gridToScreen(eyeWorldX - m.px * sepWorld, eyeWorldY - m.py * sepWorld, eyeWorldZ);
-    const rPos = Iso.gridToScreen(eyeWorldX + m.px * sepWorld, eyeWorldY + m.py * sepWorld, eyeWorldZ);
+    const cPos = Iso.projectTo(eyeWorldX, eyeWorldY, eyeWorldZ, _eyeC);
+    const lPos = Iso.projectTo(eyeWorldX - m.px * sepWorld, eyeWorldY - m.py * sepWorld, eyeWorldZ, _eyeL);
+    const rPos = Iso.projectTo(eyeWorldX + m.px * sepWorld, eyeWorldY + m.py * sepWorld, eyeWorldZ, _eyeR);
 
     return {
       cx: cPos.x,
@@ -153,8 +160,8 @@ window.ZS = window.ZS || {};
       const hqLv = state.hqLevel || 1;
       const hqOccH = hqLv === 1 ? 18 : hqLv === 2 ? 26 : hqLv === 3 ? 36 : 46;
       const structH = st.id === 'command_hq' ? hqOccH : R.getStructVisualTopZ(st.id, st.level || 1);
-      const topPos = Iso.gridToScreen(sx + 0.5, sy + 0.5, structH);
-      const botPos = Iso.gridToScreen(sx + 1, sy + 1, 0);
+      const topPos = Iso.projectTo(sx + 0.5, sy + 0.5, structH, _occTop);
+      const botPos = Iso.projectTo(sx + 1, sy + 1, 0, _occBot);
       const halfW = 26 * zScale;
       if (
         eyes.cx >= topPos.x - halfW &&
@@ -172,13 +179,13 @@ window.ZS = window.ZS || {};
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
     const zDef = ZS.DATA.ZOMBIES[z.type] || ZS.DATA.ZOMBIES.walker;
-    const m = getZombiePoseMetrics(z, zDef, timeSec);
+    const isGhost = !!(opts && opts.isGhost);
+    const m = !isGhost && z._framePose ? z._framePose : getZombiePoseMetrics(z, zDef, timeSec);
     const { sc, type, stride, legZ, bodyBaseZ, fx, fy, px, py } = m;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
-    const isGhost = !!(opts && opts.isGhost);
     const isNightLit = !!(state && state.nightAlpha > 0.35);
 
-    const basePos = Iso.gridToScreen(z.x, z.y, 1);
+    const basePos = Iso.projectTo(z.x, z.y, 1, _zBasePos);
 
     // Boss Siege Charge trailing afterimages (3 echoes: alpha 0.18 / 0.30 / 0.42)
     if (zDef.isBoss && !isGhost && !isSil && z.chargeState && z.chargeState.phase === 'dash') {
@@ -191,7 +198,10 @@ window.ZS = window.ZS || {};
           ...z,
           x: cs.startX + (z.x - cs.startX) * f,
           y: cs.startY + (z.y - cs.startY) * f,
-          hitFlash: 0
+          hitFlash: 0,
+          _framePose: null,
+          _frameEyes: null,
+          _frameEyesOccluded: false
         };
         ctx.save();
         ctx.globalAlpha = alphas[tIdx];
@@ -582,7 +592,7 @@ window.ZS = window.ZS || {};
 
     // Depth-sorted daytime/lit eyes (naturally occluded by foreground 3D structures)
     if (!isGhost) {
-      const eyes = getZombieEyePositions(z, zDef, timeSec, zScale);
+      const eyes = z._frameEyes || getZombieEyePositions(z, zDef, timeSec, zScale, m);
       drawZombieEyePinpoints(ctx, eyes, zDef, zScale, P);
 
       // Slowed EMP cyan tint ring
