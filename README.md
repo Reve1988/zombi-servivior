@@ -1,4 +1,4 @@
-# OUTPOST ZERO — 모던 전술 디펜스 & 쉘터 빌더
+# Dead-End Defense — 모던 전술 디펜스 & 쉘터 빌더
 
 순수 **HTML / CSS / JavaScript (Canvas 2D & Web Audio API)** 만으로 제작한 아이소메트릭(쿼터뷰) 2.5D 미니어처 복셀 좀비 디펜스 & 기지 꾸미기 게임입니다.
 
