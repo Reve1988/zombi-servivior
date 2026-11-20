@@ -13,7 +13,7 @@ window.ZS = window.ZS || {};
   let panStart = { x: 0, y: 0 };
 
   function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const w = window.innerWidth;
     const h = window.innerHeight;
     canvas.width = Math.floor(w * dpr);

@@ -45,7 +45,9 @@ window.ZS = window.ZS || {};
     emissiveList: null,
     activeTrapTiles: null,
     cachedTerrainN: 0,
-    terrainMeta: null
+    terrainMeta: null,
+    stampCacheBakes: 0,
+    stampCacheHits: 0
   });
 
   function tileHash01(x, y, salt) {
@@ -255,8 +257,10 @@ window.ZS = window.ZS || {};
     return sx >= -padX && sx <= w + padX && sy >= -padTop && sy <= h + padBot;
   }
 
+  const _visPt = { x: 0, y: 0 };
+
   function isGridVisible(gx, gy, padX, padTop, padBot, w, h) {
-    const p = ZS.Iso.gridToScreen(gx, gy, 0);
+    const p = ZS.Iso.projectTo(gx, gy, 0, _visPt);
     return p.x >= -padX && p.x <= w + padX && p.y >= -padTop && p.y <= h + padBot;
   }
 
@@ -779,10 +783,16 @@ window.ZS = window.ZS || {};
         drawPerimeterProp(ctx, item.ep, zScale);
         R.emissiveList = nightEmissives;
       } else if (item.kind === 'zombie') {
-        const zDef = DATA.ZOMBIES[item.z.type] || DATA.ZOMBIES.walker;
-        const zEyes = nightEmissives ? R.getZombieEyePositions(item.z, zDef, timeSec, zScale) : null;
-        R.emissiveList = nightEmissives && zEyes && !R.isZombieEyesOccluded(state, item.z, zEyes, zScale) ? nightEmissives : null;
-        R.drawZombie(ctx, item.z, timeSec, zScale, state);
+        const z = item.z;
+        const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
+        const pose = R.getZombiePoseMetrics(z, zDef, timeSec);
+        const eyes = R.getZombieEyePositions(z, zDef, timeSec, zScale, pose);
+        const occluded = nightEmissives ? R.isZombieEyesOccluded(state, z, eyes, zScale) : false;
+        z._framePose = pose;
+        z._frameEyes = eyes;
+        z._frameEyesOccluded = occluded;
+        R.emissiveList = nightEmissives && eyes && !occluded ? nightEmissives : null;
+        R.drawZombie(ctx, z, timeSec, zScale, state);
         R.emissiveList = nightEmissives;
       } else if (item.kind === 'dying_zombie') {
         R.emissiveList = null;
@@ -835,7 +845,7 @@ window.ZS = window.ZS || {};
     if (!isSil && state.nightAlpha > 0.02) {
       R.drawNightLighting(ctx, w, h, state, powered, timeSec, zScale);
       if (nightEmissives && nightEmissives.length > 0) {
-        drawEmissivePass(ctx, nightEmissives, state.nightAlpha, zScale, w, h);
+        R.drawEmissivePass(ctx, nightEmissives, state.nightAlpha, zScale, w, h);
       }
     }
 
@@ -843,6 +853,15 @@ window.ZS = window.ZS || {};
     // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout OFF Warnings
     if (!isSil) {
       R.drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale, w, h);
+    }
+
+    for (let i = 0; i < renderList.length; i++) {
+      if (renderList[i].kind === 'zombie') {
+        const z = renderList[i].z;
+        z._framePose = null;
+        z._frameEyes = null;
+        z._frameEyesOccluded = false;
+      }
     }
 
     // 10. Floating Texts (Damage, Loot, Buff Callouts)
@@ -1182,6 +1201,8 @@ window.ZS = window.ZS || {};
     }
   }
 
+  const _circPt = { x: 0, y: 0 };
+
   function drawIsoCircle(ctx, cx, cy, radiusTiles, strokeColor, fillColor, lineDash, lineWidth) {
     const Iso = ZS.Iso;
     const steps = 48;
@@ -1190,7 +1211,7 @@ window.ZS = window.ZS || {};
       const ang = (i / steps) * Math.PI * 2;
       const gx = cx + Math.cos(ang) * radiusTiles;
       const gy = cy + Math.sin(ang) * radiusTiles;
-      const p = Iso.gridToScreen(gx, gy, 2);
+      const p = Iso.projectTo(gx, gy, 2, _circPt);
       if (i === 0) ctx.moveTo(p.x, p.y);
       else ctx.lineTo(p.x, p.y);
     }
@@ -1512,49 +1533,80 @@ window.ZS = window.ZS || {};
       ctx.stroke();
     }
     if (isEmissive && R.emissiveList && !window.ZS_SILHOUETTE_MODE) {
-      R.emissiveList.push({ kind: 'poly', pts, fill, hex });
+      const snap = new Array(pts.length);
+      for (let i = 0; i < pts.length; i++) {
+        snap[i] = { x: pts[i].x, y: pts[i].y };
+      }
+      R.emissiveList.push({ kind: 'poly', pts: snap, fill, hex });
     }
   }
+
+  const _ibA = { x: 0, y: 0 };
+  const _ibB = { x: 0, y: 0 };
+  const _ibC = { x: 0, y: 0 };
+  const _ibD = { x: 0, y: 0 };
+  const _ibBb = { x: 0, y: 0 };
+  const _ibCb = { x: 0, y: 0 };
+  const _ibDb = { x: 0, y: 0 };
+  const _ibLeftQuad = [_ibD, _ibC, _ibCb, _ibDb];
+  const _ibRightQuad = [_ibC, _ibB, _ibBb, _ibCb];
+  const _ibTopQuad = [_ibA, _ibB, _ibC, _ibD];
 
   function drawIsoBox(ctx, gx, gy, z, w, d, h, hex, opts, zScale) {
     const Iso = ZS.Iso;
-    const o = opts || {};
-    const em = !!o.emissive;
+    const em = !!(opts && opts.emissive);
+    const withEdge = !(opts && opts.edge === false);
+    const noTop = !!(opts && opts.noTop);
     const zTop = z + h;
-    const A = Iso.gridToScreen(gx, gy, zTop);
-    const B = Iso.gridToScreen(gx + w, gy, zTop);
-    const C = Iso.gridToScreen(gx + w, gy + d, zTop);
-    const D = Iso.gridToScreen(gx, gy + d, zTop);
+    Iso.projectTo(gx, gy, zTop, _ibA);
+    Iso.projectTo(gx + w, gy, zTop, _ibB);
+    Iso.projectTo(gx + w, gy + d, zTop, _ibC);
+    Iso.projectTo(gx, gy + d, zTop, _ibD);
     if (h > 0) {
-      const Bb = Iso.gridToScreen(gx + w, gy, z);
-      const Cb = Iso.gridToScreen(gx + w, gy + d, z);
-      const Db = Iso.gridToScreen(gx, gy + d, z);
-      drawPolyFace(ctx, [D, C, Cb, Db], hex, 0.82, em, o.edge !== false, zScale);
-      drawPolyFace(ctx, [C, B, Bb, Cb], hex, 0.66, em, o.edge !== false, zScale);
+      Iso.projectTo(gx + w, gy, z, _ibBb);
+      Iso.projectTo(gx + w, gy + d, z, _ibCb);
+      Iso.projectTo(gx, gy + d, z, _ibDb);
+      drawPolyFace(ctx, _ibLeftQuad, hex, 0.82, em, withEdge, zScale);
+      drawPolyFace(ctx, _ibRightQuad, hex, 0.66, em, withEdge, zScale);
     }
-    if (!o.noTop) {
-      drawPolyFace(ctx, [A, B, C, D], hex, 1.0, em, o.edge !== false, zScale);
+    if (!noTop) {
+      drawPolyFace(ctx, _ibTopQuad, hex, 1.0, em, withEdge, zScale);
     }
   }
 
+  const _frB0 = { x: 0, y: 0 };
+  const _frB1 = { x: 0, y: 0 };
+  const _frB2 = { x: 0, y: 0 };
+  const _frB3 = { x: 0, y: 0 };
+  const _frT0 = { x: 0, y: 0 };
+  const _frT1 = { x: 0, y: 0 };
+  const _frT2 = { x: 0, y: 0 };
+  const _frT3 = { x: 0, y: 0 };
+  const _frFace0 = [_frB0, _frB1, _frT1, _frT0];
+  const _frFace1 = [_frB0, _frB3, _frT3, _frT0];
+  const _frFace2 = [_frB3, _frB2, _frT2, _frT3];
+  const _frFace3 = [_frB2, _frB1, _frT1, _frT2];
+  const _frFaceTop = [_frT0, _frT1, _frT2, _frT3];
+
   function drawFrustumXY(ctx, gx, gy, z, w, d, h, ix, iy, hex, opts, zScale) {
     const Iso = ZS.Iso;
-    const o = opts || {};
-    const em = !!o.emissive;
-    const b0 = Iso.gridToScreen(gx, gy, z);
-    const b1 = Iso.gridToScreen(gx + w, gy, z);
-    const b2 = Iso.gridToScreen(gx + w, gy + d, z);
-    const b3 = Iso.gridToScreen(gx, gy + d, z);
-    const t0 = Iso.gridToScreen(gx + ix, gy + iy, z + h);
-    const t1 = Iso.gridToScreen(gx + w - ix, gy + iy, z + h);
-    const t2 = Iso.gridToScreen(gx + w - ix, gy + d - iy, z + h);
-    const t3 = Iso.gridToScreen(gx + ix, gy + d - iy, z + h);
-    drawPolyFace(ctx, [b0, b1, t1, t0], hex, 0.95, em, true, zScale);
-    drawPolyFace(ctx, [b0, b3, t3, t0], hex, 0.95, em, true, zScale);
-    drawPolyFace(ctx, [b3, b2, t2, t3], hex, 0.86, em, true, zScale);
-    drawPolyFace(ctx, [b2, b1, t1, t2], hex, 0.70, em, true, zScale);
-    if (!o.noTop) {
-      drawPolyFace(ctx, [t0, t1, t2, t3], hex, 1.0, em, true, zScale);
+    const em = !!(opts && opts.emissive);
+    const noTop = !!(opts && opts.noTop);
+    const zTop = z + h;
+    Iso.projectTo(gx, gy, z, _frB0);
+    Iso.projectTo(gx + w, gy, z, _frB1);
+    Iso.projectTo(gx + w, gy + d, z, _frB2);
+    Iso.projectTo(gx, gy + d, z, _frB3);
+    Iso.projectTo(gx + ix, gy + iy, zTop, _frT0);
+    Iso.projectTo(gx + w - ix, gy + iy, zTop, _frT1);
+    Iso.projectTo(gx + w - ix, gy + d - iy, zTop, _frT2);
+    Iso.projectTo(gx + ix, gy + d - iy, zTop, _frT3);
+    drawPolyFace(ctx, _frFace0, hex, 0.95, em, true, zScale);
+    drawPolyFace(ctx, _frFace1, hex, 0.95, em, true, zScale);
+    drawPolyFace(ctx, _frFace2, hex, 0.86, em, true, zScale);
+    drawPolyFace(ctx, _frFace3, hex, 0.70, em, true, zScale);
+    if (!noTop) {
+      drawPolyFace(ctx, _frFaceTop, hex, 1.0, em, true, zScale);
     }
   }
 
@@ -1567,51 +1619,91 @@ window.ZS = window.ZS || {};
     return 0.74 + 0.08 * t;
   }
 
-  function drawCyl(ctx, cx, cy, z, r, h, hex, opts, zScale) {
-    const Iso = ZS.Iso;
-    const o = opts || {};
-    const n = o.n || 14;
-    const em = !!o.emissive;
-    const pts = [];
+  const CYL_LUT = Object.create(null);
+  const _cylSideTop0 = { x: 0, y: 0 };
+  const _cylSideTop1 = { x: 0, y: 0 };
+  const _cylSideBot1 = { x: 0, y: 0 };
+  const _cylSideBot0 = { x: 0, y: 0 };
+  const _cylQuad = [_cylSideTop0, _cylSideTop1, _cylSideBot1, _cylSideBot0];
+
+  function getCylLut(n) {
+    let lut = CYL_LUT[n];
+    if (lut) return lut;
+    const cos = new Float64Array(n);
+    const sin = new Float64Array(n);
+    const topPts = new Array(n);
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2;
-      pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+      cos[k] = Math.cos(a);
+      sin[k] = Math.sin(a);
+      topPts[k] = { x: 0, y: 0 };
     }
-    if (!o.noSides && h > 0) {
-      const sides = [];
-      for (let k = 0; k < n; k++) {
-        const am = ((k + 0.5) / n) * Math.PI * 2;
-        const nx = Math.cos(am);
-        const ny = Math.sin(am);
-        if (nx + ny > -0.25) sides.push({ k, nx, ny });
-      }
-      sides.sort((a, b) => a.nx + a.ny - (b.nx + b.ny));
-      for (let i = 0; i < sides.length; i++) {
-        const s = sides[i];
-        const p0 = pts[s.k];
-        const p1 = pts[(s.k + 1) % n];
-        drawPolyFace(
-          ctx,
-          [
-            Iso.gridToScreen(p0[0], p0[1], z + h),
-            Iso.gridToScreen(p1[0], p1[1], z + h),
-            Iso.gridToScreen(p1[0], p1[1], z),
-            Iso.gridToScreen(p0[0], p0[1], z)
-          ],
-          hex,
-          calcSideShade(s.nx, s.ny),
-          em,
-          false,
-          zScale
-        );
+    const rawSides = [];
+    for (let k = 0; k < n; k++) {
+      const am = ((k + 0.5) / n) * Math.PI * 2;
+      const nx = Math.cos(am);
+      const ny = Math.sin(am);
+      if (nx + ny > -0.25) {
+        rawSides.push({
+          k0: k,
+          k1: (k + 1) % n,
+          depth: nx + ny,
+          shade: calcSideShade(nx, ny)
+        });
       }
     }
-    if (!o.noTop) {
-      const topPts = [];
-      for (let k = 0; k < n; k++) {
-        topPts.push(Iso.gridToScreen(pts[k][0], pts[k][1], z + h));
+    rawSides.sort((a, b) => a.depth - b.depth);
+    const sideCount = rawSides.length;
+    const sideK0 = new Uint16Array(sideCount);
+    const sideK1 = new Uint16Array(sideCount);
+    const sideShade = new Float64Array(sideCount);
+    for (let i = 0; i < sideCount; i++) {
+      sideK0[i] = rawSides[i].k0;
+      sideK1[i] = rawSides[i].k1;
+      sideShade[i] = rawSides[i].shade;
+    }
+    lut = { n, cos, sin, topPts, sideCount, sideK0, sideK1, sideShade };
+    CYL_LUT[n] = lut;
+    return lut;
+  }
+
+  function drawCyl(ctx, cx, cy, z, r, h, hex, opts, zScale) {
+    const Iso = ZS.Iso;
+    const n = (opts && opts.n) || 14;
+    const em = !!(opts && opts.emissive);
+    const noSides = !!(opts && opts.noSides);
+    const noTop = !!(opts && opts.noTop);
+    const topEdge = !(opts && opts.topEdge === false);
+    const lut = getCylLut(n);
+    const cos = lut.cos;
+    const sin = lut.sin;
+    const zTop = z + h;
+
+    if (!noSides && h > 0) {
+      const sideCount = lut.sideCount;
+      const sideK0 = lut.sideK0;
+      const sideK1 = lut.sideK1;
+      const sideShade = lut.sideShade;
+      for (let i = 0; i < sideCount; i++) {
+        const k0 = sideK0[i];
+        const k1 = sideK1[i];
+        const x0 = cx + cos[k0] * r;
+        const y0 = cy + sin[k0] * r;
+        const x1 = cx + cos[k1] * r;
+        const y1 = cy + sin[k1] * r;
+        Iso.projectTo(x0, y0, zTop, _cylSideTop0);
+        Iso.projectTo(x1, y1, zTop, _cylSideTop1);
+        Iso.projectTo(x1, y1, z, _cylSideBot1);
+        Iso.projectTo(x0, y0, z, _cylSideBot0);
+        drawPolyFace(ctx, _cylQuad, hex, sideShade[i], em, false, zScale);
       }
-      drawPolyFace(ctx, topPts, hex, 1.0, em, o.topEdge !== false, zScale);
+    }
+    if (!noTop) {
+      const topPts = lut.topPts;
+      for (let k = 0; k < n; k++) {
+        Iso.projectTo(cx + cos[k] * r, cy + sin[k] * r, zTop, topPts[k]);
+      }
+      drawPolyFace(ctx, topPts, hex, 1.0, em, topEdge, zScale);
     }
   }
 
@@ -1807,7 +1899,7 @@ window.ZS = window.ZS || {};
     ctx.fillStyle = fill;
     ctx.fill();
     if (isEmissive && R.emissiveList && !window.ZS_SILHOUETTE_MODE) {
-      R.emissiveList.push({ kind: 'dot', p, r: rPx, hex, fill });
+      R.emissiveList.push({ kind: 'dot', p: { x: p.x, y: p.y }, r: rPx, hex, fill });
     }
   }
 
@@ -1857,36 +1949,46 @@ window.ZS = window.ZS || {};
     }
   }
 
+  const _psW = { x: 0, y: 0 };
+  const _psN = { x: 0, y: 0 };
+  const _psE = { x: 0, y: 0 };
+  const _psS = { x: 0, y: 0 };
+  const _psApex = { x: 0, y: 0 };
+  const _psTri0 = [_psN, _psW, _psApex];
+  const _psTri1 = [_psW, _psS, _psApex];
+  const _psTri2 = [_psS, _psE, _psApex];
+  const _psTri3 = [_psE, _psN, _psApex];
+
   function drawPyramidSpike(ctx, cx, cy, z, rx, ry, h, hex, opts, zScale) {
     const Iso = ZS.Iso;
-    const o = opts || {};
-    const em = !!o.emissive;
+    const em = !!(opts && opts.emissive);
+    const withEdge = !(opts && opts.edge === false);
     const rX = rx || 0.07;
     const rY = ry != null ? ry : rX;
-    const W = Iso.gridToScreen(cx - rX, cy, z);
-    const N = Iso.gridToScreen(cx, cy - rY, z);
-    const E = Iso.gridToScreen(cx + rX, cy, z);
-    const S = Iso.gridToScreen(cx, cy + rY, z);
-    const apex = Iso.gridToScreen(cx, cy, z + h);
+    Iso.projectTo(cx - rX, cy, z, _psW);
+    Iso.projectTo(cx, cy - rY, z, _psN);
+    Iso.projectTo(cx + rX, cy, z, _psE);
+    Iso.projectTo(cx, cy + rY, z, _psS);
+    Iso.projectTo(cx, cy, z + h, _psApex);
 
     if (h <= 17 * Math.max(rX, rY)) {
-      drawPolyFace(ctx, [N, W, apex], hex, 1.0, em, false, zScale);
+      drawPolyFace(ctx, _psTri0, hex, 1.0, em, false, zScale);
     }
     // Top-left directional light: left face 100%, front-left mid face 82%, right face 66%
-    drawPolyFace(ctx, [W, S, apex], hex, 1.0, em, false, zScale);
-    drawPolyFace(ctx, [S, E, apex], hex, 0.82, em, false, zScale);
-    drawPolyFace(ctx, [E, N, apex], hex, 0.66, em, false, zScale);
+    drawPolyFace(ctx, _psTri1, hex, 1.0, em, false, zScale);
+    drawPolyFace(ctx, _psTri2, hex, 0.82, em, false, zScale);
+    drawPolyFace(ctx, _psTri3, hex, 0.66, em, false, zScale);
 
-    if (o.edge !== false && !em && !window.ZS_SILHOUETTE_MODE) {
-      ctx.strokeStyle = o.outlineColor || 'rgba(10, 14, 20, 0.34)';
+    if (withEdge && !em && !window.ZS_SILHOUETTE_MODE) {
+      ctx.strokeStyle = (opts && opts.outlineColor) || 'rgba(10, 14, 20, 0.34)';
       ctx.lineWidth = Math.max(0.6, 0.75 * zScale);
       ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.moveTo(W.x, W.y);
-      ctx.lineTo(S.x, S.y);
-      ctx.lineTo(E.x, E.y);
-      ctx.lineTo(N.x, N.y);
-      ctx.lineTo(apex.x, apex.y);
+      ctx.moveTo(_psW.x, _psW.y);
+      ctx.lineTo(_psS.x, _psS.y);
+      ctx.lineTo(_psE.x, _psE.y);
+      ctx.lineTo(_psN.x, _psN.y);
+      ctx.lineTo(_psApex.x, _psApex.y);
       ctx.closePath();
       ctx.stroke();
     }

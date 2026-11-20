@@ -82,6 +82,7 @@ window.ZS = window.ZS || {};
       }
 
       state.zombies.splice(index, 1);
+      G._zombieBucketsDirty = true;
       G.notifyCombatHud();
     }
   }
@@ -176,6 +177,29 @@ window.ZS = window.ZS || {};
     let structureDestroyed = false;
     const reactiveOn = state.phase === 'night' && !!(state.nightConsumables && state.nightConsumables.reactiveArmor);
     const dmgTakenMult = reactiveOn ? 0.80 : 1.0;
+
+    // Collect active tactical gates once per tick instead of 5x5 grid scans per zombie
+    const activeGates = state.activeGates || (state.activeGates = []);
+    activeGates.length = 0;
+    const gateDef = DATA.ITEMS.tactical_gate;
+    for (let gy = 0; gy < N; gy++) {
+      const row = state.structGrid[gy];
+      if (!row) continue;
+      for (let gx = 0; gx < N; gx++) {
+        const gs = row[gx];
+        if (!gs || gs.id !== 'tactical_gate' || gs.hp <= 0) continue;
+        const gProf = gateDef ? G.getStructLevelProfile(gateDef, gs.level || 1) : null;
+        const gRad = (gProf && gProf.gateSlowRadius) || (gateDef && gateDef.gateSlowRadius) || 1.15;
+        const gSlow = gProf && gProf.gateSlowFactor ? gProf.gateSlowFactor : 0.75;
+        activeGates.push({
+          cx: gx + 0.5,
+          cy: gy + 0.5,
+          st: gs,
+          gRadSq: gRad * gRad,
+          gSlow
+        });
+      }
+    }
 
     for (let i = state.zombies.length - 1; i >= 0; i--) {
       const z = state.zombies[i];
@@ -323,18 +347,14 @@ window.ZS = window.ZS || {};
         }
       }
 
-      for (let gy = Math.max(0, ty - 2); gy <= Math.min(N - 1, ty + 2); gy++) {
-        for (let gx = Math.max(0, tx - 2); gx <= Math.min(N - 1, tx + 2); gx++) {
-          const gs = state.structGrid[gy] && state.structGrid[gy][gx];
-          if (!gs || gs.id !== 'tactical_gate' || gs.hp <= 0) continue;
-          const gDef = DATA.ITEMS.tactical_gate;
-          const gProf = gDef ? G.getStructLevelProfile(gDef, gs.level || 1) : null;
-          const gRad = (gProf && gProf.gateSlowRadius) || (gDef && gDef.gateSlowRadius) || 1.15;
-          if (Math.hypot(z.x - (gx + 0.5), z.y - (gy + 0.5)) <= gRad) {
-            const gSlow = gProf && gProf.gateSlowFactor ? gProf.gateSlowFactor : 0.75;
-            slowMult = Math.min(slowMult, gSlow);
-            z.inGateAura = true;
-          }
+      for (let gi = 0; gi < activeGates.length; gi++) {
+        const gate = activeGates[gi];
+        if (gate.st.hp <= 0) continue;
+        const gdx = z.x - gate.cx;
+        const gdy = z.y - gate.cy;
+        if (gdx * gdx + gdy * gdy <= gate.gRadSq) {
+          slowMult = Math.min(slowMult, gate.gSlow);
+          z.inGateAura = true;
         }
       }
 
