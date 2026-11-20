@@ -131,14 +131,13 @@ button, input, select {
   justify-content: space-between;
   gap: 6px;
   padding: 6px 10px;
-  background: rgba(20, 29, 41, 0.93);
-  backdrop-filter: blur(12px);
+  background: rgba(20, 29, 41, 0.96);
   border: 2px solid #2B3B4E;
   border-radius: 15px;
   box-shadow: 0 3px 0 #0B1119, 0 10px 26px rgba(0, 0, 0, 0.45);
   z-index: 20;
   flex-wrap: wrap;
-  transition: padding 0.18s ease, background-color 0.18s ease;
+  transition: background-color 0.18s ease;
 }
 
 .hud-group {
@@ -168,6 +167,7 @@ button, input, select {
   font-weight: 800;
   letter-spacing: 0.5px;
   color: #f8fafc;
+  font-variant-numeric: tabular-nums;
 }
 
 .wave-sub {
@@ -207,6 +207,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 800;
   color: #f8fafc;
+  font-variant-numeric: tabular-nums;
 }
 
 .bar-track {
@@ -224,7 +225,7 @@ button, input, select {
 
 .bar-fill {
   height: 100%;
-  transition: width 0.22s ease, background-color 0.25s ease;
+  transition: background-color 0.25s ease;
 }
 
 .hp-fill {
@@ -251,7 +252,7 @@ button, input, select {
   border: 1.5px solid #31455B;
   border-radius: 11px;
   box-shadow: 0 2px 0 #0F1722;
-  transition: padding 0.16s ease, gap 0.16s ease;
+  transition: transform 0.12s ease, border-color 0.15s ease;
 }
 
 .res-meta {
@@ -334,6 +335,7 @@ button, input, select {
   font-weight: 800;
   color: #f8fafc;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .pop-cap {
@@ -347,6 +349,7 @@ button, input, select {
   font-weight: 600;
   color: var(--col-power);
   line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
 .power-pill.blackout .res-micro {
@@ -517,7 +520,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
 }
 
 .sys-btn.icon-only {
@@ -571,8 +574,7 @@ button, input, select {
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  background: rgba(14, 21, 32, 0.94);
-  backdrop-filter: blur(8px);
+  background: rgba(14, 21, 32, 0.96);
   border: 1px solid rgba(255, 159, 67, 0.65);
   border-radius: 11px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
@@ -633,7 +635,7 @@ button, input, select {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
   white-space: nowrap;
 }
 
@@ -683,12 +685,11 @@ button, input, select {
 .recon-card {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(17, 27, 40, 0.92);
+  background: rgba(17, 27, 40, 0.95);
   border: 1px solid rgba(255, 77, 109, 0.38);
   border-radius: 8px;
   padding: 9px 10px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8px);
   color: var(--text);
 }
 
@@ -874,15 +875,14 @@ button, input, select {
   align-items: flex-start;
   gap: 3px;
   padding: 9px 12px;
-  background: rgba(20, 30, 44, 0.92);
-  backdrop-filter: blur(8px);
+  background: rgba(20, 30, 44, 0.95);
   color: #f1f5f9;
   border: 2px solid #2D3F54;
   border-radius: 13px;
   box-shadow: 0 3px 0 #0B1119, 0 8px 18px rgba(0, 0, 0, 0.36);
   cursor: pointer;
   text-align: left;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
 }
 
 .tactical-btn span {
@@ -936,6 +936,7 @@ button, input, select {
   font-size: 18px;
   font-weight: 800;
   color: var(--col-danger);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ================= WAVE TOAST BANNER ================= */
@@ -988,14 +989,13 @@ button, input, select {
   left: 12px;
   right: 12px;
   bottom: 10px;
-  background: rgba(20, 29, 41, 0.93);
-  backdrop-filter: blur(12px);
+  background: rgba(20, 29, 41, 0.96);
   border: 2px solid #2B3B4E;
   border-radius: 16px;
   padding: 9px 12px;
   box-shadow: 0 3px 0 #0B1119, 0 -8px 28px rgba(0, 0, 0, 0.5);
   z-index: 20;
-  transition: padding 0.18s ease, background-color 0.18s ease;
+  transition: background-color 0.18s ease;
 }
 
 #build-dock .dock-expand-btn {
@@ -1092,7 +1092,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
 }
 
 .tab-btn:hover, .tool-btn:hover {
@@ -1139,7 +1139,7 @@ button, input, select {
   border-radius: 13px;
   box-shadow: 0 2px 0 #0F1722;
   cursor: pointer;
-  transition: all 0.13s ease;
+  transition: transform 0.13s ease, background-color 0.13s ease, border-color 0.13s ease, color 0.13s ease, box-shadow 0.13s ease, opacity 0.13s ease;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1332,7 +1332,7 @@ button, input, select {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
   white-space: nowrap;
 }
 
@@ -1477,6 +1477,7 @@ button, input, select {
   font-weight: 700;
   color: #cde0f3;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .comp-actions {
@@ -1534,7 +1535,6 @@ button, input, select {
 .detail-xp-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.2s ease;
 }
 
 .detail-xp-rem {
@@ -1617,10 +1617,16 @@ button, input, select {
   cursor: pointer;
 }
 
+.trader-card {
+  width: min(840px, 94vw);
+}
+
 .trader-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 9px 13px;
   background: rgba(25, 38, 56, 0.72);
   border-radius: 10px;
@@ -1629,9 +1635,184 @@ button, input, select {
 }
 
 .trader-balance strong {
-  color: var(--col-gold);
-  font-size: 15px;
+  color: #f1f5f9;
+  font-size: 14px;
   font-weight: 800;
+}
+
+.trader-res-sep {
+  color: #64748b;
+  margin: 0 3px;
+}
+
+.trader-toolbar .sys-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.trader-ops-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.trader-exchange-bar,
+.trader-consumables-bar {
+  padding: 10px 12px;
+  background: rgba(19, 30, 45, 0.88);
+  border: 1px solid rgba(148, 178, 210, 0.22);
+  border-radius: 12px;
+}
+
+.trader-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #f8fafc;
+}
+
+.trader-section-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9cb4cd;
+}
+
+.exchange-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 7px;
+}
+
+.exchange-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  background: rgba(27, 41, 58, 0.85);
+  border: 1px solid rgba(148, 178, 210, 0.18);
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.exchange-rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #e6eef7;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.exchange-arrow {
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.exchange-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.exchange-mult-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--col-gold-soft);
+  background: var(--col-gold-bg);
+  color: var(--col-gold);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.exchange-mult-btn:hover:not(:disabled) {
+  background: rgba(255, 201, 74, 0.28);
+}
+
+.exchange-mult-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.consumable-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.consumable-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  background: rgba(26, 39, 56, 0.9);
+  border: 1px solid rgba(255, 201, 74, 0.28);
+  border-radius: 10px;
+}
+
+.consumable-card.active {
+  border-color: var(--col-health);
+  background: rgba(20, 44, 34, 0.85);
+}
+
+.consumable-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.consumable-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 3px;
+}
+
+.consumable-desc {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b4c6d8;
+  line-height: 1.38;
+}
+
+.buy-consumable-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--col-gold-soft);
+  background: var(--col-gold-bg);
+  color: var(--col-gold);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.buy-consumable-btn.active {
+  border-color: var(--col-health);
+  background: var(--col-health-bg);
+  color: var(--col-health);
+  opacity: 1;
+}
+
+.buy-consumable-btn:hover:not(:disabled) {
+  background: rgba(255, 201, 74, 0.28);
+}
+
+.buy-consumable-btn:disabled:not(.active) {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .trader-grid {

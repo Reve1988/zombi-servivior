@@ -142,31 +142,31 @@ ZS.DATA = (function () {
   };
 
   const SOLAR_TIERS = {
-    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 38, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'solar_t1', topZ: 12 },
-    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 14, scrap: 28, coin: 6 }, maxHp: 195, dayCharge: 75, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'solar_t2', topZ: 17 },
-    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 18, scrap: 44, coin: 16 }, maxHp: 270, dayCharge: 135, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'solar_t3', topZ: 24 },
-    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 24, scrap: 70, coin: 34 }, maxHp: 370, dayCharge: 220, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'solar_t4', topZ: 34 }
+    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 38, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
+    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 75, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
+    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 135, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
+    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 220, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
   };
 
   const WIND_TIERS = {
-    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'wind_t1', topZ: 30 },
-    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 12, scrap: 26, coin: 6 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'wind_t2', topZ: 44 },
-    3: { level: 3, name: '중형 풍력발전기', reqHqLevel: 3, upCost: { wood: 16, scrap: 42, coin: 16 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'wind_t3', topZ: 60 },
-    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 20, scrap: 66, coin: 32 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'wind_t4', topZ: 70 }
+    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'infra_wind', topZ: 30 },
+    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 6, scrap: 32, coin: 10 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'infra_wind', topZ: 44 },
+    3: { level: 3, name: '중형 풍력발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 54, coin: 24 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'infra_wind', topZ: 60 },
+    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 10, scrap: 88, coin: 46 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'infra_wind', topZ: 70 }
   };
 
   const BATTERY_TIERS = {
-    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 70, dayCharge: 6, nightGen: 0, cozy: 1, cozyGroup: 'battery_t1', topZ: 14 },
-    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 8, scrap: 24, coin: 8 }, maxHp: 230, powerCap: 155, dayCharge: 14, nightGen: 0, cozy: 2, cozyGroup: 'battery_t2', topZ: 22 },
-    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 10, scrap: 38, coin: 18 }, maxHp: 300, powerCap: 290, dayCharge: 26, nightGen: 0, cozy: 4, cozyGroup: 'battery_t3', topZ: 33 },
-    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 14, scrap: 64, coin: 36 }, maxHp: 400, powerCap: 480, dayCharge: 42, nightGen: 0, cozy: 7, cozyGroup: 'battery_t4', topZ: 40 }
+    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 70, dayCharge: 6, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
+    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 155, dayCharge: 14, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
+    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 290, dayCharge: 26, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
+    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 480, dayCharge: 42, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
   };
 
   const BARRACKS_TIERS = {
-    1: { level: 1, name: '전술 돔 막사', reqHqLevel: 1, cost: { wood: 24, scrap: 8 }, maxHp: 170, popCap: 1, cozy: 5, cozyGroup: 'housing_t1', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
-    2: { level: 2, name: '확장형 야전 막사', reqHqLevel: 2, upCost: { wood: 22, scrap: 16, coin: 8 }, maxHp: 230, popCap: 2, cozy: 10, cozyGroup: 'housing_t2', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
-    3: { level: 3, name: '모듈러 컨테이너 숙소', reqHqLevel: 3, upCost: { wood: 28, scrap: 30, coin: 18 }, maxHp: 310, popCap: 4, cozy: 18, cozyGroup: 'housing_t3', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
-    4: { level: 4, name: '강화 작전 생활관', reqHqLevel: 4, upCost: { wood: 36, scrap: 52, coin: 34 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'housing_t4', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
+    1: { level: 1, name: '전술 돔 막사', reqHqLevel: 1, cost: { wood: 24, scrap: 8 }, maxHp: 170, popCap: 1, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
+    2: { level: 2, name: '확장형 야전 막사', reqHqLevel: 2, upCost: { wood: 12, scrap: 24, coin: 12 }, maxHp: 230, popCap: 2, cozy: 10, cozyGroup: 'infra_housing', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
+    3: { level: 3, name: '모듈러 컨테이너 숙소', reqHqLevel: 3, upCost: { wood: 14, scrap: 44, coin: 26 }, maxHp: 310, popCap: 4, cozy: 18, cozyGroup: 'infra_housing', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
+    4: { level: 4, name: '강화 작전 생활관', reqHqLevel: 4, upCost: { wood: 18, scrap: 74, coin: 46 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
   };
 
   const GATE_TIERS = {
@@ -176,9 +176,9 @@ ZS.DATA = (function () {
   };
 
   const TRAP_TIERS = {
-    1: { level: 1, name: '스파이크 철조망 매트', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 4.6 },
-    2: { level: 2, name: '소투스 칼날 매트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 4.7 },
-    3: { level: 3, name: '고전압 파쇄 패드', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 5.0 }
+    1: { level: 1, name: '강철 스파이크 트랩', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 5.4 },
+    2: { level: 2, name: '중장갑 피스톤 스파이크 트랩', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 5.8 },
+    3: { level: 3, name: '고전압 피에조 스파이크 트랩', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 6.45 }
   };
 
   const REPAIR_TIERS = {
@@ -199,7 +199,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.4.0',
+  VERSION: 'v0.5.0',
   GRID_SIZE: 22,
   HQ_POS: { x: 10, y: 10 },
   PALETTE,
@@ -307,13 +307,13 @@ ZS.DATA = (function () {
 
   COZY_TIERS: [
     { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.10 },
-    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.10, xpBonus: 0.10, freeRepair: 0.18 },
-    { level: 3, min: 60,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.20, xpBonus: 0.20, freeRepair: 0.26 },
-    { level: 4, min: 110, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.32, xpBonus: 0.30, freeRepair: 0.34 },
-    { level: 5, min: 175, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.45, xpBonus: 0.45, freeRepair: 0.42 },
-    { level: 6, min: 250, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.60, xpBonus: 0.60, freeRepair: 0.50 },
-    { level: 7, min: 330, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.75, xpBonus: 0.80, freeRepair: 0.58 },
-    { level: 8, min: 420, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.95, xpBonus: 1.00, freeRepair: 0.65 }
+    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.08, xpBonus: 0.10, freeRepair: 0.18 },
+    { level: 3, min: 65,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.26 },
+    { level: 4, min: 130, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.34 },
+    { level: 5, min: 225, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.42 },
+    { level: 6, min: 340, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.50 },
+    { level: 7, min: 480, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.58 },
+    { level: 8, min: 640, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.65 }
   ],
 
   COZY_FLOOR_CAP: 60,
@@ -441,7 +441,7 @@ ZS.DATA = (function () {
     },
     razor_pad: {
       id: 'razor_pad',
-      name: '스파이크 철조망 매트',
+      name: '강철 스파이크 트랩',
       category: 'defense',
       layer: 'struct',
       subType: 'trap',
@@ -451,7 +451,7 @@ ZS.DATA = (function () {
       maxHp: 180,
       trapDps: 11,
       slowFactor: 0.55,
-      desc: '[3단 진화 바닥 함정] 스파이크 매트(1단·11/s·둔화 45%) → 소투스 칼날(2단·19/s·52%) → 고전압 파쇄 패드(3단·30/s·60%·피해+15%).'
+      desc: '[3단 진화 바닥 스파이크 트랩] 강철 스파이크(1단·11/s·둔화 45%) → 중장갑 피스톤(2단·19/s·52%) → 고전압 피에조(3단·30/s·60%·피해+15%).'
     },
 
     // ================= DEFENSE: MANNED POSTS (Pop: 1, Power: 0) =================
@@ -808,6 +808,7 @@ ZS.DATA = (function () {
       speed: 0.68,
       damage: 34,
       attackRate: 0.85,
+      woodDrop: [1, 3],
       scrapDrop: [7, 12],
       coinDrop: [4, 7],
       scale: 1.32,
@@ -862,6 +863,7 @@ ZS.DATA = (function () {
       attackRate: 0.90,
       empRadius: 2.1,
       empDuration: 3.0,
+      woodDrop: [1, 2],
       scrapDrop: [5, 9],
       coinDrop: [3, 6],
       scale: 1.16,
@@ -882,6 +884,7 @@ ZS.DATA = (function () {
       speed: 0.56,
       damage: 58,
       attackRate: 0.8,
+      woodDrop: [10, 16],
       scrapDrop: [30, 42],
       coinDrop: [28, 38],
       isBoss: true,
@@ -968,6 +971,41 @@ ZS.DATA = (function () {
       coinCost: 44,
       type: 'free_item',
       itemId: 'emp_coil'
+    }
+  ],
+
+  TRADER_EXCHANGE_ROUTES: [
+    { id: 'scrap_to_wood', from: 'scrap', to: 'wood', cost: 20, give: 24, label: '고철 → 목재' },
+    { id: 'coin_to_wood',  from: 'coin',  to: 'wood', cost: 10, give: 22, label: '코인 → 목재' },
+    { id: 'coin_to_scrap', from: 'coin',  to: 'scrap', cost: 12, give: 20, label: '코인 → 고철' },
+    { id: 'scrap_to_coin', from: 'scrap', to: 'coin', cost: 28, give: 10, label: '고철 → 코인' },
+    { id: 'wood_to_coin',  from: 'wood',  to: 'coin', cost: 35, give: 10, label: '목재 → 코인' }
+  ],
+
+  TRADER_NIGHT_CONSUMABLES: [
+    {
+      id: 'overpressure_ammo',
+      stateKey: 'overpressureAmmo',
+      name: '고압 탄약 보급',
+      svgIcon: 'cat-defense',
+      svgColorCls: 'icon-coin',
+      baseScrap: 45,
+      scrapPerWave: 8,
+      baseCoin: 25,
+      coinPerWave: 4,
+      desc: '다음 1회 야간 웨이브 동안 모든 아군 초소·포탑·본부 화력 +20% (새벽 정산 시 자동 해제).'
+    },
+    {
+      id: 'reactive_armor',
+      stateKey: 'reactiveArmor',
+      name: '반응 장갑 코팅',
+      svgIcon: 'wall-upgrade',
+      svgColorCls: 'icon-heal',
+      baseScrap: 40,
+      scrapPerWave: 8,
+      baseCoin: 22,
+      coinPerWave: 4,
+      desc: '다음 1회 야간 웨이브 동안 모든 성벽·게이트·전초기지 피격 피해 -20% 및 근접 반사 +15%p (새벽 정산 시 자동 해제).'
     }
   ]
   };

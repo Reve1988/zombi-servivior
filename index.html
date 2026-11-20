@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OUTPOST ZERO — 모던 전술 디펜스 & 쉘터 빌더</title>
+  <title>Dead-End Defense — 모던 전술 디펜스 & 쉘터 빌더</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -171,7 +171,7 @@
     </div>
 
     <div class="hud-group hud-sys">
-      <span id="hud-version" class="version-badge" title="현재 게임 빌드 버전">v0.3.0</span>
+      <span id="hud-version" class="version-badge" title="현재 게임 빌드 버전">v0.5.0</span>
       <button id="btn-sound" class="sys-btn icon-only" title="효과음 켜기/끄기" aria-label="효과음 켜기/끄기">
         <svg class="oz-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-sys-sound-on"></use></svg>
       </button>
@@ -341,7 +341,7 @@
         <div>
           <h2 class="inline-icon-text">
             <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-hud-hq"></use></svg>
-            <span>OUTPOST ZERO <span id="guide-version" class="version-inline">v0.3.0</span> — 전술 지휘관 매뉴얼</span>
+            <span>Dead-End Defense <span id="guide-version" class="version-inline">v0.5.0</span> — 전술 지휘관 매뉴얼</span>
           </h2>
           <p>현대 전술 기지를 건설·꾸미고 밤마다 몰려오는 감염체 웨이브를 방어하세요.</p>
         </div>
@@ -399,8 +399,16 @@
   <script defer src="js/audio.js"></script>
   <script defer src="js/iso.js"></script>
   <script defer src="js/pathfinding.js"></script>
-  <script defer src="js/renderer.js"></script>
-  <script defer src="js/game.js"></script>
+  <script defer src="js/renderer-core.js"></script>
+  <script defer src="js/renderer-structures.js"></script>
+  <script defer src="js/renderer-entities.js"></script>
+  <script defer src="js/renderer-overlay.js"></script>
+  <script defer src="js/game-core.js"></script>
+  <script defer src="js/game-build.js"></script>
+  <script defer src="js/game-combat.js"></script>
+  <script defer src="js/game-zombies.js"></script>
+  <script defer src="js/ui-hud.js"></script>
+  <script defer src="js/ui-dock.js"></script>
   <script defer src="js/main.js"></script>
 </body>
 </html>
