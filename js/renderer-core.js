@@ -1570,7 +1570,7 @@ window.ZS = window.ZS || {};
             2
           );
           if (inBounds && canDrop && srcDef && !(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty)) {
-            const srcProf = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(srcDef, src.level || 1) : null;
+            const srcProf = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(srcDef, srcUnit.level || 1) : null;
             const moveAuraR = (srcProf && srcProf.auraRadius) || (srcDef.aura && srcDef.aura.radius);
             const moveGateR = (srcProf && srcProf.gateSlowRadius) || srcDef.gateSlowRadius;
             if (srcDef.range) {
