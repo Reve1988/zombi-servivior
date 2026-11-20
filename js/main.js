@@ -13,12 +13,14 @@ window.ZS = window.ZS || {};
   let panStart = { x: 0, y: 0 };
 
   function resizeCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const w = window.innerWidth;
     const h = window.innerHeight;
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ZS.Iso.setViewport(w, h);
   }
 
@@ -339,11 +341,25 @@ window.ZS = window.ZS || {};
     });
   }
 
-  // ================= MAIN ANIMATION LOOP =================
+  // ================= MAIN ANIMATION LOOP (Fixed 60 FPS Limiter) =================
+  const TARGET_FPS = 60;
+  const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
+  const VSYNC_TOLERANCE_MS = 1.6;
   let lastFrameMs = performance.now();
+  let nextFrameTargetMs = lastFrameMs;
   let hudTick = 0;
 
   function loop(nowMs) {
+    requestAnimationFrame(loop);
+    if (nowMs < nextFrameTargetMs - VSYNC_TOLERANCE_MS) {
+      return;
+    }
+    if (nowMs - nextFrameTargetMs > FRAME_INTERVAL_MS) {
+      nextFrameTargetMs = nowMs + FRAME_INTERVAL_MS;
+    } else {
+      nextFrameTargetMs += FRAME_INTERVAL_MS;
+    }
+
     const rawDt = Math.min(0.05, Math.max(0.001, (nowMs - lastFrameMs) / 1000));
     lastFrameMs = nowMs;
 
@@ -365,7 +381,6 @@ window.ZS = window.ZS || {};
     }
 
     ZS.Renderer.render(ctx, window.innerWidth, window.innerHeight, ZS.Game.state, uiState, nowMs / 1000);
-    requestAnimationFrame(loop);
   }
 
   // ================= BOOTSTRAP =================
