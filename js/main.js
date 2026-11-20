@@ -468,8 +468,8 @@ window.ZS = window.ZS || {};
     }
     if (guideVer) guideVer.textContent = ver;
     document.title = env.isDevBuild
-      ? `[DEV] OUTPOST ZERO (${ver}) — 스테이징 검수 빌드`
-      : `OUTPOST ZERO (${ver}) — 모던 전술 디펜스 & 쉘터 빌더`;
+      ? '[DEV] Dead-End Defense — 스테이징 검수 빌드'
+      : 'Dead-End Defense — 모던 전술 디펜스 & 쉘터 빌더';
 
     U.initDebugToolbar(env);
 
@@ -482,7 +482,7 @@ window.ZS = window.ZS || {};
     if (!ZS.Game.loadGame()) {
       ZS.Game.initNewGame();
       U.showWaveBanner(
-        'OUTPOST ZERO 지휘권 인수 완료',
+        'Dead-End Defense 지휘권 인수 완료',
         '낮 동안 방어선·발전기·모던 쉘터를 구축하고 [웨이브 시작]을 눌러 야간 방어에 돌입하세요!',
         'info'
       );
