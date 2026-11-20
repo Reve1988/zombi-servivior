@@ -44,6 +44,9 @@ jobs:
           if [ -d "_prod/assets" ]; then
             cp -r _prod/assets _site/assets
           fi
+          if [ -f "_prod/assets/icons/favicon.ico" ]; then
+            cp _prod/assets/icons/favicon.ico _site/favicon.ico
+          fi
 
           # Always publish robots.txt disallowing /dev/ indexing & add .nojekyll
           cat << 'EOF' > _site/robots.txt
@@ -69,6 +72,9 @@ jobs:
             cp -r _dev/js _site/dev/js
             if [ -d "_dev/assets" ]; then
               cp -r _dev/assets _site/dev/assets
+            fi
+            if [ -f "_dev/assets/icons/favicon.ico" ]; then
+              cp _dev/assets/icons/favicon.ico _site/dev/favicon.ico
             fi
 
             # Inject noindex meta + ZS_DEV_BUILD / ZS_COMMIT_SHA markers ONLY into _site/dev/index.html
