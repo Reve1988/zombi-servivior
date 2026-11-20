@@ -268,7 +268,8 @@ window.ZS = window.ZS || {};
 
     document.getElementById('btn-speed').addEventListener('click', () => {
       ZS.Game.state.gameSpeed = ZS.Game.state.gameSpeed === 1 ? 2 : 1;
-      U.updateHud();
+      if (ZS.Game.state.phase === 'night' && U.updateCombatHud) U.updateCombatHud();
+      else U.updateHud();
     });
 
     document.getElementById('btn-skill-repair').addEventListener('click', () => {
@@ -279,7 +280,8 @@ window.ZS = window.ZS || {};
       if (ZS.Game.state.skills.airstrikeCd > 0) return;
       uiState.activeSkill = uiState.activeSkill === 'airstrike' ? null : 'airstrike';
       document.getElementById('btn-skill-airstrike').classList.toggle('targeting', uiState.activeSkill === 'airstrike');
-      U.updateHud();
+      if (ZS.Game.state.phase === 'night' && U.updateCombatHud) U.updateCombatHud();
+      else U.updateHud();
     });
 
     document.getElementById('btn-sound').addEventListener('click', () => {
@@ -459,6 +461,7 @@ window.ZS = window.ZS || {};
 
     ZS.Game.setCallbacks({
       onUiChange: U.updateHud,
+      onCombatHudChange: U.updateCombatHud,
       onWaveBanner: U.showWaveBanner
     });
 

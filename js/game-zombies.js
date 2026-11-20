@@ -4,6 +4,28 @@ window.ZS = window.ZS || {};
   const G = ZS._Game;
   const { DATA, N, PROD_SAVE_KEY, DEV_SAVE_KEY, SETTINGS_KEY, state } = G;
 
+  const MAX_PARTICLES = 240;
+  let particleEvictCursor = 0;
+
+  function pushParticle(pt) {
+    if (state.particles.length < MAX_PARTICLES) {
+      state.particles.push(pt);
+      return;
+    }
+    state.particles[particleEvictCursor] = pt;
+    particleEvictCursor = (particleEvictCursor + 1) % MAX_PARTICLES;
+  }
+
+  function scaleWaveDrop(rawAmount, waveNum, isBoss) {
+    const w = waveNum || 1;
+    if (w < 15 || rawAmount <= 0) return rawAmount;
+    const baseScale = Math.max(0.35, 1 / (1 + (w - 14) * 0.075));
+    const scale = isBoss ? Math.max(0.70, baseScale) : baseScale;
+    const exact = rawAmount * scale;
+    const whole = Math.floor(exact);
+    return whole + (Math.random() < (exact - whole) ? 1 : 0);
+  }
+
   function damageZombie(index, amount, textColor, isCrit, sourceUid) {
     const z = state.zombies[index];
     if (!z) return;
@@ -27,10 +49,14 @@ window.ZS = window.ZS || {};
 
     if (z.hp <= 0) {
       const def = DATA.ZOMBIES[z.type];
-      const scrapGain = randInt(def.scrapDrop[0], def.scrapDrop[1]);
-      const coinGain = randInt(def.coinDrop[0], def.coinDrop[1]);
+      const rawScrap = randInt(def.scrapDrop[0], def.scrapDrop[1]);
+      const rawCoin = randInt(def.coinDrop[0], def.coinDrop[1]);
+      const scrapGain = scaleWaveDrop(rawScrap, state.wave, !!def.isBoss);
+      const coinGain = scaleWaveDrop(rawCoin, state.wave, !!def.isBoss);
+      const woodGain = def.woodDrop ? randInt(def.woodDrop[0], def.woodDrop[1]) : 0;
       state.scrap += scrapGain;
       state.coin += coinGain;
+      if (woodGain > 0) state.wood += woodGain;
       state.waveKilledZombies += 1;
 
       G.awardKillXpBySourceUid(sourceUid, z.type, !!def.isBoss);
@@ -42,15 +68,21 @@ window.ZS = window.ZS || {};
       }
       if (def.isBoss) {
         state.bossDefeated = true;
-        addFloatingText(z.x - 0.18, z.y, 24, `+${scrapGain}`, DATA.PALETTE.resScrap, 13, DATA.PALETTE.outlineDark);
-        addFloatingText(z.x + 0.18, z.y, 26, `+${coinGain}`, DATA.PALETTE.coin, 13, DATA.PALETTE.outlineDark);
-        G.banner('알파 보스 격파!', `고철 +${scrapGain} · 코인 +${coinGain} 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
-      } else if (Math.random() < 0.35 || z.type === 'brute') {
+        if (woodGain > 0) {
+          addFloatingText(z.x - 0.32, z.y, 22, `+${woodGain}`, DATA.PALETTE.resWood, 13, DATA.PALETTE.outlineDark);
+        }
+        addFloatingText(z.x - 0.05, z.y, 25, `+${scrapGain}`, DATA.PALETTE.resScrap, 13, DATA.PALETTE.outlineDark);
+        addFloatingText(z.x + 0.24, z.y, 27, `+${coinGain}`, DATA.PALETTE.coin, 13, DATA.PALETTE.outlineDark);
+        const woodTxt = woodGain > 0 ? `목재 +${woodGain} · ` : '';
+        G.banner('알파 보스 격파!', `${woodTxt}고철 +${scrapGain} · 코인 +${coinGain} 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
+      } else if (woodGain > 0 && Math.random() < 0.45) {
+        addFloatingText(z.x, z.y, 16, `+${woodGain}`, DATA.PALETTE.resWood, 12, DATA.PALETTE.outlineDark);
+      } else if (scrapGain > 0 && (Math.random() < 0.35 || z.type === 'brute')) {
         addFloatingText(z.x, z.y, 16, `+${scrapGain}`, DATA.PALETTE.resScrap, 12, DATA.PALETTE.outlineDark);
       }
 
       state.zombies.splice(index, 1);
-      G.notifyUi();
+      G.notifyCombatHud();
     }
   }
 
@@ -142,6 +174,8 @@ window.ZS = window.ZS || {};
 
   function updateZombies(dt) {
     let structureDestroyed = false;
+    const reactiveOn = state.phase === 'night' && !!(state.nightConsumables && state.nightConsumables.reactiveArmor);
+    const dmgTakenMult = reactiveOn ? 0.80 : 1.0;
 
     for (let i = state.zombies.length - 1; i >= 0; i--) {
       const z = state.zombies[i];
@@ -188,7 +222,7 @@ window.ZS = window.ZS || {};
               z.x = cs.targetX - (dx / dist) * stopDist;
               z.y = cs.targetY - (dy / dist) * stopDist;
             }
-            const siegeDmg = Math.round(z.damage * 2.5);
+            const siegeDmg = Math.max(1, Math.round(z.damage * 2.5 * dmgTakenMult));
             targetSt.hp -= siegeDmg;
             targetSt.hitFlashTimer = 0.08;
             targetSt.hitFlash = 1.0;
@@ -361,13 +395,13 @@ window.ZS = window.ZS || {};
         }
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
-          hqStruct.hp -= z.damage;
+          const hqDmg = Math.max(1, Math.round(z.damage * dmgTakenMult));
+          hqStruct.hp -= hqDmg;
           hqStruct.hitFlashTimer = 0.05;
           hqStruct.hitFlash = 1.0;
           triggerScreenShake(5.0, 0.28);
           spawnBurstParticles(hqCx, hqCy, 14, DATA.PALETTE.danger, 5);
-          addFloatingText(hqCx, hqCy, 28, `-${z.damage}`, DATA.PALETTE.danger, 12);
-          G.notifyUi();
+          addFloatingText(hqCx, hqCy, 28, `-${hqDmg}`, DATA.PALETTE.danger, 12);
           if (hqStruct.hp <= 0) {
             hqStruct.hp = 0;
             spawnStructureDebris(hqCx, hqCy, 'command_hq', 18);
@@ -375,6 +409,22 @@ window.ZS = window.ZS || {};
             triggerGameOver();
             return;
           }
+          if (reactiveOn) {
+            const hqRefl = Math.max(4, Math.round(z.damage * 0.15));
+            state.projectiles.push({
+              kind: 'spark',
+              x1: hqCx,
+              y1: hqCy,
+              x2: z.x,
+              y2: z.y,
+              z: 14,
+              color: DATA.PALETTE.thornSpark || '#FF8A3D',
+              life: 0.12,
+              maxLife: 0.12
+            });
+            damageZombie(i, hqRefl, DATA.PALETTE.thornSpark || '#FF8A3D', false);
+          }
+          G.notifyCombatHud();
         }
         continue;
       }
@@ -491,7 +541,8 @@ window.ZS = window.ZS || {};
         // Melee attack blocking structure
         if (z.atkCooldown <= 0) {
           z.atkCooldown = 1 / z.attackRate;
-          blockingTarget.hp -= z.damage;
+          const incDmg = Math.max(1, Math.round(z.damage * dmgTakenMult));
+          blockingTarget.hp -= incDmg;
           blockingTarget.hitFlashTimer = 0.045;
           blockingTarget.hitFlash = 1.0;
           spawnBurstParticles(btx + 0.5, bty + 0.5, 10, '#cbd5e1', 4);
@@ -504,9 +555,11 @@ window.ZS = window.ZS || {};
             structureDestroyed = true;
           }
 
-          // Wall/Gate Thorns: Lv.1 wire 15% (min 4), Lv.3 wall/gate 35% (min 8) + orange spark line (0.12s)
-          if (bProf && bProf.thornsRatio > 0) {
-            const reflDmg = Math.max(bProf.thornsMin || 4, Math.round(z.damage * bProf.thornsRatio));
+          // Wall/Gate Thorns (+15%p melee reflection when Reactive Armor Coating is active)
+          const totalThorns = ((bProf && bProf.thornsRatio) || 0) + (reactiveOn ? 0.15 : 0);
+          if (totalThorns > 0) {
+            const minRefl = (bProf && bProf.thornsMin) || 4;
+            const reflDmg = Math.max(minRefl, Math.round(z.damage * totalThorns));
             state.projectiles.push({
               kind: 'spark',
               x1: btx + 0.5,
@@ -531,7 +584,7 @@ window.ZS = window.ZS || {};
     if (structureDestroyed) {
       G.recalculateBaseStats();
       G.recomputeFlow();
-      G.notifyUi();
+      G.notifyCombatHud();
     }
   }
 
@@ -585,11 +638,15 @@ window.ZS = window.ZS || {};
     state.muzzleFlashes = [];
     state.projectiles = [];
     state.burstQueue = [];
+    state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
+    state.traderRefreshCost = 15;
+    state.traderRefreshCount = 0;
 
     G.recalculateBaseStats();
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     // 1. Wave clearance rewards + Cozy dividend bonus
-    const woodReward = 30 + clearedWave * 8;
+    const woodReward = 38 + clearedWave * 12;
     const scrapReward = 24 + clearedWave * 7;
     const baseCoin = 24 + clearedWave * 6;
     const bonusCoin = Math.round(baseCoin * state.cozyTier.coinBonus);
@@ -625,11 +682,26 @@ window.ZS = window.ZS || {};
     state.power = Math.min(maxTarget, state.power + state.dayCharge);
     const gainedPower = Math.round(state.power - beforePower);
 
-    // 4. Morning Survivor Arrival if Empty Bunk Available
+    // 4. Morning Survivor Arrival (every day below 12 agents, every 2 waves at 12+ agents)
     let arrivedAgent = 0;
+    let recruitNote = '';
     if (state.agents < state.popCap) {
-      state.agents += 1;
-      arrivedAgent = 1;
+      if (state.agents < 12) {
+        state.agents += 1;
+        arrivedAgent = 1;
+        state.agentRecruitProgress = 0;
+      } else {
+        state.agentRecruitProgress = (state.agentRecruitProgress || 0) + 1;
+        if (state.agentRecruitProgress >= 2) {
+          state.agents += 1;
+          arrivedAgent = 1;
+          state.agentRecruitProgress = 0;
+        } else {
+          recruitNote = ' · 요원 합류 대기(1/2)';
+        }
+      }
+    } else {
+      state.agentRecruitProgress = 0;
     }
 
     state.wave += 1;
@@ -639,7 +711,7 @@ window.ZS = window.ZS || {};
     G.refreshTraderOffers(false);
     ZS.Audio.playWaveClear();
 
-    const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : '';
+    const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
     G.banner(
       `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
       `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 주간 충전 전력 +${gainedPower}${agentMsg}`,
@@ -652,6 +724,7 @@ window.ZS = window.ZS || {};
 
   function triggerGameOver() {
     state.phase = 'gameover';
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
     ZS.Audio.playBlackout();
     G.banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
     G.notifyUi();
@@ -723,7 +796,7 @@ window.ZS = window.ZS || {};
       const a = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
       const spd = 0.85 + Math.random() * 0.95;
       const life = 0.28 + Math.random() * 0.14;
-      state.particles.push({
+      pushParticle({
         kind: 'dust',
         x: gx + Math.cos(a) * 0.24,
         y: gy + Math.sin(a) * 0.24,
@@ -790,7 +863,7 @@ window.ZS = window.ZS || {};
       const spd = 1.1 + Math.random() * 2.5;
       const w = 0.085 + Math.random() * 0.065;
       const life = 0.52 + Math.random() * 0.28;
-      state.particles.push({
+      pushParticle({
         kind: 'cube',
         x: gx + (Math.random() - 0.5) * 0.36,
         y: gy + (Math.random() - 0.5) * 0.36,
@@ -813,7 +886,7 @@ window.ZS = window.ZS || {};
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const spd = 0.6 + Math.random() * 2.2;
-      state.particles.push({
+      pushParticle({
         x: gx,
         y: gy,
         z: zPx,
@@ -833,7 +906,9 @@ window.ZS = window.ZS || {};
       const pt = state.particles[i];
       pt.life -= dt;
       if (pt.life <= 0) {
-        state.particles.splice(i, 1);
+        const lastIdx = state.particles.length - 1;
+        if (i !== lastIdx) state.particles[i] = state.particles[lastIdx];
+        state.particles.pop();
         continue;
       }
       pt.x += pt.vx * dt;
@@ -907,6 +982,7 @@ window.ZS = window.ZS || {};
     spawnBuildDustPuffs,
     getStructureDebrisPalette,
     spawnStructureDebris,
+    pushParticle,
     spawnBurstParticles,
     updateParticles,
     addFloatingText,
@@ -943,6 +1019,7 @@ window.ZS = window.ZS || {};
     computeRankFromXp: G.computeRankFromXp,
     recalculateBaseStats: G.recalculateBaseStats,
     getPlacementCozyPreview: G.getPlacementCozyPreview,
+    computeStructureEffectiveStatsUncached: G.computeStructureEffectiveStatsUncached,
     getStructureEffectiveStats: G.getStructureEffectiveStats,
     canPlaceItem: G.canPlaceItem,
     placeItem: G.placeItem,
@@ -951,6 +1028,9 @@ window.ZS = window.ZS || {};
     getRepairAllInfo: G.getRepairAllInfo,
     repairAllStructures: G.repairAllStructures,
     refreshTraderOffers: G.refreshTraderOffers,
+    exchangeResource: G.exchangeResource,
+    getNightConsumableCost: G.getNightConsumableCost,
+    buyNightConsumable: G.buyNightConsumable,
     buyTraderOffer: G.buyTraderOffer,
     startNightWave: G.startNightWave,
     toggleReconPaths: G.toggleReconPaths,

@@ -27,26 +27,52 @@ window.ZS = window.ZS || {};
     return def.category === 'defense' || def.category === 'infra';
   }
 
+  const TIER_UPCOST_OVERRIDES = {
+    barricade_wall: {
+      2: { wood: 4, scrap: 10 },
+      3: { wood: 4, scrap: 24, coin: 10 }
+    },
+    tactical_gate: {
+      2: { wood: 4, scrap: 18, coin: 8 },
+      3: { wood: 6, scrap: 36, coin: 24 }
+    }
+  };
+
+  function normalizeCozyGroup(grp) {
+    if (!grp) return grp;
+    if (/^repair_t\d+$/.test(grp)) return 'decor_repair';
+    if (/^solar_t\d+$/.test(grp)) return 'infra_solar';
+    if (/^wind_t\d+$/.test(grp)) return 'infra_wind';
+    if (/^battery_t\d+$/.test(grp)) return 'infra_battery';
+    if (/^housing_t\d+$/.test(grp)) return 'infra_housing';
+    return grp;
+  }
+
   function getUpgradeCost(def, fromLevel) {
     if (!isUpgradeableDef(def)) return null;
+    const nextLv = (fromLevel || 1) + 1;
+    const overrideMap = TIER_UPCOST_OVERRIDES[def.id];
+    if (overrideMap && overrideMap[nextLv]) {
+      return { ...overrideMap[nextLv] };
+    }
     const tierMap = getTierMap(def);
     if (tierMap) {
-      const nextTier = tierMap[(fromLevel || 1) + 1];
+      const nextTier = tierMap[nextLv];
       return nextTier && nextTier.upCost ? { ...nextTier.upCost } : null;
     }
     const base = def.cost || {};
     if (fromLevel === 1) {
       return {
-        wood: Math.max(12, Math.round((base.wood || 8) * 1.15)),
-        scrap: Math.max(8, Math.round((base.scrap || 6) * 0.85)),
-        coin: (base.coin || 0) + 10
+        wood: Math.max(4, Math.round((base.wood || 8) * 0.45)),
+        scrap: Math.max(16, Math.round((base.scrap || 12) * 1.35)),
+        coin: (base.coin || 0) + 14
       };
     }
     if (fromLevel === 2) {
       return {
-        wood: Math.max(24, Math.round((base.wood || 10) * 1.80)),
-        scrap: Math.max(16, Math.round((base.scrap || 10) * 1.45)),
-        coin: Math.round((base.coin || 0) * 1.5) + 25
+        wood: Math.max(6, Math.round((base.wood || 10) * 0.55)),
+        scrap: Math.max(30, Math.round((base.scrap || 14) * 2.25)),
+        coin: Math.round((base.coin || 0) * 1.6) + 34
       };
     }
     return null;
@@ -82,8 +108,9 @@ window.ZS = window.ZS || {};
     let dayCharge = def.dayCharge || 0;
     let nightGen = def.nightGen || 0;
     let popCap = def.popCap || 0;
+    let popUse = def.popUse || 0;
     let cozy = def.cozy || 0;
-    let cozyGroup = def.cozyGroup || null;
+    let cozyGroup = normalizeCozyGroup(def.cozyGroup || null);
     let lightRadius = def.lightRadius || 0;
     let lightColor = def.lightColor || null;
     let auraRadius = def.aura ? def.aura.radius || 0 : 0;
@@ -116,7 +143,7 @@ window.ZS = window.ZS || {};
       if (tier.nightGen !== undefined) nightGen = tier.nightGen;
       if (tier.popCap !== undefined) popCap = tier.popCap;
       if (tier.cozy !== undefined) cozy = tier.cozy;
-      if (tier.cozyGroup !== undefined) cozyGroup = tier.cozyGroup;
+      if (tier.cozyGroup !== undefined) cozyGroup = normalizeCozyGroup(tier.cozyGroup);
       if (tier.lightRadius !== undefined) lightRadius = tier.lightRadius;
       if (tier.lightColor !== undefined) lightColor = tier.lightColor;
       if (tier.auraRadius !== undefined) auraRadius = tier.auraRadius;
@@ -168,9 +195,10 @@ window.ZS = window.ZS || {};
         rateScale = 1.10;
         hpScale = 1.25;
       } else if (lv === 3) {
-        dmgScale = 1.62;
-        rateScale = 1.20;
-        hpScale = 1.55;
+        popUse = 2;
+        dmgScale = 1.92;
+        rateScale = 1.32;
+        hpScale = 1.70;
         if (def.id === 'rifle_bunker') {
           burstSecondMult = 0.50;
         } else if (def.id === 'shotgun_post') {
@@ -258,6 +286,7 @@ window.ZS = window.ZS || {};
       dayCharge,
       nightGen,
       popCap,
+      popUse,
       cozy,
       cozyGroup,
       lightRadius,
@@ -339,10 +368,10 @@ window.ZS = window.ZS || {};
           if (prof.nightGen) nightGen += prof.nightGen;
           if (def.requiresPower && prof.powerIdle) nightIdleDrain += prof.powerIdle;
           if (prof.popCap) popCap += prof.popCap;
-          if (def.popUse) popUsed += def.popUse;
+          if (prof.popUse) popUsed += prof.popUse;
 
           if (prof.cozy) {
-            const grp = prof.cozyGroup || def.cozyGroup || def.id;
+            const grp = normalizeCozyGroup(prof.cozyGroup || def.cozyGroup || def.id);
             if (!structGroups[grp]) structGroups[grp] = [];
             structGroups[grp].push(prof.cozy);
             groupCounts[grp] = (groupCounts[grp] || 0) + 1;
@@ -401,6 +430,7 @@ window.ZS = window.ZS || {};
     state.cozyScore = totalCozy;
     state.cozyDiversityBonus = diversityBonus;
     state.cozyTier = tier;
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     if (!silentTierUp && tier.level > prevTierLevel) {
       state.cozyTierUpTimer = 0.8;
@@ -447,7 +477,7 @@ window.ZS = window.ZS || {};
       };
     }
 
-    const grp = (prof && prof.cozyGroup) || def.cozyGroup || def.id;
+    const grp = normalizeCozyGroup((prof && prof.cozyGroup) || def.cozyGroup || def.id);
     const existingCount = (state.cozyGroupCounts && state.cozyGroupCounts[grp]) || 0;
     const isDiminished = existingCount >= 3;
     let gain = isDiminished ? Math.round(cozyVal * 0.5) : cozyVal;
@@ -466,9 +496,10 @@ window.ZS = window.ZS || {};
     };
   }
 
-  function getStructureEffectiveStats(st, tx, ty, overrideLevel, isMounted) {
+  function computeStructureEffectiveStatsUncached(st, tx, ty, overrideLevel, isMounted) {
+    if (!st) return { damage: 0, fireRate: 0, range: 0, critChance: 0, lightRadius: 0, auraStacks: {} };
     const def = DATA.ITEMS[st.id];
-    if (!def) return { damage: 0, fireRate: 0, range: 0, critChance: 0, lightRadius: 0 };
+    if (!def) return { damage: 0, fireRate: 0, range: 0, critChance: 0, lightRadius: 0, auraStacks: {} };
 
     const onWall = isMounted !== undefined
       ? !!isMounted
@@ -487,6 +518,12 @@ window.ZS = window.ZS || {};
       dmgMult += state.cozyTier.agentDmg;
     }
 
+    if (state.phase === 'night' && state.nightConsumables && state.nightConsumables.overpressureAmmo) {
+      if (def.subType === 'manned' || def.subType === 'turret') {
+        dmgMult += 0.20;
+      }
+    }
+
     const fid = state.floorGrid[ty] && state.floorGrid[ty][tx];
     const fDef = fid ? DATA.ITEMS[fid] : null;
     if (fDef && fDef.rateTileBonus) {
@@ -494,8 +531,9 @@ window.ZS = window.ZS || {};
     }
 
     const powered = !state.isNight || !state.blackoutActive;
+    const auraCounts = {};
 
-    // Scan aura providers (ground structures and wall-mounted units)
+    // Scan aura providers (ground structures and wall-mounted units) with same-ID stacking cap: 1st 100%, 2nd 50%, 3rd+ 0%
     const applyAuraFrom = (provider, providerMounted, dist) => {
       if (!provider || provider.id === 'command_hq') return;
       const oDef = DATA.ITEMS[provider.id];
@@ -506,17 +544,24 @@ window.ZS = window.ZS || {};
       const baseAuraR = oProf.auraRadius || oDef.aura.radius || 0;
       const auraRadius = baseAuraR + (providerMounted && oDef.id === 'led_floodlight' ? 0.4 : 0);
       if (dist <= auraRadius + 0.05) {
+        const hasCombatAura = !!(oDef.aura.mannedDmg || oDef.aura.fireRate || oDef.aura.rangeMult || oDef.aura.critChance);
+        if (!hasCombatAura) return;
+        const nextCount = (auraCounts[oDef.id] || 0) + 1;
+        auraCounts[oDef.id] = nextCount;
+        const stackWeight = nextCount === 1 ? 1.0 : nextCount === 2 ? 0.5 : 0.0;
+        if (stackWeight <= 0) return;
+
         if (oDef.aura.mannedDmg && def.subType === 'manned') {
-          dmgMult += oDef.aura.mannedDmg;
+          dmgMult += oDef.aura.mannedDmg * stackWeight;
         }
         if (oDef.aura.fireRate) {
-          rateMult += oDef.aura.fireRate;
+          rateMult += oDef.aura.fireRate * stackWeight;
         }
         if (oDef.aura.rangeMult) {
-          rangeMult += oDef.aura.rangeMult;
+          rangeMult += oDef.aura.rangeMult * stackWeight;
         }
         if (oDef.aura.critChance) {
-          critChance += oDef.aura.critChance;
+          critChance += oDef.aura.critChance * stackWeight;
         }
       }
     };
@@ -565,8 +610,55 @@ window.ZS = window.ZS || {};
       chainCount: prof.chainCount,
       slowDuration: prof.slowDuration,
       perkLabel: prof.perkLabel,
-      prof
+      prof,
+      auraStacks: auraCounts
     };
+  }
+
+  function getStructureEffectiveStats(st, tx, ty, overrideLevel, isMounted) {
+    if (!st) return { damage: 0, fireRate: 0, range: 0, critChance: 0, lightRadius: 0, auraStacks: {} };
+    const def = DATA.ITEMS[st.id];
+    if (!def) return { damage: 0, fireRate: 0, range: 0, critChance: 0, lightRadius: 0, auraStacks: {} };
+
+    const canCache = overrideLevel === undefined && tx >= 0 && ty >= 0 && tx < N && ty < N;
+    if (!canCache) {
+      return computeStructureEffectiveStatsUncached(st, tx, ty, overrideLevel, isMounted);
+    }
+
+    const onWall = isMounted !== undefined
+      ? !!isMounted
+      : !!(state.structGrid[ty] && state.structGrid[ty][tx] && state.structGrid[ty][tx].mounted === st);
+    const lv = st.level || 1;
+    const rank = G.isCombatVeterancyDef(def) ? (st.rank || G.computeRankFromXp(st.xp || 0)) : 0;
+    const curEpoch = state.statsEpoch || 0;
+    const cacheKey = onWall ? '_effCacheMounted' : '_effCache';
+    const cached = st[cacheKey];
+
+    if (
+      cached &&
+      cached.epoch === curEpoch &&
+      cached.tx === tx &&
+      cached.ty === ty &&
+      cached.lv === lv &&
+      cached.rank === rank &&
+      cached.id === st.id
+    ) {
+      return cached.val;
+    }
+
+    const val = computeStructureEffectiveStatsUncached(st, tx, ty, undefined, onWall);
+    const entry = { epoch: curEpoch, tx, ty, lv, rank, id: st.id, val };
+    if (Object.prototype.hasOwnProperty.call(st, cacheKey)) {
+      st[cacheKey] = entry;
+    } else {
+      Object.defineProperty(st, cacheKey, {
+        value: entry,
+        writable: true,
+        enumerable: false,
+        configurable: true
+      });
+    }
+    return val;
   }
 
   function canAffordCost(cost) {
@@ -729,10 +821,11 @@ window.ZS = window.ZS || {};
           };
         }
         autoUnderlay = true;
+        const wallLv2Up = getUpgradeCost(def, 1) || { wood: 4, scrap: 10, coin: 0 };
         underlayCost = {
-          wood: (hasVoucher ? 0 : 6) + 8,
-          scrap: (hasVoucher ? 0 : 2) + 6,
-          coin: 0
+          wood: (hasVoucher ? 0 : (def.cost.wood || 6)) + (wallLv2Up.wood || 0),
+          scrap: (hasVoucher ? 0 : (def.cost.scrap || 2)) + (wallLv2Up.scrap || 0),
+          coin: wallLv2Up.coin || 0
         };
       } else if (existing.id === 'barricade_wall' || existing.id === 'tactical_gate') {
         return { ok: false, reason: '성벽 위에는 초소·발칸·투광기만 거치 가능합니다.' };
@@ -817,8 +910,9 @@ window.ZS = window.ZS || {};
       ? Math.min(maxLv, state.hqLevel || 1)
       : Math.min(3, G.getHqLevelInfo(state.hqLevel).structUpgradeCap || state.hqLevel || 1);
     const cost = getUpgradeCost(def, curLv);
+    const curProf = getStructLevelProfile(def, curLv);
+    const nextProf = getStructLevelProfile(def, nextLv);
     if (nextLv > capLv) {
-      const nextProf = getStructLevelProfile(def, nextLv);
       return {
         ok: false,
         reason: isTierEvo
@@ -828,6 +922,25 @@ window.ZS = window.ZS || {};
         reqHqLevel: nextLv,
         cost
       };
+    }
+    const popDelta = Math.max(0, (nextProf.popUse || def.popUse || 0) - (curProf.popUse || def.popUse || 0));
+    if (popDelta > 0) {
+      if (state.popUsed + popDelta > state.popCap) {
+        return {
+          ok: false,
+          reason: `숙소 수용량이 부족합니다! (Lv.${nextLv} 개조에 추가 요원 +${popDelta}명 필요)`,
+          popShort: true,
+          cost
+        };
+      }
+      if (state.popUsed + popDelta > state.agents) {
+        return {
+          ok: false,
+          reason: `대기 중인 작전 요원이 부족합니다! (Lv.${nextLv} 개조에 추가 요원 +${popDelta}명 필요)`,
+          popShort: true,
+          cost
+        };
+      }
     }
     if (!canAffordCost(cost)) {
       return {
@@ -1020,9 +1133,12 @@ window.ZS = window.ZS || {};
       const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
       const profLv2 = getStructLevelProfile(def, 2);
       const wallMaxHp = Math.round(profLv2.baseMaxHp * hpMult);
-      const wallInvested = usedVoucher
-        ? { wood: 8, scrap: 6, coin: 0 }
-        : { wood: 14, scrap: 8, coin: 0 };
+      const wallLv2Up = getUpgradeCost(def, 1) || { wood: 4, scrap: 10, coin: 0 };
+      const wallInvested = {
+        wood: (usedVoucher ? 0 : (def.cost.wood || 6)) + (wallLv2Up.wood || 0),
+        scrap: (usedVoucher ? 0 : (def.cost.scrap || 2)) + (wallLv2Up.scrap || 0),
+        coin: wallLv2Up.coin || 0
+      };
       existing.buildAnimTimer = 0.24;
       state.structGrid[ty][tx] = {
         uid: G.nextStructUid++,
@@ -1324,24 +1440,60 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function getStructureRepairWeights(node) {
+    if (!node) return { woodRatio: 0.5, scrapRatio: 0.5 };
+    if (node.id === 'command_hq') {
+      return (state.hqLevel || 1) >= 2
+        ? { woodRatio: 0.15, scrapRatio: 0.85 }
+        : { woodRatio: 0.50, scrapRatio: 0.50 };
+    }
+    const def = DATA.ITEMS[node.id];
+    const lv = node.level || 1;
+    const isMetalPrimary =
+      lv >= 2 ||
+      (def && (def.subType === 'turret' || def.subType === 'power' || def.id === 'vending_machine' || def.id === 'arcade_neon'));
+    if (!isMetalPrimary) {
+      return { woodRatio: 0.75, scrapRatio: 0.25 };
+    }
+    return lv >= 3
+      ? { woodRatio: 0.10, scrapRatio: 0.90 }
+      : { woodRatio: 0.15, scrapRatio: 0.85 };
+  }
+
   function getRepairAllInfo() {
     let missingTotal = 0;
+    let woodWeight = 0;
+    let scrapWeight = 0;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (st && st.hp < st.maxHp) {
-          missingTotal += st.maxHp - st.hp;
+          const miss = st.maxHp - st.hp;
+          const w = getStructureRepairWeights(st);
+          missingTotal += miss;
+          woodWeight += miss * w.woodRatio;
+          scrapWeight += miss * w.scrapRatio;
         }
         if (st && st.mounted && st.mounted.hp < st.mounted.maxHp) {
-          missingTotal += st.mounted.maxHp - st.mounted.hp;
+          const miss = st.mounted.maxHp - st.mounted.hp;
+          const w = getStructureRepairWeights(st.mounted);
+          missingTotal += miss;
+          woodWeight += miss * w.woodRatio;
+          scrapWeight += miss * w.scrapRatio;
         }
       }
     }
     if (missingTotal <= 0) return { needed: false, woodCost: 0, scrapCost: 0 };
+    let woodCost = Math.round(woodWeight / 26);
+    let scrapCost = Math.round(scrapWeight / 20);
+    if (woodCost === 0 && scrapCost === 0) {
+      if (scrapWeight >= woodWeight) scrapCost = 1;
+      else woodCost = 1;
+    }
     return {
       needed: true,
-      woodCost: Math.max(2, Math.ceil(missingTotal / 32)),
-      scrapCost: Math.max(2, Math.ceil(missingTotal / 38))
+      woodCost,
+      scrapCost
     };
   }
 
@@ -1351,7 +1503,10 @@ window.ZS = window.ZS || {};
     if (!info.needed) return false;
     if (state.wood < info.woodCost || state.scrap < info.scrapCost) {
       ZS.Audio.playError();
-      G.banner('수리 자재 부족', `전체 수리에 목재 ${info.woodCost}, 고철 ${info.scrapCost}이 필요합니다.`, 'warn');
+      const parts = [];
+      if (info.woodCost > 0) parts.push(`목재 ${info.woodCost}`);
+      if (info.scrapCost > 0) parts.push(`고철 ${info.scrapCost}`);
+      G.banner('수리 자재 부족', `전체 수리에 ${parts.join(', ')}이 필요합니다.`, 'warn');
       return false;
     }
     state.wood -= info.woodCost;
@@ -1377,11 +1532,19 @@ window.ZS = window.ZS || {};
   // ================= TRADER CONVOY SYSTEM =================
   function refreshTraderOffers(paid) {
     if (paid) {
-      if (state.coin < state.traderRefreshCost) {
+      if (state.phase !== 'day') {
         ZS.Audio.playError();
         return false;
       }
-      state.coin -= state.traderRefreshCost;
+      const curCost = state.traderRefreshCost || 15;
+      if (state.coin < curCost) {
+        ZS.Audio.playError();
+        G.banner('코인 부족', `보급 목록 갱신에 ${curCost} 코인이 필요합니다.`, 'warn');
+        return false;
+      }
+      state.coin -= curCost;
+      state.traderRefreshCount = (state.traderRefreshCount || 0) + 1;
+      state.traderRefreshCost = curCost + 10 + (state.traderRefreshCount - 1) * 5;
       ZS.Audio.playTrade();
     }
 
@@ -1394,11 +1557,99 @@ window.ZS = window.ZS || {};
       sold: false
     }));
 
+    if (paid) G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function exchangeResource(routeId, mult) {
+    if (state.phase !== 'day') {
+      ZS.Audio.playError();
+      return false;
+    }
+    const routes = DATA.TRADER_EXCHANGE_ROUTES || [];
+    let route = null;
+    for (let i = 0; i < routes.length; i++) {
+      if (routes[i].id === routeId) {
+        route = routes[i];
+        break;
+      }
+    }
+    const count = Math.floor(Number(mult));
+    if (!route || !Number.isFinite(count) || count <= 0) {
+      ZS.Audio.playError();
+      return false;
+    }
+    const totalCost = route.cost * count;
+    const totalGive = route.give * count;
+    const RES_NAMES = { wood: '목재', scrap: '고철', coin: '코인' };
+    if ((state[route.from] || 0) < totalCost) {
+      ZS.Audio.playError();
+      G.banner('환전 자재 부족', `${route.label} ×${count} 환전에 ${RES_NAMES[route.from] || route.from} ${totalCost}이 필요합니다.`, 'warn');
+      return false;
+    }
+    state[route.from] -= totalCost;
+    state[route.to] = (state[route.to] || 0) + totalGive;
+    ZS.Audio.playTrade();
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function findNightConsumable(consumableId) {
+    const list = DATA.TRADER_NIGHT_CONSUMABLES || [];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === consumableId) return list[i];
+    }
+    return null;
+  }
+
+  function getNightConsumableCost(consumableId, waveNum) {
+    const item = findNightConsumable(consumableId);
+    if (!item) return null;
+    const w = Math.max(1, waveNum || state.wave || 1);
+    return {
+      scrap: item.baseScrap + w * item.scrapPerWave,
+      coin: item.baseCoin + w * item.coinPerWave
+    };
+  }
+
+  function buyNightConsumable(consumableId) {
+    if (state.phase !== 'day') {
+      ZS.Audio.playError();
+      return false;
+    }
+    const item = findNightConsumable(consumableId);
+    if (!item) return false;
+    if (!state.nightConsumables) {
+      state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
+    }
+    if (state.nightConsumables[item.stateKey]) {
+      ZS.Audio.playError();
+      return false;
+    }
+    const cost = getNightConsumableCost(consumableId, state.wave);
+    if (!cost || state.scrap < cost.scrap || state.coin < cost.coin) {
+      ZS.Audio.playError();
+      G.banner('보급 자재 부족', `[${item.name}] 구매에 고철 ${cost ? cost.scrap : 0} · 코인 ${cost ? cost.coin : 0}이 필요합니다.`, 'warn');
+      return false;
+    }
+    state.scrap -= cost.scrap;
+    state.coin -= cost.coin;
+    state.nightConsumables[item.stateKey] = true;
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
+    ZS.Audio.playTrade();
+    G.banner(`[야간 작전 보급] ${item.name} 장착`, '다음 1회 야간 웨이브 동안 기지 전역에 효과가 적용됩니다.', 'good');
+    G.saveGame();
     G.notifyUi();
     return true;
   }
 
   function buyTraderOffer(index) {
+    if (state.phase !== 'day') {
+      ZS.Audio.playError();
+      return false;
+    }
     const offer = state.traderOffers[index];
     if (!offer || offer.sold) return false;
     if (state.coin < offer.coinCost) {
@@ -1450,6 +1701,7 @@ window.ZS = window.ZS || {};
     getStructLevelProfile,
     recalculateBaseStats,
     getPlacementCozyPreview,
+    computeStructureEffectiveStatsUncached,
     getStructureEffectiveStats,
     canAffordCost,
     payCost,
@@ -1470,6 +1722,9 @@ window.ZS = window.ZS || {};
     getRepairAllInfo,
     repairAllStructures,
     refreshTraderOffers,
+    exchangeResource,
+    getNightConsumableCost,
+    buyNightConsumable,
     buyTraderOffer
   });
 })();

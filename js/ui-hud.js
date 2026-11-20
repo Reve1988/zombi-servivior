@@ -17,6 +17,10 @@ window.ZS = window.ZS || {};
 
   let bannerTimer = null;
   let lastCozyPulseSeq = 0;
+  let lastPhaseIconKey = '';
+  let lastPowerIconKey = '';
+  let lastCozySig = '';
+  let lastReconSig = '';
 
   const U = (ZS._UI = {
     uiState
@@ -62,14 +66,17 @@ window.ZS = window.ZS || {};
     const P = ZS.DATA.PALETTE;
     const isNightBlackout = !!(st.isNight && st.blackoutActive);
     if (st.phase === 'night') {
+      const nextPhaseKey = isNightBlackout ? 'night-off' : 'night-on';
       const phaseIconEl = document.getElementById('hud-phase-icon');
-      if (phaseIconEl) {
+      if (phaseIconEl && lastPhaseIconKey !== nextPhaseKey) {
+        lastPhaseIconKey = nextPhaseKey;
         phaseIconEl.className = isNightBlackout ? 'icon-slot icon-danger' : 'icon-slot';
         phaseIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'phase-night', 20);
       }
       const phaseTextEl = document.getElementById('hud-phase-text');
       if (phaseTextEl) {
-        phaseTextEl.textContent = isNightBlackout ? '블랙아웃 교전 중!' : '야간 방어 교전 중';
+        const nextTxt = isNightBlackout ? '블랙아웃 교전 중!' : '야간 방어 교전 중';
+        if (phaseTextEl.textContent !== nextTxt) phaseTextEl.textContent = nextTxt;
       }
     }
 
@@ -80,8 +87,10 @@ window.ZS = window.ZS || {};
     pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
     pwrBar.style.background = pwrPct > 35 ? P.power : pwrPct > 5 ? P.healthMid : P.danger;
 
+    const nextPwrKey = isNightBlackout ? 'pwr-off' : 'pwr-on';
     const pwrIconEl = document.getElementById('res-power-icon');
-    if (pwrIconEl) {
+    if (pwrIconEl && lastPowerIconKey !== nextPwrKey) {
+      lastPowerIconKey = nextPwrKey;
       pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
       pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
     }
@@ -98,14 +107,20 @@ window.ZS = window.ZS || {};
 
     document.getElementById('hud-wave-num').textContent = `WAVE ${st.wave}`;
     if (st.phase === 'day') {
-      phaseIconEl.className = 'icon-slot icon-coin';
-      phaseIconEl.innerHTML = ozIcon('phase-day', 20);
+      if (lastPhaseIconKey !== 'day') {
+        lastPhaseIconKey = 'day';
+        phaseIconEl.className = 'icon-slot icon-coin';
+        phaseIconEl.innerHTML = ozIcon('phase-day', 20);
+      }
       document.getElementById('hud-phase-text').textContent = '주간 정비 · 건설 페이즈';
     } else if (st.phase === 'night') {
       syncNightPhaseAndPowerHud(st);
     } else {
-      phaseIconEl.className = 'icon-slot icon-danger';
-      phaseIconEl.innerHTML = ozIcon('state-alert', 20);
+      if (lastPhaseIconKey !== 'gameover') {
+        lastPhaseIconKey = 'gameover';
+        phaseIconEl.className = 'icon-slot icon-danger';
+        phaseIconEl.innerHTML = ozIcon('state-alert', 20);
+      }
       document.getElementById('hud-phase-text').textContent = '작전 실패';
     }
 
@@ -130,92 +145,96 @@ window.ZS = window.ZS || {};
     // Population display
     document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
 
-    // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip
+    // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip (dirty-memoized)
     const tier = st.cozyTier;
     const tiers = ZS.DATA.COZY_TIERS || [];
     document.getElementById('res-cozy').textContent = `Lv.${tier.level}`;
-
-    const heartPath = document.getElementById('res-cozy-heart-path');
-    if (heartPath) {
-      const strokeW = (1.5 + ((tier.level - 1) / 7) * 1.0).toFixed(2);
-      heartPath.setAttribute('stroke-width', strokeW);
-    }
-
-    const nextTier = tiers.find((t) => t.level === tier.level + 1);
-    const segWrap = document.getElementById('res-cozy-segments');
-    if (segWrap) {
-      const curProgress = nextTier
-        ? Math.max(0, Math.min(1, (st.cozyScore - tier.min) / Math.max(1, nextTier.min - tier.min)))
-        : 1;
-      let segHtml = '';
-      for (let idx = 1; idx <= 8; idx++) {
-        let fillPct = 0;
-        if (idx < tier.level) {
-          fillPct = 100;
-        } else if (idx === tier.level) {
-          fillPct = nextTier ? Math.max(18, Math.round(curProgress * 100)) : 100;
-        }
-        segHtml += `<span class="cozy-seg"><span class="cozy-seg-fill" style="width:${fillPct}%"></span></span>`;
-      }
-      segWrap.innerHTML = segHtml;
-    }
 
     const cozyPillEl = document.getElementById('cozy-pill');
     if (cozyPillEl && st.cozyPulseSeq && st.cozyPulseSeq !== lastCozyPulseSeq) {
       lastCozyPulseSeq = st.cozyPulseSeq;
       cozyPillEl.classList.remove('tier-up-pulse');
       if (cozyPillEl.offsetWidth !== undefined) {
-        // Trigger reflow when running in browser DOM
+        // Trigger reflow only when a cozy tier-up pulse occurs
       }
       cozyPillEl.classList.add('tier-up-pulse');
     }
 
-    const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
-    const rowsHtml = tiers
-      .map(
-        (t) => `
-        <tr class="${t.level === tier.level ? 'current-tier' : ''}">
-          <td>Lv.${t.level}</td>
-          <td>${escapeHtml(t.title)}</td>
-          <td>${t.min}</td>
-          <td>+${Math.round(t.agentDmg * 100)}%</td>
-          <td>+${Math.round(t.fireRate * 100)}%</td>
-          <td>+${Math.round(t.coinBonus * 100)}%</td>
-          <td>+${Math.round((t.xpBonus || 0) * 100)}%</td>
-          <td>${Math.round(t.freeRepair * 100)}%</td>
-        </tr>`
-      )
-      .join('');
-
-    document.getElementById('cozy-tooltip').innerHTML = `
-      <div class="cozy-popover-head">
-        <span class="inline-icon-text" style="font-weight:800;color:${P.gold};">${ozIcon('res-cozy', 15, 'icon-coin')}<span>${escapeHtml(tier.title)} (Lv.${tier.level})</span></span>
-        <span style="font-size:12px;color:#e6eef7;">총 <b>${st.cozyScore}점</b></span>
-      </div>
-      <div class="cozy-popover-meta">
-        바닥재 ${st.cozyFloorScore || 0}/${floorCap}점${(st.cozyFloorRaw || 0) >= floorCap ? ' (상한)' : ''} · 구조물 ${st.cozyStructScore || 0}점${st.cozySynergyScore ? ` · 라운지 +${st.cozySynergyScore}` : ''} · 다양성 <span style="color:${P.gold}">+${st.cozyDiversityBonus}</span>
-      </div>
-      <table class="cozy-table">
-        <thead>
-          <tr>
-            <th>등급</th>
-            <th>타이틀</th>
-            <th>요구</th>
-            <th>요원화력</th>
-            <th>연사</th>
-            <th>코인</th>
-            <th>숙련XP</th>
-            <th>수리</th>
-          </tr>
-        </thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      ${
-        nextTier
-          ? `<div class="cozy-popover-foot">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
-          : `<div class="cozy-popover-foot" style="color:${P.gold};">★ 최고 안락함 등급(Lv.8) 달성!</div>`
+    const cozySig = `${st.cozyScore}|${st.cozyFloorRaw || 0}|${st.cozyStructScore || 0}|${st.cozySynergyScore || 0}|${st.cozyDiversityBonus || 0}|${tier.level}`;
+    if (cozySig !== lastCozySig) {
+      lastCozySig = cozySig;
+      const heartPath = document.getElementById('res-cozy-heart-path');
+      if (heartPath) {
+        const strokeW = (1.5 + ((tier.level - 1) / 7) * 1.0).toFixed(2);
+        heartPath.setAttribute('stroke-width', strokeW);
       }
-    `;
+
+      const nextTier = tiers.find((t) => t.level === tier.level + 1);
+      const segWrap = document.getElementById('res-cozy-segments');
+      if (segWrap) {
+        const curProgress = nextTier
+          ? Math.max(0, Math.min(1, (st.cozyScore - tier.min) / Math.max(1, nextTier.min - tier.min)))
+          : 1;
+        let segHtml = '';
+        for (let idx = 1; idx <= 8; idx++) {
+          let fillPct = 0;
+          if (idx < tier.level) {
+            fillPct = 100;
+          } else if (idx === tier.level) {
+            fillPct = nextTier ? Math.max(18, Math.round(curProgress * 100)) : 100;
+          }
+          segHtml += `<span class="cozy-seg"><span class="cozy-seg-fill" style="width:${fillPct}%"></span></span>`;
+        }
+        segWrap.innerHTML = segHtml;
+      }
+
+      const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
+      const rowsHtml = tiers
+        .map(
+          (t) => `
+          <tr class="${t.level === tier.level ? 'current-tier' : ''}">
+            <td>Lv.${t.level}</td>
+            <td>${escapeHtml(t.title)}</td>
+            <td>${t.min}</td>
+            <td>+${Math.round(t.agentDmg * 100)}%</td>
+            <td>+${Math.round(t.fireRate * 100)}%</td>
+            <td>+${Math.round(t.coinBonus * 100)}%</td>
+            <td>+${Math.round((t.xpBonus || 0) * 100)}%</td>
+            <td>${Math.round(t.freeRepair * 100)}%</td>
+          </tr>`
+        )
+        .join('');
+
+      document.getElementById('cozy-tooltip').innerHTML = `
+        <div class="cozy-popover-head">
+          <span class="inline-icon-text" style="font-weight:800;color:${P.gold};">${ozIcon('res-cozy', 15, 'icon-coin')}<span>${escapeHtml(tier.title)} (Lv.${tier.level})</span></span>
+          <span style="font-size:12px;color:#e6eef7;">총 <b>${st.cozyScore}점</b></span>
+        </div>
+        <div class="cozy-popover-meta">
+          바닥재 ${st.cozyFloorScore || 0}/${floorCap}점${(st.cozyFloorRaw || 0) >= floorCap ? ' (상한)' : ''} · 구조물 ${st.cozyStructScore || 0}점${st.cozySynergyScore ? ` · 라운지 +${st.cozySynergyScore}` : ''} · 다양성 <span style="color:${P.gold}">+${st.cozyDiversityBonus}</span>
+        </div>
+        <table class="cozy-table">
+          <thead>
+            <tr>
+              <th>등급</th>
+              <th>타이틀</th>
+              <th>요구</th>
+              <th>요원화력</th>
+              <th>연사</th>
+              <th>코인</th>
+              <th>숙련XP</th>
+              <th>수리</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        ${
+          nextTier
+            ? `<div class="cozy-popover-foot">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
+            : `<div class="cozy-popover-foot" style="color:${P.gold};">★ 최고 안락함 등급(Lv.8) 달성!</div>`
+        }
+      `;
+    }
 
     // Auto-collapse build dock & compact secondary HUD at Night start; auto-expand at Dawn (#10)
     if (st.phase !== uiState.lastPhase) {
@@ -248,27 +267,16 @@ window.ZS = window.ZS || {};
       const repBtn = document.getElementById('btn-repair-all');
       const repLbl = document.getElementById('repair-cost-label');
       repBtn.disabled = !rep.needed;
-      repLbl.innerHTML = rep.needed
-        ? `<span>비용:</span>${ozIcon('res-wood', 13, 'icon-wood')}<span>${rep.woodCost}</span><span>·</span>${ozIcon('res-scrap', 13, 'icon-scrap')}<span>${rep.scrapCost}</span>`
-        : '모든 시설 내구도 100%';
+      if (rep.needed) {
+        const repParts = [];
+        if (rep.woodCost > 0) repParts.push(`${ozIcon('res-wood', 13, 'icon-wood')}<span>${rep.woodCost}</span>`);
+        if (rep.scrapCost > 0) repParts.push(`${ozIcon('res-scrap', 13, 'icon-scrap')}<span>${rep.scrapCost}</span>`);
+        repLbl.innerHTML = `<span>비용:</span>${repParts.join('<span>·</span>')}`;
+      } else {
+        repLbl.textContent = '모든 시설 내구도 100%';
+      }
     } else if (st.phase === 'night') {
-      const left = st.spawnQueue.length + st.zombies.length;
-      document.getElementById('hud-enemies-left').textContent = `${left}기`;
-      document.getElementById('speed-label').textContent = `${st.gameSpeed}x`;
-
-      const rBtn = document.getElementById('btn-skill-repair');
-      rBtn.disabled = st.skills.repairCd > 0;
-      document.getElementById('skill-repair-cd').textContent =
-        st.skills.repairCd > 0 ? `재충전 중 (${Math.ceil(st.skills.repairCd)}초)` : '즉시 전체 시설 +95 HP';
-
-      const sBtn = document.getElementById('btn-skill-airstrike');
-      sBtn.disabled = st.skills.airstrikeCd > 0;
-      document.getElementById('skill-strike-cd').innerHTML =
-        st.skills.airstrikeCd > 0
-          ? `재장전 중 (${Math.ceil(st.skills.airstrikeCd)}초)`
-          : uiState.activeSkill === 'airstrike'
-          ? `${ozIcon('sys-center', 13, 'icon-danger')}<span>타격할 타일을 클릭하세요!</span>`
-          : '지정 위치 광역 폭격 + 조명';
+      updateCombatHud();
     }
 
     U.renderItemCards();
@@ -286,9 +294,19 @@ window.ZS = window.ZS || {};
     if (!el) return;
     const intel = st && st.nextWaveIntel;
     if (!intel || st.phase !== 'day') {
-      el.style.display = 'none';
+      if (lastReconSig !== 'hidden') {
+        lastReconSig = 'hidden';
+        el.style.display = 'none';
+      }
       return;
     }
+
+    const showPaths = st.showReconPaths !== false;
+    const pathLen = st.previewPaths ? st.previewPaths.length : 0;
+    const breachLen = st.breachMarkers ? st.breachMarkers.length : 0;
+    const reconSig = `${intel.wave}|${intel.pattern}|${intel.totalCount}|${showPaths ? 1 : 0}|${pathLen}|${breachLen}|${(intel.sideKinds || []).join(',')}`;
+    if (reconSig === lastReconSig) return;
+    lastReconSig = reconSig;
 
     el.style.display = 'block';
     const isBossWave = intel.bossSide != null || (intel.counts && intel.counts.boss > 0);
@@ -375,10 +393,6 @@ window.ZS = window.ZS || {};
         ? `<div class="recon-boss-row">${ozIcon('en-boss', 15)}<span>알파 타이탄${counts.boss > 1 ? ` ×${counts.boss}` : ''} · ${SIDE_NAMES[intel.bossSide]}</span></div>`
         : '';
 
-    const showPaths = st.showReconPaths !== false;
-    const pathLen = st.previewPaths ? st.previewPaths.length : 0;
-    const breachLen = st.breachMarkers ? st.breachMarkers.length : 0;
-
     el.innerHTML = `
       <div class="recon-head">
         <span class="recon-title">${ozIcon('recon-compass', 15)}<span>정찰 브리핑 · WAVE ${intel.wave}</span></span>
@@ -415,12 +429,37 @@ window.ZS = window.ZS || {};
     }, 4200);
   }
 
-  function updateLiveNightNumbers() {
+  let lastStrikeTargeting = null;
+  let lastPopSig = '';
+
+  function updateCombatHud() {
     const st = ZS.Game.state;
+    if (st.phase !== 'night') {
+      updateHud();
+      return;
+    }
+    const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
+    const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
+    const hqHp = hq ? Math.ceil(hq.hp) : 0;
+    const hqMax = hq ? hq.maxHp : hqInfo.maxHp;
+    document.getElementById('hud-hq-hp').textContent = `${hqHp} / ${hqMax}`;
+    document.getElementById('hud-hq-bar').style.width = `${Math.max(0, (hqHp / hqMax) * 100)}%`;
+
+    document.getElementById('res-wood').textContent = Math.floor(st.wood);
+    document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
+    document.getElementById('res-coin').textContent = Math.floor(st.coin);
+    const nextPopSig = `${st.popUsed}/${st.agents}/${st.popCap}`;
+    if (nextPopSig !== lastPopSig) {
+      lastPopSig = nextPopSig;
+      document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
+    }
+    document.getElementById('res-cozy').textContent = `Lv.${st.cozyTier.level}`;
+
     syncNightPhaseAndPowerHud(st);
 
     const left = st.spawnQueue.length + st.zombies.length;
     document.getElementById('hud-enemies-left').textContent = `${left}기`;
+    document.getElementById('speed-label').textContent = `${st.gameSpeed}x`;
 
     const rBtn = document.getElementById('btn-skill-repair');
     rBtn.disabled = st.skills.repairCd > 0;
@@ -429,9 +468,23 @@ window.ZS = window.ZS || {};
 
     const sBtn = document.getElementById('btn-skill-airstrike');
     sBtn.disabled = st.skills.airstrikeCd > 0;
+    const strikeEl = document.getElementById('skill-strike-cd');
     if (st.skills.airstrikeCd > 0) {
-      document.getElementById('skill-strike-cd').textContent = `재장전 중 (${Math.ceil(st.skills.airstrikeCd)}초)`;
+      lastStrikeTargeting = 'cd';
+      strikeEl.textContent = `재장전 중 (${Math.ceil(st.skills.airstrikeCd)}초)`;
+    } else if (uiState.activeSkill === 'airstrike') {
+      if (lastStrikeTargeting !== 'targeting') {
+        lastStrikeTargeting = 'targeting';
+        strikeEl.innerHTML = `${ozIcon('sys-center', 13, 'icon-danger')}<span>타격할 타일을 클릭하세요!</span>`;
+      }
+    } else if (lastStrikeTargeting !== 'idle') {
+      lastStrikeTargeting = 'idle';
+      strikeEl.textContent = '지정 위치 광역 폭격 + 조명';
     }
+  }
+
+  function updateLiveNightNumbers() {
+    updateCombatHud();
   }
 
   function initDebugToolbar(env) {
@@ -495,6 +548,7 @@ window.ZS = window.ZS || {};
     formatPowerSubText,
     syncNightPhaseAndPowerHud,
     updateHud,
+    updateCombatHud,
     renderReconCard,
     showWaveBanner,
     updateLiveNightNumbers,
