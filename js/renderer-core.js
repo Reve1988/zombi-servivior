@@ -1,16 +1,49 @@
 window.ZS = window.ZS || {};
 
 (function () {
+  const LIGHT_SCALE = 0.5;
   const lightCanvas = document.createElement('canvas');
   const lightCtx = lightCanvas.getContext('2d');
   const eyeHaloCache = new Map();
+  const glowStampCache = new Map();
+  const emissiveStampCache = new Map();
   const thumbnailCache = new Map();
+  let punchHoleStamp = null;
+  const bgCache = {
+    canvas: document.createElement('canvas'),
+    ctx: null,
+    w: 0,
+    h: 0,
+    isSil: null,
+    isNight: null
+  };
+  const terrainCache = {
+    canvas: document.createElement('canvas'),
+    ctx: null,
+    N: 0,
+    isSil: null,
+    bakeScale: 0,
+    worldMinX: 0,
+    worldMinY: 0,
+    worldW: 0,
+    worldH: 0,
+    floorIds: null,
+    decalOcc: null,
+    bakeCount: 0
+  };
   const R = (ZS._Renderer = {
     lightCanvas,
     lightCtx,
+    LIGHT_SCALE,
+    lightScaleX: LIGHT_SCALE,
+    lightScaleY: LIGHT_SCALE,
     eyeHaloCache,
+    glowStampCache,
+    emissiveStampCache,
     thumbnailCache,
+    terrainCache,
     emissiveList: null,
+    activeTrapTiles: null,
     cachedTerrainN: 0,
     terrainMeta: null
   });
@@ -134,10 +167,97 @@ window.ZS = window.ZS || {};
   }
 
   function ensureLightCanvas(w, h) {
-    if (lightCanvas.width !== w || lightCanvas.height !== h) {
-      lightCanvas.width = w;
-      lightCanvas.height = h;
+    const lw = Math.max(1, Math.round(w * LIGHT_SCALE));
+    const lh = Math.max(1, Math.round(h * LIGHT_SCALE));
+    if (lightCanvas.width !== lw || lightCanvas.height !== lh) {
+      lightCanvas.width = lw;
+      lightCanvas.height = lh;
     }
+    R.lightScaleX = lw / Math.max(1, w);
+    R.lightScaleY = lh / Math.max(1, h);
+    return { lw, lh, scaleX: R.lightScaleX, scaleY: R.lightScaleY };
+  }
+
+  function getGlowStamp(glowColor, innerFrac) {
+    const frac = innerFrac != null ? innerFrac : 0.04;
+    const key = `${glowColor}|${frac}`;
+    let stamp = glowStampCache.get(key);
+    if (stamp) return stamp;
+    const sz = 64;
+    stamp = document.createElement('canvas');
+    stamp.width = sz;
+    stamp.height = sz;
+    const sctx = stamp.getContext('2d');
+    const half = sz * 0.5;
+    const grad = sctx.createRadialGradient(half, half, Math.max(1, half * frac), half, half, half);
+    grad.addColorStop(0, glowColor);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, sz, sz);
+    if (glowStampCache.size > 128) glowStampCache.clear();
+    glowStampCache.set(key, stamp);
+    return stamp;
+  }
+
+  function getPunchHoleStamp() {
+    if (punchHoleStamp) return punchHoleStamp;
+    const sz = 64;
+    const stamp = document.createElement('canvas');
+    stamp.width = sz;
+    stamp.height = sz;
+    const sctx = stamp.getContext('2d');
+    const half = sz * 0.5;
+    const grad = sctx.createRadialGradient(half, half, half * 0.08, half, half, half);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    grad.addColorStop(0.65, 'rgba(0, 0, 0, 0.45)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, sz, sz);
+    punchHoleStamp = stamp;
+    return stamp;
+  }
+
+  function getEmissiveGlowStamp(hex) {
+    const key = hex || '#FFD27A';
+    let stamp = emissiveStampCache.get(key);
+    if (stamp) return stamp;
+    const sz = 64;
+    stamp = document.createElement('canvas');
+    stamp.width = sz;
+    stamp.height = sz;
+    const sctx = stamp.getContext('2d');
+    const half = sz * 0.5;
+    let r = 255;
+    let g = 210;
+    let b = 122;
+    if (key[0] === '#') {
+      if (key.length >= 7) {
+        r = parseInt(key.slice(1, 3), 16) || 0;
+        g = parseInt(key.slice(3, 5), 16) || 0;
+        b = parseInt(key.slice(5, 7), 16) || 0;
+      } else if (key.length === 4) {
+        r = parseInt(key[1] + key[1], 16) || 0;
+        g = parseInt(key[2] + key[2], 16) || 0;
+        b = parseInt(key[3] + key[3], 16) || 0;
+      }
+    }
+    const grad = sctx.createRadialGradient(half, half, 1.5, half, half, half);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.28)`);
+    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, sz, sz);
+    if (emissiveStampCache.size > 128) emissiveStampCache.clear();
+    emissiveStampCache.set(key, stamp);
+    return stamp;
+  }
+
+  function isScreenVisible(sx, sy, padX, padTop, padBot, w, h) {
+    return sx >= -padX && sx <= w + padX && sy >= -padTop && sy <= h + padBot;
+  }
+
+  function isGridVisible(gx, gy, padX, padTop, padBot, w, h) {
+    const p = ZS.Iso.gridToScreen(gx, gy, 0);
+    return p.x >= -padX && p.x <= w + padX && p.y >= -padTop && p.y <= h + padBot;
   }
 
   function getEyeHaloStamp(glowColor) {
@@ -170,6 +290,234 @@ window.ZS = window.ZS || {};
     return false;
   }
 
+  function ensureTerrainCache(N, meta, state, P, isSil) {
+    const Iso = ZS.Iso;
+    const dpr = window.devicePixelRatio || 1;
+    const worldMinX = -N * (Iso.TILE_W * 0.5) - 24;
+    const worldMaxX = N * (Iso.TILE_W * 0.5) + 24;
+    const worldMinY = -24;
+    const worldMaxY = (N + 0.4) * Iso.TILE_H + 36;
+    const worldW = Math.ceil(worldMaxX - worldMinX);
+    const worldH = Math.ceil(worldMaxY - worldMinY);
+    const bakeScale = Math.min(2.0, Math.max(1.5, dpr), 4096 / Math.max(1, worldW));
+    const totalCells = N * N;
+
+    let dirty =
+      terrainCache.N !== N ||
+      terrainCache.isSil !== isSil ||
+      terrainCache.bakeScale !== bakeScale ||
+      !terrainCache.floorIds ||
+      terrainCache.floorIds.length !== totalCells;
+
+    if (!dirty) {
+      const fg = state.floorGrid;
+      const sg = state.structGrid;
+      for (let y = 0; y < N && !dirty; y++) {
+        const fRow = fg && fg[y];
+        const sRow = sg && sg[y];
+        const mRow = meta.grid[y];
+        const rowOff = y * N;
+        for (let x = 0; x < N; x++) {
+          const idx = rowOff + x;
+          const fid = (fRow && fRow[x]) || null;
+          if (terrainCache.floorIds[idx] !== fid) {
+            dirty = true;
+            break;
+          }
+          if (!fid && mRow[x].decal) {
+            const occ = Boolean(sRow && sRow[x]);
+            if (terrainCache.decalOcc[idx] !== occ) {
+              dirty = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!dirty) return terrainCache;
+
+    if (!terrainCache.floorIds || terrainCache.floorIds.length !== totalCells) {
+      terrainCache.floorIds = new Array(totalCells);
+      terrainCache.decalOcc = new Array(totalCells);
+    }
+
+    terrainCache.N = N;
+    terrainCache.isSil = isSil;
+    terrainCache.bakeScale = bakeScale;
+    terrainCache.worldMinX = worldMinX;
+    terrainCache.worldMinY = worldMinY;
+    terrainCache.worldW = worldW;
+    terrainCache.worldH = worldH;
+
+    const cw = Math.max(1, Math.round(worldW * bakeScale));
+    const ch = Math.max(1, Math.round(worldH * bakeScale));
+    if (terrainCache.canvas.width !== cw || terrainCache.canvas.height !== ch) {
+      terrainCache.canvas.width = cw;
+      terrainCache.canvas.height = ch;
+    }
+    const tctx = terrainCache.ctx || (terrainCache.ctx = terrainCache.canvas.getContext('2d'));
+
+    const prevVp = Iso.getViewport();
+    const prevMinZoom = Iso.cam.minZoom;
+    const prevCamX = Iso.cam.x;
+    const prevCamY = Iso.cam.y;
+    const prevZoom = Iso.cam.zoom;
+
+    try {
+      Iso.setViewport(worldW, worldH);
+      Iso.cam.zoom = 1.0;
+      Iso.cam.x = worldMinX + worldW * 0.5;
+      Iso.cam.y = worldMinY + worldH * 0.5;
+      tctx.setTransform(bakeScale, 0, 0, bakeScale, 0, 0);
+      tctx.clearRect(0, 0, worldW, worldH);
+
+      if (isSil) {
+        Iso.resetRenderModifiers();
+      } else {
+        Iso.setSceneTint('#FFE8BA', 0.055);
+      }
+
+      drawIslandSlab(tctx, N, P, 1.0);
+
+      for (let y = 0; y < N; y++) {
+        const fRow = state.floorGrid && state.floorGrid[y];
+        const sRow = state.structGrid && state.structGrid[y];
+        const rowOff = y * N;
+        for (let x = 0; x < N; x++) {
+          const cell = meta.grid[y][x];
+          const isEdge = cell.isEdge;
+          const checker = (x + y) % 2 === 0;
+          const rawBase = isEdge
+            ? checker
+              ? P.terrainEdgeA
+              : P.terrainEdgeB
+            : checker
+            ? P.terrainA
+            : P.terrainB;
+          const tileFill = isSil ? (isEdge ? '#CBD3DB' : '#D5DBE1') : Iso.shadeHex(rawBase, cell.shadeFactor);
+          Iso.drawTilePoly(tctx, x, y, 0, tileFill, tileFill, 0.65);
+
+          const fid = (fRow && fRow[x]) || null;
+          const occ = Boolean(sRow && sRow[x]);
+          terrainCache.floorIds[rowOff + x] = fid;
+          terrainCache.decalOcc[rowOff + x] = occ;
+
+          if (fid) {
+            drawFloorTile(tctx, x, y, fid, 1.0);
+          } else if (cell.decal && !occ) {
+            drawTerrainDecal(tctx, x, y, cell.decal, 1.0);
+          }
+        }
+      }
+
+      if (!isSil) {
+        drawQuarantineBorder(tctx, N, P, false, 1.0);
+      }
+      terrainCache.bakeCount += 1;
+    } finally {
+      Iso.setViewport(prevVp.w, prevVp.h);
+      Iso.cam.minZoom = prevMinZoom;
+      Iso.cam.x = prevCamX;
+      Iso.cam.y = prevCamY;
+      Iso.cam.zoom = prevZoom;
+    }
+
+    return terrainCache;
+  }
+
+  function drawEditGridOverlay(ctx, N, meta, uiState, w, h, zScale) {
+    const Iso = ZS.Iso;
+    ctx.save();
+
+    // Inner buildable grid lines (batched into 1 path)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i <= N - 1; i++) {
+      const a = Iso.gridToScreen(i, 1, 0);
+      const b = Iso.gridToScreen(i, N - 1, 0);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      const c = Iso.gridToScreen(1, i, 0);
+      const d = Iso.gridToScreen(N - 1, i, 0);
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(d.x, d.y);
+    }
+    ctx.stroke();
+
+    // Outer quarantine ring grid lines (batched into 1 path)
+    ctx.strokeStyle = 'rgba(255, 77, 109, 0.28)';
+    ctx.beginPath();
+    const o0 = Iso.gridToScreen(0, 0, 0);
+    const o1 = Iso.gridToScreen(N, 0, 0);
+    const o2 = Iso.gridToScreen(N, N, 0);
+    const o3 = Iso.gridToScreen(0, N, 0);
+    ctx.moveTo(o0.x, o0.y);
+    ctx.lineTo(o1.x, o1.y);
+    ctx.lineTo(o2.x, o2.y);
+    ctx.lineTo(o3.x, o3.y);
+    ctx.closePath();
+    for (let i = 1; i < N; i++) {
+      let pA = Iso.gridToScreen(i, 0, 0);
+      let pB = Iso.gridToScreen(i, 1, 0);
+      ctx.moveTo(pA.x, pA.y);
+      ctx.lineTo(pB.x, pB.y);
+      pA = Iso.gridToScreen(i, N - 1, 0);
+      pB = Iso.gridToScreen(i, N, 0);
+      ctx.moveTo(pA.x, pA.y);
+      ctx.lineTo(pB.x, pB.y);
+      pA = Iso.gridToScreen(0, i, 0);
+      pB = Iso.gridToScreen(1, i, 0);
+      ctx.moveTo(pA.x, pA.y);
+      ctx.lineTo(pB.x, pB.y);
+      pA = Iso.gridToScreen(N - 1, i, 0);
+      pB = Iso.gridToScreen(N, i, 0);
+      ctx.moveTo(pA.x, pA.y);
+      ctx.lineTo(pB.x, pB.y);
+    }
+    ctx.stroke();
+
+    // Outer edge build-prohibition X markers (culled & batched)
+    if (uiState.mode === 'build') {
+      const pad = 20 * zScale;
+      ctx.strokeStyle = 'rgba(255, 77, 109, 0.22)';
+      ctx.lineWidth = Math.max(1, 1.1 * zScale);
+      ctx.beginPath();
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          if (!meta.grid[y][x].isEdge) continue;
+          const c = Iso.gridToScreen(x + 0.5, y + 0.5, 0.4);
+          if (!isScreenVisible(c.x, c.y, pad, pad, pad, w, h)) continue;
+          ctx.moveTo(c.x - 4 * zScale, c.y - 2 * zScale);
+          ctx.lineTo(c.x + 4 * zScale, c.y + 2 * zScale);
+          ctx.moveTo(c.x + 4 * zScale, c.y - 2 * zScale);
+          ctx.lineTo(c.x - 4 * zScale, c.y + 2 * zScale);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Highlighted quarantine perimeter border during edit mode
+    const q0 = Iso.gridToScreen(1, 1, 0.5);
+    const q1 = Iso.gridToScreen(N - 1, 1, 0.5);
+    const q2 = Iso.gridToScreen(N - 1, N - 1, 0.5);
+    const q3 = Iso.gridToScreen(1, N - 1, 0.5);
+    ctx.strokeStyle = 'rgba(255, 77, 109, 0.68)';
+    ctx.lineWidth = Math.max(1.0, 1.35 * zScale);
+    ctx.setLineDash([6 * zScale, 5 * zScale]);
+    ctx.beginPath();
+    ctx.moveTo(q0.x, q0.y);
+    ctx.lineTo(q1.x, q1.y);
+    ctx.lineTo(q2.x, q2.y);
+    ctx.lineTo(q3.x, q3.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.restore();
+  }
+
   function render(ctx, w, h, state, uiState, timeSec) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
@@ -178,22 +526,33 @@ window.ZS = window.ZS || {};
     const zScale = Iso.cam.zoom;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
 
-    // 1. Background Sky / Tactical Tabletop Backdrop
-    if (isSil) {
-      ctx.fillStyle = '#EEF1F4';
-      ctx.fillRect(0, 0, w, h);
-    } else {
-      const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
-      if (state.nightAlpha > 0.4) {
-        bgGrad.addColorStop(0, '#101B2D');
-        bgGrad.addColorStop(1, '#060A13');
+    // 1. Cached Background Sky / Tactical Tabletop Backdrop
+    const isNightBg = state.nightAlpha > 0.4;
+    if (bgCache.w !== w || bgCache.h !== h || bgCache.isSil !== isSil || bgCache.isNight !== isNightBg) {
+      bgCache.w = w;
+      bgCache.h = h;
+      bgCache.isSil = isSil;
+      bgCache.isNight = isNightBg;
+      bgCache.canvas.width = Math.max(1, w);
+      bgCache.canvas.height = Math.max(1, h);
+      const bctx = bgCache.ctx || (bgCache.ctx = bgCache.canvas.getContext('2d'));
+      if (isSil) {
+        bctx.fillStyle = '#EEF1F4';
+        bctx.fillRect(0, 0, w, h);
       } else {
-        bgGrad.addColorStop(0, '#2C3B49');
-        bgGrad.addColorStop(1, '#151E27');
+        const bgGrad = bctx.createRadialGradient(w * 0.5, h * 0.42, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
+        if (isNightBg) {
+          bgGrad.addColorStop(0, '#101B2D');
+          bgGrad.addColorStop(1, '#060A13');
+        } else {
+          bgGrad.addColorStop(0, '#2C3B49');
+          bgGrad.addColorStop(1, '#151E27');
+        }
+        bctx.fillStyle = bgGrad;
+        bctx.fillRect(0, 0, w, h);
       }
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, w, h);
     }
+    ctx.drawImage(bgCache.canvas, 0, 0, w, h);
 
     // Optional mild camera shake ONLY on Airstrike, Boss spawn, and HQ hit (#8 + accessibility toggle)
     const shakeActive =
@@ -209,6 +568,18 @@ window.ZS = window.ZS || {};
       ctx.translate(sx, sy);
     }
 
+    const meta = ensureTerrainMeta(N);
+    const showEditGrid =
+      (state.phase === 'day' &&
+        (uiState.mode === 'build' || uiState.mode === 'move' || uiState.mode === 'remove')) ||
+      uiState.activeSkill === 'airstrike';
+
+    // 2 & 3. World-Baked Static Terrain, Island Slab, Natural Decals, Quarantine Border & Floor Tiles
+    const tc = ensureTerrainCache(N, meta, state, P, isSil);
+    const dstX = (tc.worldMinX - Iso.cam.x) * zScale + w * 0.5;
+    const dstY = (tc.worldMinY - Iso.cam.y) * zScale + h * 0.5;
+    ctx.drawImage(tc.canvas, 0, 0, tc.canvas.width, tc.canvas.height, dstX, dstY, tc.worldW * zScale, tc.worldH * zScale);
+
     // Apply day warm-afternoon vs night cool-moonlight ambient tint to matte voxel surfaces
     if (state.nightAlpha > 0.02) {
       Iso.setSceneTint('#6F9CE8', 0.085 * state.nightAlpha);
@@ -216,83 +587,28 @@ window.ZS = window.ZS || {};
       Iso.setSceneTint('#FFE8BA', 0.055);
     }
 
-    const meta = ensureTerrainMeta(N);
-    const showEditGrid =
-      (state.phase === 'day' &&
-        (uiState.mode === 'build' || uiState.mode === 'move' || uiState.mode === 'remove')) ||
-      uiState.activeSkill === 'airstrike';
-
-    // 2. 3D Miniature Diorama Island Base Slab (3-layer turf / soil / bedrock geological strata)
-    drawIslandSlab(ctx, N, P, zScale);
-
-    // 3. Terrain, Natural Decals, Quarantine Border & Floor Tiles
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        const cell = meta.grid[y][x];
-        const isEdge = cell.isEdge;
-        const checker = (x + y) % 2 === 0;
-        const rawBase = isEdge
-          ? checker
-            ? P.terrainEdgeA
-            : P.terrainEdgeB
-          : checker
-          ? P.terrainA
-          : P.terrainB;
-        const tileFill = isSil ? (isEdge ? '#CBD3DB' : '#D5DBE1') : Iso.shadeHex(rawBase, cell.shadeFactor);
-
-        if (showEditGrid && !isSil) {
-          const gridStroke = isEdge ? 'rgba(255, 77, 109, 0.28)' : 'rgba(255, 255, 255, 0.14)';
-          Iso.drawTilePoly(ctx, x, y, 0, tileFill, gridStroke, 1);
-          if (isEdge && uiState.mode === 'build') {
-            const c = Iso.gridToScreen(x + 0.5, y + 0.5, 0.4);
-            ctx.strokeStyle = 'rgba(255, 77, 109, 0.22)';
-            ctx.lineWidth = Math.max(1, 1.1 * zScale);
-            ctx.beginPath();
-            ctx.moveTo(c.x - 4 * zScale, c.y - 2 * zScale);
-            ctx.lineTo(c.x + 4 * zScale, c.y + 2 * zScale);
-            ctx.moveTo(c.x + 4 * zScale, c.y - 2 * zScale);
-            ctx.lineTo(c.x - 4 * zScale, c.y + 2 * zScale);
-            ctx.stroke();
-          }
-        } else {
-          // Seam-guard stroke in matching tile color eliminates graph-paper grid lines & Canvas AA seams
-          Iso.drawTilePoly(ctx, x, y, 0, tileFill, tileFill, 0.65);
-        }
-
-        const floorId = state.floorGrid[y][x];
-        if (floorId) {
-          drawFloorTile(ctx, x, y, floorId, zScale);
-        } else if (cell.decal && !(state.structGrid[y] && state.structGrid[y][x])) {
-          drawTerrainDecal(ctx, x, y, cell.decal, zScale);
-        }
-      }
-    }
-
-    // Crisp inner quarantine boundary & directional danger chevrons separating 1-tile outer spawn zone
-    if (!isSil) {
-      drawQuarantineBorder(ctx, N, P, showEditGrid, zScale);
+    // Lightweight edit grid overlay (build/move/remove/airstrike without rebaking terrain)
+    if (showEditGrid && !isSil) {
+      drawEditGridOverlay(ctx, N, meta, uiState, w, h, zScale);
     }
 
     // Fading zombie death ground stains (#8: drawn flat on ground above tiles/floors, below structures)
     if (!isSil && state.groundDecals && state.groundDecals.length > 0) {
-      R.drawGroundStains(ctx, state.groundDecals, zScale);
+      R.drawGroundStains(ctx, state.groundDecals, zScale, w, h);
     }
 
-    // Subtle warm afternoon sunlight wash over the inner base during daytime
+    // Subtle warm afternoon sunlight wash over the inner base during daytime (pre-baked glow stamp)
     if (!isSil && state.nightAlpha < 0.95) {
       const sunCenter = Iso.gridToScreen(DATA.HQ_POS.x + 0.2, DATA.HQ_POS.y + 0.2, 4);
       const sunRad = N * 22 * zScale;
       const dayFactor = Math.max(0, 1 - state.nightAlpha * 1.15);
-      ctx.save();
-      const sunGrad = ctx.createRadialGradient(sunCenter.x, sunCenter.y, sunRad * 0.08, sunCenter.x, sunCenter.y, sunRad);
-      sunGrad.addColorStop(0, `rgba(255, 224, 166, ${(0.085 * dayFactor).toFixed(3)})`);
-      sunGrad.addColorStop(0.65, `rgba(255, 214, 150, ${(0.035 * dayFactor).toFixed(3)})`);
-      sunGrad.addColorStop(1, 'rgba(255, 214, 150, 0)');
-      ctx.fillStyle = sunGrad;
-      ctx.beginPath();
-      ctx.arc(sunCenter.x, sunCenter.y, sunRad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      if (dayFactor > 0.01 && isScreenVisible(sunCenter.x, sunCenter.y, sunRad, sunRad, sunRad, w, h)) {
+        const sunStamp = getGlowStamp('rgba(255, 222, 162, 1)', 0.08);
+        ctx.save();
+        ctx.globalAlpha = 0.085 * dayFactor;
+        ctx.drawImage(sunStamp, sunCenter.x - sunRad, sunCenter.y - sunRad, sunRad * 2, sunRad * 2);
+        ctx.restore();
+      }
     }
 
     // 4. Hover / Placement Range & Aura Rings (Under structures)
@@ -348,12 +664,54 @@ window.ZS = window.ZS || {};
       }
     }
 
-    // 5. Collect & Depth-Sort All Structures + Perimeter Props + Zombies
+    // Track read-only active spike trap occupancy before culling
+    let activeTrapTiles = null;
+    if (state.zombies && state.zombies.length > 0) {
+      for (let i = 0; i < state.zombies.length; i++) {
+        const z = state.zombies[i];
+        if (!z || z.leapState || z.hp <= 0) continue;
+        const ztx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
+        const zty = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
+        const st = state.structGrid[zty] && state.structGrid[zty][ztx];
+        if (st && st.id === 'razor_pad') {
+          if (!activeTrapTiles) activeTrapTiles = new Map();
+          const key = `${ztx},${zty}`;
+          activeTrapTiles.set(key, (activeTrapTiles.get(key) || 0) + 1);
+        }
+      }
+    }
+    if (state.projectiles && state.projectiles.length > 0) {
+      for (let i = 0; i < state.projectiles.length; i++) {
+        const p = state.projectiles[i];
+        if (!p || p.kind !== 'bleed_burst') continue;
+        const ptx = Math.max(0, Math.min(N - 1, Math.floor(p.x)));
+        const pty = Math.max(0, Math.min(N - 1, Math.floor(p.y)));
+        const st = state.structGrid[pty] && state.structGrid[pty][ptx];
+        if (st && st.id === 'razor_pad') {
+          if (!activeTrapTiles) activeTrapTiles = new Map();
+          const key = `${ptx},${pty}`;
+          activeTrapTiles.set(key, (activeTrapTiles.get(key) || 0) + 2);
+        }
+      }
+    }
+    R.activeTrapTiles = activeTrapTiles;
+
+    // 5. Collect & Depth-Sort Visible Structures + Perimeter Props + Zombies (Safe-Margin Frustum Culling)
+    const cullPadX = Math.max(85, 110 * zScale);
+    const cullPadTop = Math.max(55, 72 * zScale);
+    const cullPadBot = Math.max(95, 130 * zScale);
+    const propPadX = Math.max(48, 60 * zScale);
+    const propPadY = Math.max(40, 50 * zScale);
+    const zPadX = Math.max(90, 120 * zScale);
+    const zPadTop = Math.max(60, 80 * zScale);
+    const zPadBot = Math.max(95, 125 * zScale);
+
     const renderList = [];
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (!st) continue;
+        if (!isGridVisible(x + 0.5, y + 0.5, cullPadX, cullPadTop, cullPadBot, w, h)) continue;
         const def = st.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[st.id];
         const depthOffset = def && def.passable ? 0.15 : 1.0;
         renderList.push({
@@ -368,6 +726,7 @@ window.ZS = window.ZS || {};
 
     for (let i = 0; i < meta.edgeProps.length; i++) {
       const ep = meta.edgeProps[i];
+      if (!isGridVisible(ep.gx + 0.2, ep.gy + 0.2, propPadX, propPadY, propPadY, w, h)) continue;
       renderList.push({
         kind: 'edge_prop',
         depth: ep.gx + ep.gy + 0.08,
@@ -377,6 +736,14 @@ window.ZS = window.ZS || {};
 
     for (let i = 0; i < state.zombies.length; i++) {
       const z = state.zombies[i];
+      let visible = isGridVisible(z.x, z.y, zPadX, zPadTop, zPadBot, w, h);
+      if (!visible && z.leapState) {
+        visible = isGridVisible(z.leapState.targetX, z.leapState.targetY, zPadX, zPadTop, zPadBot, w, h);
+      }
+      if (!visible && z.chargeState) {
+        visible = isGridVisible(z.chargeState.targetX, z.chargeState.targetY, zPadX, zPadTop, zPadBot, w, h);
+      }
+      if (!visible) continue;
       renderList.push({
         kind: 'zombie',
         depth: z.x + z.y + 0.05,
@@ -387,6 +754,7 @@ window.ZS = window.ZS || {};
     if (state.dyingZombies) {
       for (let i = 0; i < state.dyingZombies.length; i++) {
         const dz = state.dyingZombies[i];
+        if (!isGridVisible(dz.x, dz.y, zPadX, zPadTop, zPadBot, w, h)) continue;
         renderList.push({
           kind: 'dying_zombie',
           depth: dz.x + dz.y + 0.04,
@@ -423,10 +791,11 @@ window.ZS = window.ZS || {};
       }
     }
     R.emissiveList = null;
+    R.activeTrapTiles = null;
 
     // Creeping perimeter mist / fog band along the 4 outer edges ("outside = danger")
     if (!isSil) {
-      drawPerimeterFog(ctx, N, state.nightAlpha, timeSec, zScale);
+      drawPerimeterFog(ctx, N, state.nightAlpha, timeSec, zScale, w, h);
     }
 
     // 6. Ghost Preview of Structure Being Built or Moved
@@ -441,46 +810,43 @@ window.ZS = window.ZS || {};
 
     // 7. Muzzle Flashes, Projectiles & Voxel Debris / Dust Particles (World Space)
     if (state.muzzleFlashes && state.muzzleFlashes.length > 0) {
-      R.drawMuzzleFlashes(ctx, state.muzzleFlashes, zScale);
+      R.drawMuzzleFlashes(ctx, state.muzzleFlashes, zScale, w, h);
     }
-    R.drawProjectiles(ctx, state.projectiles, zScale);
-    R.drawParticles(ctx, state.particles, zScale);
+    R.drawProjectiles(ctx, state.projectiles, zScale, w, h);
+    R.drawParticles(ctx, state.particles, zScale, w, h);
 
-    // Warm central base glow on Cozy Tier-Up (radius 3 tiles, 0.8s)
+    // Warm central base glow on Cozy Tier-Up (radius 3 tiles, 0.8s — pre-baked glow stamp)
     if (!isSil && state.cozyTierUpTimer && state.cozyTierUpTimer > 0) {
       const progress = 1 - Math.max(0, Math.min(1, state.cozyTierUpTimer / 0.8));
       const alpha = Math.sin(progress * Math.PI) * 0.55;
       const center = Iso.gridToScreen(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 10);
       const rPx = (1.6 + progress * 1.4) * 38 * zScale;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const grad = ctx.createRadialGradient(center.x, center.y, 4, center.x, center.y, rPx);
-      grad.addColorStop(0, `rgba(255, 201, 74, ${alpha.toFixed(3)})`);
-      grad.addColorStop(0.55, `rgba(255, 210, 122, ${(alpha * 0.45).toFixed(3)})`);
-      grad.addColorStop(1, 'rgba(255, 201, 74, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      if (alpha > 0.01 && isScreenVisible(center.x, center.y, rPx, rPx, rPx, w, h)) {
+        const cozyStamp = getGlowStamp('rgba(255, 204, 86, 1)', 0.06);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(cozyStamp, center.x - rPx, center.y - rPx, rPx * 2, rPx * 2);
+        ctx.restore();
+      }
     }
 
     // 8. Nighttime Tactical Darkness & Dynamic Glow Layer
     if (!isSil && state.nightAlpha > 0.02) {
       R.drawNightLighting(ctx, w, h, state, powered, timeSec, zScale);
       if (nightEmissives && nightEmissives.length > 0) {
-        drawEmissivePass(ctx, nightEmissives, state.nightAlpha, zScale);
+        drawEmissivePass(ctx, nightEmissives, state.nightAlpha, zScale, w, h);
       }
     }
 
     // ── Info Layer (Drawn above darkness: identical daytime brightness & contrast) ──
     // 9. Selection Outline, Structure/Zombie HP Bars, and Blackout OFF Warnings
     if (!isSil) {
-      R.drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale);
+      R.drawInfoLayer(ctx, state, uiState, renderList, statusPowered, timeSec, zScale, w, h);
     }
 
     // 10. Floating Texts (Damage, Loot, Buff Callouts)
-    R.drawFloatingTexts(ctx, state.floatingTexts, zScale);
+    R.drawFloatingTexts(ctx, state.floatingTexts, zScale, w, h);
 
     if (shakeActive) {
       ctx.restore();
@@ -732,19 +1098,18 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawPerimeterFog(ctx, N, nightAlpha, timeSec, zScale) {
+  function drawPerimeterFog(ctx, N, nightAlpha, timeSec, zScale, viewW, viewH) {
     const Iso = ZS.Iso;
-    // Subtle drifting mist wisps along the 4 outer island edges to reinforce "outside = danger"
-    ctx.save();
-    const mistColor =
-      nightAlpha > 0.35
-        ? `rgba(26, 44, 78, ${(0.20 + nightAlpha * 0.14).toFixed(3)})`
-        : 'rgba(176, 192, 204, 0.13)';
-    const dangerMist =
-      nightAlpha > 0.35
-        ? `rgba(255, 77, 109, ${(0.045 * nightAlpha).toFixed(3)})`
-        : 'rgba(120, 96, 104, 0.05)';
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const isNightFog = nightAlpha > 0.35;
+    const mistKey = isNightFog ? 'rgba(26, 44, 78, 1)' : 'rgba(176, 192, 204, 1)';
+    const dangerKey = isNightFog ? 'rgba(255, 77, 109, 1)' : 'rgba(120, 96, 104, 1)';
+    const mistAlpha = isNightFog ? (0.20 + nightAlpha * 0.14) : 0.13;
+    const dangerAlpha = isNightFog ? (0.045 * nightAlpha) : 0.05;
+    const mistStamp = getGlowStamp(mistKey, 0.05);
+    const dangerStamp = getGlowStamp(dangerKey, 0.05);
 
+    ctx.save();
     const wispCount = N >= 22 ? 20 : 16;
     for (let i = 0; i < wispCount; i++) {
       const side = i % 4;
@@ -767,13 +1132,12 @@ window.ZS = window.ZS || {};
       const p = Iso.gridToScreen(gx, gy, 2.5);
       const rx = (28 + (i % 3) * 8) * zScale;
       const ry = (13 + (i % 3) * 4) * zScale;
-      const grad = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, rx);
-      grad.addColorStop(0, i % 3 === 0 ? dangerMist : mistColor);
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
+      if (!isScreenVisible(p.x, p.y, rx, ry, ry, vp.w, vp.h)) continue;
+      const isDanger = i % 3 === 0;
+      const alpha = isDanger ? dangerAlpha : mistAlpha;
+      if (alpha <= 0.002) continue;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(isDanger ? dangerStamp : mistStamp, p.x - rx, p.y - ry, rx * 2, ry * 2);
     }
     ctx.restore();
   }
@@ -1104,7 +1468,7 @@ window.ZS = window.ZS || {};
       case 'tactical_gate': return [16.5, 26.5, 28.0][Math.min(3, Math.max(1, level || 1)) - 1];
       case 'hesco_wall': return level >= 3 ? 19 : 14;
       case 'blast_wall': return level >= 3 ? 29 : 25;
-      case 'razor_pad': return [4.6, 4.7, 5.0][Math.min(3, Math.max(1, level || 1)) - 1];
+      case 'razor_pad': return [5.4, 5.8, 6.45][Math.min(3, Math.max(1, level || 1)) - 1];
       case 'rifle_bunker': return level >= 3 ? 24 : 23;
       case 'shotgun_post': return 23;
       case 'sniper_tower': return 53;
@@ -1493,6 +1857,41 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function drawPyramidSpike(ctx, cx, cy, z, rx, ry, h, hex, opts, zScale) {
+    const Iso = ZS.Iso;
+    const o = opts || {};
+    const em = !!o.emissive;
+    const rX = rx || 0.07;
+    const rY = ry != null ? ry : rX;
+    const W = Iso.gridToScreen(cx - rX, cy, z);
+    const N = Iso.gridToScreen(cx, cy - rY, z);
+    const E = Iso.gridToScreen(cx + rX, cy, z);
+    const S = Iso.gridToScreen(cx, cy + rY, z);
+    const apex = Iso.gridToScreen(cx, cy, z + h);
+
+    if (h <= 17 * Math.max(rX, rY)) {
+      drawPolyFace(ctx, [N, W, apex], hex, 1.0, em, false, zScale);
+    }
+    // Top-left directional light: left face 100%, front-left mid face 82%, right face 66%
+    drawPolyFace(ctx, [W, S, apex], hex, 1.0, em, false, zScale);
+    drawPolyFace(ctx, [S, E, apex], hex, 0.82, em, false, zScale);
+    drawPolyFace(ctx, [E, N, apex], hex, 0.66, em, false, zScale);
+
+    if (o.edge !== false && !em && !window.ZS_SILHOUETTE_MODE) {
+      ctx.strokeStyle = o.outlineColor || 'rgba(10, 14, 20, 0.34)';
+      ctx.lineWidth = Math.max(0.6, 0.75 * zScale);
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(W.x, W.y);
+      ctx.lineTo(S.x, S.y);
+      ctx.lineTo(E.x, E.y);
+      ctx.lineTo(N.x, N.y);
+      ctx.lineTo(apex.x, apex.y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+
   function drawSawTooth(ctx, cx, cy, z, w, h, hexLight, hexDark, zScale) {
     const Iso = ZS.Iso;
     const pL = Iso.gridToScreen(cx - w, cy, z);
@@ -1536,11 +1935,15 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawEmissivePass(ctx, list, nightAlpha, zScale) {
+  function drawEmissivePass(ctx, list, nightAlpha, zScale, viewW, viewH) {
     if (!list || list.length === 0) return;
     const Iso = ZS.Iso;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const mergeR = 14 * zScale;
+    const mergeR2 = mergeR * mergeR;
+    const cullPad = 28 * zScale;
+    const clusters = [];
+
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       let cx = 0;
@@ -1556,25 +1959,49 @@ window.ZS = window.ZS || {};
         cx /= e.pts.length;
         cy /= e.pts.length;
       }
-      const rad = 18 * zScale;
-      const rgb = e.hex && e.hex[0] === '#'
-        ? [parseInt(e.hex.slice(1, 3), 16), parseInt(e.hex.slice(3, 5), 16), parseInt(e.hex.slice(5, 7), 16)]
-        : [255, 210, 122];
-      const grd = ctx.createRadialGradient(cx, cy, 1, cx, cy, rad);
-      grd.addColorStop(0, `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${(0.28 * nightAlpha).toFixed(3)})`);
-      grd.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-      ctx.fill();
+      if (!isScreenVisible(cx, cy, cullPad, cullPad, cullPad, vp.w, vp.h)) continue;
+      const hex = e.hex && e.hex[0] === '#' ? e.hex.toUpperCase() : '#FFD27A';
+      let matched = null;
+      for (let j = clusters.length - 1; j >= 0; j--) {
+        const cl = clusters[j];
+        if (cl.hex !== hex) continue;
+        const dx = cx - cl.cx;
+        const dy = cy - cl.cy;
+        if (dx * dx + dy * dy <= mergeR2) {
+          matched = cl;
+          break;
+        }
+      }
+      if (matched) {
+        const n = matched.count;
+        matched.cx = (matched.cx * n + cx) / (n + 1);
+        matched.cy = (matched.cy * n + cy) / (n + 1);
+        matched.count = n + 1;
+      } else {
+        clusters.push({ hex, cx, cy, count: 1 });
+      }
     }
-    ctx.restore();
+
+    if (clusters.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < clusters.length; i++) {
+        const cl = clusters[i];
+        const stamp = getEmissiveGlowStamp(cl.hex);
+        const boost = Math.min(1.75, 1 + (cl.count - 1) * 0.18);
+        const rad = (18 + Math.min(6, (cl.count - 1) * 1.4)) * zScale;
+        ctx.globalAlpha = Math.min(1, nightAlpha * boost);
+        ctx.drawImage(stamp, cl.cx - rad, cl.cy - rad, rad * 2, rad * 2);
+      }
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.globalAlpha = Math.min(1, 0.35 + nightAlpha * 0.65);
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (e.kind === 'dot') {
+        if (!isScreenVisible(e.p.x, e.p.y, cullPad, cullPad, cullPad, vp.w, vp.h)) continue;
         ctx.beginPath();
         ctx.arc(e.p.x, e.p.y, e.r * zScale, 0, Math.PI * 2);
         ctx.fillStyle = e.fill || Iso.shadeHex(e.hex, 1);
@@ -1596,7 +2023,14 @@ window.ZS = window.ZS || {};
   Object.assign(R, {
     tileHash01,
     ensureTerrainMeta,
+    ensureTerrainCache,
+    drawEditGridOverlay,
     ensureLightCanvas,
+    getGlowStamp,
+    getPunchHoleStamp,
+    getEmissiveGlowStamp,
+    isScreenVisible,
+    isGridVisible,
     getEyeHaloStamp,
     computeBlackoutElectricPowered,
     render,
@@ -1630,6 +2064,7 @@ window.ZS = window.ZS || {};
     drawPowerStripCyl,
     drawIsoRibbon,
     drawRingGlow,
+    drawPyramidSpike,
     drawSawTooth,
     drawZigzagArc,
     drawSandbagRing,

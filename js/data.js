@@ -176,9 +176,9 @@ ZS.DATA = (function () {
   };
 
   const TRAP_TIERS = {
-    1: { level: 1, name: '스파이크 철조망 매트', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 4.6 },
-    2: { level: 2, name: '소투스 칼날 매트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 4.7 },
-    3: { level: 3, name: '고전압 파쇄 패드', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 5.0 }
+    1: { level: 1, name: '강철 스파이크 트랩', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 5.4 },
+    2: { level: 2, name: '중장갑 피스톤 스파이크 트랩', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 5.8 },
+    3: { level: 3, name: '고전압 피에조 스파이크 트랩', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 6.45 }
   };
 
   const REPAIR_TIERS = {
@@ -441,7 +441,7 @@ ZS.DATA = (function () {
     },
     razor_pad: {
       id: 'razor_pad',
-      name: '스파이크 철조망 매트',
+      name: '강철 스파이크 트랩',
       category: 'defense',
       layer: 'struct',
       subType: 'trap',
@@ -451,7 +451,7 @@ ZS.DATA = (function () {
       maxHp: 180,
       trapDps: 11,
       slowFactor: 0.55,
-      desc: '[3단 진화 바닥 함정] 스파이크 매트(1단·11/s·둔화 45%) → 소투스 칼날(2단·19/s·52%) → 고전압 파쇄 패드(3단·30/s·60%·피해+15%).'
+      desc: '[3단 진화 바닥 스파이크 트랩] 강철 스파이크(1단·11/s·둔화 45%) → 중장갑 피스톤(2단·19/s·52%) → 고전압 피에조(3단·30/s·60%·피해+15%).'
     },
 
     // ================= DEFENSE: MANNED POSTS (Pop: 1, Power: 0) =================
