@@ -423,14 +423,23 @@ window.ZS = window.ZS || {};
 
   const _blitOrigin = { x: 0, y: 0 };
 
-  function blitSpriteStamp(ctx, stamp, gx, gy, zScale, isSil) {
+  function blitSpriteStamp(ctx, stamp, gx, gy, zScale, isSil, snapPixel) {
     const origin = ZS.Iso.projectTo(gx, gy, 0, _blitOrigin);
-    const dstX = origin.x - stamp.anchorX * zScale;
-    const dstY = origin.y - stamp.anchorY * zScale;
+    const rawDstX = origin.x - stamp.anchorX * zScale;
+    const rawDstY = origin.y - stamp.anchorY * zScale;
+    let dstX = rawDstX;
+    let dstY = rawDstY;
+    if (snapPixel) {
+      const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+      dstX = Math.round(rawDstX * dpr) / dpr;
+      dstY = Math.round(rawDstY * dpr) / dpr;
+    }
     const dstW = stamp.logicalW * zScale;
     const dstH = stamp.logicalH * zScale;
     ctx.drawImage(stamp.canvas, dstX, dstY, dstW, dstH);
     if (R.emissiveList && !isSil && stamp.emissiveCanvas) {
+      const snapDx = snapPixel ? (dstX - rawDstX) : 0;
+      const snapDy = snapPixel ? (dstY - rawDstY) : 0;
       R.emissiveList.push({
         kind: 'stamp',
         canvas: stamp.emissiveCanvas,
@@ -438,8 +447,8 @@ window.ZS = window.ZS || {};
         y: dstY,
         w: dstW,
         h: dstH,
-        originX: origin.x,
-        originY: origin.y,
+        originX: origin.x + snapDx,
+        originY: origin.y + snapDy,
         glowClusters: stamp.glowClusters
       });
     }
@@ -488,14 +497,14 @@ window.ZS = window.ZS || {};
 
   function ensureTerrainCache(N, meta, state, P, isSil) {
     const Iso = ZS.Iso;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
     const worldMinX = -N * (Iso.TILE_W * 0.5) - 24;
     const worldMaxX = N * (Iso.TILE_W * 0.5) + 24;
     const worldMinY = -24;
     const worldMaxY = (N + 0.4) * Iso.TILE_H + 36;
     const worldW = Math.ceil(worldMaxX - worldMinX);
     const worldH = Math.ceil(worldMaxY - worldMinY);
-    const bakeScale = Math.min(2.0, Math.max(1.5, dpr), 4096 / Math.max(1, worldW));
+    const bakeScale = Math.min(3.0, Math.max(2.0, dpr * 1.25), 6144 / Math.max(1, worldW));
     const totalCells = N * N;
 
     let dirty =
@@ -721,6 +730,8 @@ window.ZS = window.ZS || {};
     const N = DATA.GRID_SIZE;
     const zScale = Iso.cam.zoom;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // 1. Cached Background Sky / Tactical Tabletop Backdrop
     const isNightBg = state.nightAlpha > 0.4;
@@ -978,7 +989,7 @@ window.ZS = window.ZS || {};
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
         const pose = R.getQuantizedZombiePoseMetrics
-          ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec)
+          ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec, zScale)
           : R.getZombiePoseMetrics(z, zDef, timeSec);
         const eyes = R.getZombieEyePositions(z, zDef, timeSec, zScale, pose);
         const occluded = nightEmissives ? R.isZombieEyesOccluded(state, z, eyes, zScale) : false;

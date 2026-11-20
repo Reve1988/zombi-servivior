@@ -3,7 +3,7 @@ window.ZS = window.ZS || {};
 (function () {
   const R = ZS._Renderer;
   const TAU = Math.PI * 2;
-  const ZOMBIE_STAMP_SCALE = 2.0;
+  const ZOMBIE_STAMP_SCALE = 2.5;
   const ZOMBIE_STAMP_MAX = 640;
   const zombieStampCache = new Map();
   R.zombieStampCache = zombieStampCache;
@@ -24,12 +24,16 @@ window.ZS = window.ZS || {};
       : 7.8;
   }
 
-  function canUseZombieStamp(z, zDef, opts) {
+  function canUseZombieStamp(z, zDef, opts, zScale) {
     if (!z) return false;
     if (opts && opts.isGhost) return false;
     if ((z.hitFlash || 0) > 0.001) return false;
     if (z.leapState) return false;
     if (zDef && zDef.isBoss && z.chargeState) return false;
+    if (zScale) {
+      const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+      if (zScale * dpr > ZOMBIE_STAMP_SCALE * 1.08) return false;
+    }
     return true;
   }
 
@@ -135,8 +139,8 @@ window.ZS = window.ZS || {};
     return { sc, type, stride, bob, legZ, bodyBaseZ, leapLift, crouch, ang, fx, fy, px, py, headFwd, headZ, headW, headH, topZ };
   }
 
-  function getQuantizedZombiePoseMetrics(z, zDef, timeSec) {
-    const quant = canUseZombieStamp(z, zDef) ? getQuantizedZombieParams(z, zDef, timeSec) : null;
+  function getQuantizedZombiePoseMetrics(z, zDef, timeSec, zScale) {
+    const quant = canUseZombieStamp(z, zDef, null, zScale) ? getQuantizedZombieParams(z, zDef, timeSec) : null;
     const pose = getZombiePoseMetrics(z, zDef, timeSec, quant);
     if (quant) pose._quant = quant;
     return pose;
@@ -589,7 +593,7 @@ window.ZS = window.ZS || {};
     const isSil = !!window.ZS_SILHOUETTE_MODE;
     const isNightLit = !!(state && state.nightAlpha > 0.35);
 
-    const useStamp = canUseZombieStamp(z, zDef, opts);
+    const useStamp = canUseZombieStamp(z, zDef, opts, zScale);
     const quant = useStamp
       ? ((z._framePose && z._framePose._quant) || getQuantizedZombieParams(z, zDef, timeSec))
       : null;
