@@ -731,7 +731,7 @@ window.ZS = window.ZS || {};
     const zScale = Iso.cam.zoom;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'low';
 
     // 1. Cached Background Sky / Tactical Tabletop Backdrop
     const isNightBg = state.nightAlpha > 0.4;
@@ -785,7 +785,27 @@ window.ZS = window.ZS || {};
     const tc = ensureTerrainCache(N, meta, state, P, isSil);
     const dstX = (tc.worldMinX - Iso.cam.x) * zScale + w * 0.5;
     const dstY = (tc.worldMinY - Iso.cam.y) * zScale + h * 0.5;
-    ctx.drawImage(tc.canvas, 0, 0, tc.canvas.width, tc.canvas.height, dstX, dstY, tc.worldW * zScale, tc.worldH * zScale);
+    const dstW = tc.worldW * zScale;
+    const dstH = tc.worldH * zScale;
+    const visX0 = Math.max(0, dstX);
+    const visY0 = Math.max(0, dstY);
+    const visX1 = Math.min(w, dstX + dstW);
+    const visY1 = Math.min(h, dstY + dstH);
+    if (visX1 > visX0 && visY1 > visY0) {
+      const invX = tc.canvas.width / dstW;
+      const invY = tc.canvas.height / dstH;
+      ctx.drawImage(
+        tc.canvas,
+        (visX0 - dstX) * invX,
+        (visY0 - dstY) * invY,
+        (visX1 - visX0) * invX,
+        (visY1 - visY0) * invY,
+        visX0,
+        visY0,
+        visX1 - visX0,
+        visY1 - visY0
+      );
+    }
 
     // Apply day warm-afternoon vs night cool-moonlight ambient tint to matte voxel surfaces
     if (state.nightAlpha > 0.02) {

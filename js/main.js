@@ -20,7 +20,6 @@ window.ZS = window.ZS || {};
     canvas.height = Math.floor(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
     ZS.Iso.setViewport(w, h);
   }
 

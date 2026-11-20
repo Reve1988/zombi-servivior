@@ -9,11 +9,6 @@ window.ZS = window.ZS || {};
 
   const getTintBucket = R.getTintBucket;
 
-  function canUseStructStamp(zScale) {
-    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
-    return !(zScale && zScale * dpr > STAMP_SCALE * 1.08);
-  }
-
   function isNodeAnimatingOrFlashing(node) {
     return !!(
       node &&
@@ -591,7 +586,7 @@ window.ZS = window.ZS || {};
     const cy = ty + 0.5;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
 
-    if (canUseStructStamp(zScale) && !isNodeAnimatingOrFlashing(unit)) {
+    if (!isNodeAnimatingOrFlashing(unit)) {
       const tintBucket = getTintBucket(state, isSil);
       const mountTopZ = baseZ + getMountedVisualTopZ(unit.id);
       if (unit.id === 'rifle_bunker') {
@@ -1549,7 +1544,6 @@ window.ZS = window.ZS || {};
 
     const canTryStamp =
       id !== 'command_hq' &&
-      canUseStructStamp(zScale) &&
       !isNodeAnimatingOrFlashing(st) &&
       !(st.mounted && isNodeAnimatingOrFlashing(st.mounted));
 
