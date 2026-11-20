@@ -47,7 +47,9 @@ window.ZS = window.ZS || {};
     cachedTerrainN: 0,
     terrainMeta: null,
     stampCacheBakes: 0,
-    stampCacheHits: 0
+    stampCacheHits: 0,
+    zombieStampBakes: 0,
+    zombieStampHits: 0
   });
 
   function tileHash01(x, y, salt) {
@@ -251,6 +253,196 @@ window.ZS = window.ZS || {};
     if (emissiveStampCache.size > 128) emissiveStampCache.clear();
     emissiveStampCache.set(key, stamp);
     return stamp;
+  }
+
+  function getTintBucket(state, isSil) {
+    if (isSil) return 'sil';
+    if (!state || state.nightAlpha <= 0.02) return 0;
+    return Math.round(state.nightAlpha * 4);
+  }
+
+  function applyStampTint(tintBucket, isSil) {
+    const Iso = ZS.Iso;
+    if (tintBucket === 'sil' || isSil) {
+      Iso.resetRenderModifiers();
+    } else if (tintBucket === 0) {
+      Iso.setSceneTint('#FFE8BA', 0.055);
+      Iso.setEntityFlash(0);
+    } else {
+      Iso.setSceneTint('#6F9CE8', 0.085 * (tintBucket / 4));
+      Iso.setEntityFlash(0);
+    }
+  }
+
+  function mergeGlowCluster(clusters, cx, cy, hex, count, mergeR2) {
+    let matched = null;
+    for (let j = clusters.length - 1; j >= 0; j--) {
+      const cl = clusters[j];
+      if (cl.hex !== hex) continue;
+      const dx = cx - cl.cx;
+      const dy = cy - cl.cy;
+      if (dx * dx + dy * dy <= mergeR2) {
+        matched = cl;
+        break;
+      }
+    }
+    if (matched) {
+      const n = matched.count;
+      const total = n + count;
+      matched.cx = (matched.cx * n + cx * count) / total;
+      matched.cy = (matched.cy * n + cy * count) / total;
+      matched.count = total;
+    } else {
+      clusters.push({ hex, cx, cy, count });
+    }
+  }
+
+  function bakeEmissiveStamp(stampEmis, logicalW, logicalH, scale, anchorX, anchorY) {
+    if (!stampEmis || stampEmis.length === 0) {
+      return { emissiveCanvas: null, glowClusters: null };
+    }
+    const Iso = ZS.Iso;
+    const emissiveCanvas = document.createElement('canvas');
+    emissiveCanvas.width = Math.round(logicalW * scale);
+    emissiveCanvas.height = Math.round(logicalH * scale);
+    const ectx = emissiveCanvas.getContext('2d');
+    ectx.setTransform(scale, 0, 0, scale, 0, 0);
+    ectx.clearRect(0, 0, logicalW, logicalH);
+    ectx.globalAlpha = 1.0;
+
+    const mergeR = 14;
+    const mergeR2 = mergeR * mergeR;
+    const glowClusters = [];
+
+    for (let i = 0; i < stampEmis.length; i++) {
+      const e = stampEmis[i];
+      let cx = 0;
+      let cy = 0;
+      if (e.kind === 'dot') {
+        ectx.beginPath();
+        ectx.arc(e.p.x, e.p.y, e.r, 0, Math.PI * 2);
+        ectx.fillStyle = e.fill || Iso.shadeHex(e.hex, 1);
+        ectx.fill();
+        cx = e.p.x;
+        cy = e.p.y;
+      } else {
+        const pts = e.pts;
+        if (!pts || pts.length === 0) continue;
+        ectx.beginPath();
+        for (let k = 0; k < pts.length; k++) {
+          const pt = pts[k];
+          if (k === 0) ectx.moveTo(pt.x, pt.y);
+          else ectx.lineTo(pt.x, pt.y);
+          cx += pt.x;
+          cy += pt.y;
+        }
+        ectx.closePath();
+        ectx.fillStyle = e.fill;
+        ectx.fill();
+        cx /= pts.length;
+        cy /= pts.length;
+      }
+
+      const dxA = cx - anchorX;
+      const dyA = cy - anchorY;
+      const hex = e.hex && e.hex[0] === '#' ? e.hex.toUpperCase() : '#FFD27A';
+      let matched = null;
+      for (let j = glowClusters.length - 1; j >= 0; j--) {
+        const cl = glowClusters[j];
+        if (cl.hex !== hex) continue;
+        const ddx = dxA - cl.dx;
+        const ddy = dyA - cl.dy;
+        if (ddx * ddx + ddy * ddy <= mergeR2) {
+          matched = cl;
+          break;
+        }
+      }
+      if (matched) {
+        const n = matched.count;
+        matched.dx = (matched.dx * n + dxA) / (n + 1);
+        matched.dy = (matched.dy * n + dyA) / (n + 1);
+        matched.count = n + 1;
+      } else {
+        glowClusters.push({ dx: dxA, dy: dyA, hex, count: 1 });
+      }
+    }
+
+    return { emissiveCanvas, glowClusters };
+  }
+
+  function bakeSpriteStamp(logicalW, logicalH, scale, anchorX, anchorY, tintBucket, isSil, bakeFn) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(logicalW * scale);
+    cv.height = Math.round(logicalH * scale);
+    const sctx = cv.getContext('2d');
+
+    const Iso = ZS.Iso;
+    const prevVp = Iso.getViewport();
+    const prevMinZoom = Iso.cam.minZoom;
+    const prevCamX = Iso.cam.x;
+    const prevCamY = Iso.cam.y;
+    const prevZoom = Iso.cam.zoom;
+    const prevMods = Iso.getRenderModifiers();
+    const prevEmis = R.emissiveList;
+    const stampEmis = isSil ? null : [];
+    let bakedEmis = null;
+
+    try {
+      Iso.setViewport(logicalW, logicalH);
+      Iso.cam.zoom = 1.0;
+      Iso.cam.x = logicalW * 0.5 - anchorX;
+      Iso.cam.y = logicalH * 0.5 - anchorY;
+
+      sctx.setTransform(scale, 0, 0, scale, 0, 0);
+      sctx.clearRect(0, 0, logicalW, logicalH);
+
+      applyStampTint(tintBucket, isSil);
+      R.emissiveList = stampEmis;
+      bakeFn(sctx);
+      bakedEmis = bakeEmissiveStamp(stampEmis, logicalW, logicalH, scale, anchorX, anchorY);
+    } finally {
+      Iso.setViewport(prevVp.w, prevVp.h);
+      Iso.cam.minZoom = prevMinZoom;
+      Iso.cam.x = prevCamX;
+      Iso.cam.y = prevCamY;
+      Iso.cam.zoom = prevZoom;
+      Iso.setRenderModifiers(prevMods);
+      R.emissiveList = prevEmis;
+    }
+
+    return {
+      canvas: cv,
+      logicalW,
+      logicalH,
+      anchorX,
+      anchorY,
+      emissiveCanvas: bakedEmis ? bakedEmis.emissiveCanvas : null,
+      glowClusters: bakedEmis ? bakedEmis.glowClusters : null
+    };
+  }
+
+  const _blitOrigin = { x: 0, y: 0 };
+
+  function blitSpriteStamp(ctx, stamp, gx, gy, zScale, isSil) {
+    const origin = ZS.Iso.projectTo(gx, gy, 0, _blitOrigin);
+    const dstX = origin.x - stamp.anchorX * zScale;
+    const dstY = origin.y - stamp.anchorY * zScale;
+    const dstW = stamp.logicalW * zScale;
+    const dstH = stamp.logicalH * zScale;
+    ctx.drawImage(stamp.canvas, dstX, dstY, dstW, dstH);
+    if (R.emissiveList && !isSil && stamp.emissiveCanvas) {
+      R.emissiveList.push({
+        kind: 'stamp',
+        canvas: stamp.emissiveCanvas,
+        x: dstX,
+        y: dstY,
+        w: dstW,
+        h: dstH,
+        originX: origin.x,
+        originY: origin.y,
+        glowClusters: stamp.glowClusters
+      });
+    }
   }
 
   function isScreenVisible(sx, sy, padX, padTop, padBot, w, h) {
@@ -785,7 +977,9 @@ window.ZS = window.ZS || {};
       } else if (item.kind === 'zombie') {
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
-        const pose = R.getZombiePoseMetrics(z, zDef, timeSec);
+        const pose = R.getQuantizedZombiePoseMetrics
+          ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec)
+          : R.getZombiePoseMetrics(z, zDef, timeSec);
         const eyes = R.getZombieEyePositions(z, zDef, timeSec, zScale, pose);
         const occluded = nightEmissives ? R.isZombieEyesOccluded(state, z, eyes, zScale) : false;
         z._framePose = pose;
@@ -2048,6 +2242,23 @@ window.ZS = window.ZS || {};
 
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
+      if (e.kind === 'stamp') {
+        if (e.x + e.w < -cullPad || e.x > vp.w + cullPad || e.y + e.h < -cullPad || e.y > vp.h + cullPad) {
+          continue;
+        }
+        const gcs = e.glowClusters;
+        if (gcs) {
+          for (let g = 0; g < gcs.length; g++) {
+            const gc = gcs[g];
+            const cx = e.originX + gc.dx * zScale;
+            const cy = e.originY + gc.dy * zScale;
+            if (!isScreenVisible(cx, cy, cullPad, cullPad, cullPad, vp.w, vp.h)) continue;
+            mergeGlowCluster(clusters, cx, cy, gc.hex, gc.count || 1, mergeR2);
+          }
+        }
+        continue;
+      }
+
       let cx = 0;
       let cy = 0;
       if (e.kind === 'dot') {
@@ -2063,25 +2274,7 @@ window.ZS = window.ZS || {};
       }
       if (!isScreenVisible(cx, cy, cullPad, cullPad, cullPad, vp.w, vp.h)) continue;
       const hex = e.hex && e.hex[0] === '#' ? e.hex.toUpperCase() : '#FFD27A';
-      let matched = null;
-      for (let j = clusters.length - 1; j >= 0; j--) {
-        const cl = clusters[j];
-        if (cl.hex !== hex) continue;
-        const dx = cx - cl.cx;
-        const dy = cy - cl.cy;
-        if (dx * dx + dy * dy <= mergeR2) {
-          matched = cl;
-          break;
-        }
-      }
-      if (matched) {
-        const n = matched.count;
-        matched.cx = (matched.cx * n + cx) / (n + 1);
-        matched.cy = (matched.cy * n + cy) / (n + 1);
-        matched.count = n + 1;
-      } else {
-        clusters.push({ hex, cx, cy, count: 1 });
-      }
+      mergeGlowCluster(clusters, cx, cy, hex, 1, mergeR2);
     }
 
     if (clusters.length > 0) {
@@ -2102,7 +2295,12 @@ window.ZS = window.ZS || {};
     ctx.globalAlpha = Math.min(1, 0.35 + nightAlpha * 0.65);
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
-      if (e.kind === 'dot') {
+      if (e.kind === 'stamp') {
+        if (e.x + e.w < -cullPad || e.x > vp.w + cullPad || e.y + e.h < -cullPad || e.y > vp.h + cullPad) {
+          continue;
+        }
+        ctx.drawImage(e.canvas, e.x, e.y, e.w, e.h);
+      } else if (e.kind === 'dot') {
         if (!isScreenVisible(e.p.x, e.p.y, cullPad, cullPad, cullPad, vp.w, vp.h)) continue;
         ctx.beginPath();
         ctx.arc(e.p.x, e.p.y, e.r * zScale, 0, Math.PI * 2);
@@ -2131,6 +2329,11 @@ window.ZS = window.ZS || {};
     getGlowStamp,
     getPunchHoleStamp,
     getEmissiveGlowStamp,
+    getTintBucket,
+    applyStampTint,
+    bakeEmissiveStamp,
+    bakeSpriteStamp,
+    blitSpriteStamp,
     isScreenVisible,
     isGridVisible,
     getEyeHaloStamp,

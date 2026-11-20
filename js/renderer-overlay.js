@@ -745,7 +745,7 @@ window.ZS = window.ZS || {};
       } else if (item.kind === 'zombie') {
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
-        const m = z._framePose || R.getZombiePoseMetrics(z, zDef, timeSec);
+        const m = z._framePose || (R.getQuantizedZombiePoseMetrics ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec) : R.getZombiePoseMetrics(z, zDef, timeSec));
 
         if (state.nightAlpha > 0.05) {
           const eyes = z._frameEyes || R.getZombieEyePositions(z, zDef, timeSec, zScale, m);
