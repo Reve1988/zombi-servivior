@@ -581,6 +581,210 @@ window.ZS = window.ZS || {};
     }
   }
 
+  const trapAnimCache = new Map();
+
+  function getTrapThrustAmount(st, tx, ty, state, timeSec) {
+    if (!st || st.isPreview) return 0;
+    const key = Number.isFinite(st.uid) ? `u${st.uid}` : `${tx},${ty}`;
+    let isActive = false;
+    if (R.activeTrapTiles) {
+      isActive = R.activeTrapTiles.has(`${tx},${ty}`);
+    } else if (state) {
+      if (state.zombies && state.zombies.length > 0) {
+        for (let i = 0; i < state.zombies.length; i++) {
+          const z = state.zombies[i];
+          if (!z || z.leapState || z.hp <= 0) continue;
+          if (Math.floor(z.x) === tx && Math.floor(z.y) === ty) {
+            isActive = true;
+            break;
+          }
+        }
+      }
+      if (!isActive && state.projectiles && state.projectiles.length > 0) {
+        for (let i = 0; i < state.projectiles.length; i++) {
+          const p = state.projectiles[i];
+          if (p && p.kind === 'bleed_burst' && Math.floor(p.x) === tx && Math.floor(p.y) === ty) {
+            isActive = true;
+            break;
+          }
+        }
+      }
+    }
+
+    let rec = trapAnimCache.get(key);
+    if (rec && timeSec < rec.lastTime - 0.5) {
+      trapAnimCache.delete(key);
+      rec = null;
+    }
+    if (!rec) {
+      if (!isActive) return 0;
+      rec = { lastTime: timeSec, cycle: 0.22, releaseThrust: 1.0, wasActive: true };
+      if (trapAnimCache.size > 256) {
+        for (const [k, v] of trapAnimCache) {
+          if (timeSec - v.lastTime > 4.0) trapAnimCache.delete(k);
+        }
+      }
+      trapAnimCache.set(key, rec);
+      return 1.0;
+    }
+
+    const dt = Math.max(0, Math.min(0.1, timeSec - rec.lastTime));
+    rec.lastTime = timeSec;
+    if (isActive) {
+      if (!rec.wasActive) {
+        rec.cycle = 0.22;
+        rec.wasActive = true;
+      } else {
+        rec.cycle = (rec.cycle + dt * 3.0) % 1.0;
+      }
+      const u = rec.cycle;
+      const thrust = u < 0.22 ? u / 0.22 : u < 0.42 ? 1.0 : Math.max(0, 1 - (u - 0.42) / 0.58);
+      rec.releaseThrust = thrust;
+      return thrust;
+    }
+
+    rec.wasActive = false;
+    rec.releaseThrust = Math.max(0, rec.releaseThrust - dt * 4.5);
+    if (rec.releaseThrust <= 0.001) {
+      trapAnimCache.delete(key);
+      return 0;
+    }
+    return rec.releaseThrust;
+  }
+
+  function drawRazorPadTile(ctx, st, tx, ty, lv, P, state, timeSec, zScale) {
+    const Iso = ZS.Iso;
+    const thrust = getTrapThrustAmount(st, tx, ty, state, timeSec);
+
+    if (lv <= 1) {
+      // T1: Beveled riveted steel hatch base plate + 3x3 sharp 3D pyramid steel spikes
+      R.drawFrustum(ctx, tx + 0.08, ty + 0.08, 0.4, 0.84, 0.84, 1.3, 0.035, '#4A5460', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.145, ty + 0.145, 1.7, 0.71, 0.71, 0.35, '#252C34', null, zScale);
+      const rivets = [
+        [0.12, 0.12],
+        [0.835, 0.12],
+        [0.12, 0.835],
+        [0.835, 0.835]
+      ];
+      for (let i = 0; i < rivets.length; i++) {
+        R.drawIsoBox(ctx, tx + rivets[i][0], ty + rivets[i][1], 1.7, 0.045, 0.045, 0.45, '#8C96A3', null, zScale);
+      }
+
+      const pos = [0.275, 0.50, 0.725];
+      const liftZ = thrust * 2.6;
+      for (let j = 0; j < pos.length; j++) {
+        for (let i = 0; i < pos.length; i++) {
+          const sx = tx + pos[i];
+          const sy = ty + pos[j];
+          R.drawIsoBox(ctx, sx - 0.058, sy - 0.058, 2.05, 0.116, 0.116, 0.34, '#3E4650', null, zScale);
+          if (liftZ > 0.18) {
+            R.drawIsoBox(ctx, sx - 0.025, sy - 0.025, 2.05, 0.05, 0.05, liftZ + 0.2, '#6E7B88', { edge: false }, zScale);
+          }
+          R.drawPyramidSpike(ctx, sx, sy, 2.15 + liftZ, 0.074, 0.074, 3.25, '#DCE5EE', null, zScale);
+        }
+      }
+      return;
+    }
+
+    if (lv === 2) {
+      // T2: Heavy armored hazard-yellow rim + recessed dark piston channels + 4x4 dual-bevel steel spike array
+      R.drawFrustum(ctx, tx + 0.05, ty + 0.05, 0.4, 0.90, 0.90, 1.3, 0.025, '#3E4650', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.055, ty + 0.055, 0.65, 0.89, 0.89, 0.75, '#F0BD35', { noTop: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.7, 0.85, 0.85, 0.45, '#F0BD35', null, zScale);
+      R.drawIsoBox(ctx, tx + 0.13, ty + 0.13, 2.15, 0.74, 0.74, 0.30, '#2B333D', null, zScale);
+      const clamps = [
+        [0.08, 0.08],
+        [0.84, 0.08],
+        [0.08, 0.84],
+        [0.84, 0.84]
+      ];
+      for (let i = 0; i < clamps.length; i++) {
+        R.drawIsoBox(ctx, tx + clamps[i][0], ty + clamps[i][1], 2.15, 0.08, 0.08, 0.55, '#6E7B88', null, zScale);
+      }
+
+      const pPos = [0.24, 0.413, 0.587, 0.76];
+      for (let j = 0; j < pPos.length; j++) {
+        R.drawIsoBox(ctx, tx + 0.17, ty + pPos[j] - 0.032, 2.45, 0.66, 0.064, 0.12, '#141920', { edge: false }, zScale);
+      }
+
+      const liftZ = thrust * 3.0;
+      const bladeCol = P.trapBlade || '#E6EFF7';
+      for (let j = 0; j < pPos.length; j++) {
+        for (let i = 0; i < pPos.length; i++) {
+          const sx = tx + pPos[i];
+          const sy = ty + pPos[j];
+          if (liftZ > 0.18) {
+            R.drawIsoBox(ctx, sx - 0.022, sy - 0.022, 2.45, 0.044, 0.044, liftZ + 0.2, '#6E7B88', { edge: false }, zScale);
+          }
+          R.drawFrustum(ctx, sx - 0.056, sy - 0.056, 2.45 + liftZ, 0.112, 0.112, 0.85, 0.018, '#7A8794', null, zScale);
+          R.drawPyramidSpike(ctx, sx, sy, 3.10 + liftZ, 0.052, 0.052, 2.70, bladeCol, null, zScale);
+        }
+      }
+      return;
+    }
+
+    // T3: High-Voltage Piezo Spike Trap (copper busbar frame + 3x3 reinforced spikes + 4-corner warm orange/amber piezo arcs; 0px cyan)
+    const copper = P.piezoCopper || '#B87333';
+    const arcA = P.piezoArc || '#FF8A3D';
+    const arcB = P.piezoSpark || '#FFD08A';
+    R.drawFrustum(ctx, tx + 0.04, ty + 0.04, 0.4, 0.92, 0.92, 1.5, 0.025, '#343C46', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.045, ty + 0.045, 0.75, 0.91, 0.91, 0.85, copper, { noTop: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.9, 0.85, 0.85, 0.50, copper, null, zScale);
+    R.drawIsoBox(ctx, tx + 0.135, ty + 0.135, 2.4, 0.73, 0.73, 0.25, '#1D232C', null, zScale);
+    R.drawIsoBox(ctx, tx + 0.18, ty + 0.475, 2.65, 0.64, 0.05, 0.22, copper, { edge: false }, zScale);
+    R.drawIsoBox(ctx, tx + 0.475, ty + 0.18, 2.65, 0.05, 0.64, 0.22, copper, { edge: false }, zScale);
+
+    const drawCornerElectrode = (ex, ey) => {
+      R.drawIsoBox(ctx, tx + ex - 0.045, ty + ey - 0.045, 2.4, 0.09, 0.09, 1.5, copper, null, zScale);
+      R.drawIsoBox(ctx, tx + ex - 0.048, ty + ey - 0.048, 3.4, 0.096, 0.096, 0.5, '#A84232', { noTop: true }, zScale);
+      R.drawIsoBox(ctx, tx + ex - 0.032, ty + ey - 0.032, 3.9, 0.064, 0.064, 0.8, arcA, { emissive: true }, zScale);
+    };
+
+    const liftZ = thrust * 3.2;
+    const jA = st.isPreview ? 1.8 : 1.5 + 0.8 * Math.sin(timeSec * 19 + tx * 2.1 + ty);
+    const jB = st.isPreview ? -1.8 : -1.5 + 0.8 * Math.cos(timeSec * 23 + tx + ty * 1.7);
+
+    // Back and side electrodes + back perimeter arcs before central spike array
+    drawCornerElectrode(0.145, 0.145);
+    drawCornerElectrode(0.855, 0.145);
+    drawCornerElectrode(0.145, 0.855);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.15, 4.3), Iso.gridToScreen(tx + 0.85, ty + 0.15, 4.3), jA * 0.65, arcA, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.15, 4.3), Iso.gridToScreen(tx + 0.15, ty + 0.85, 4.3), jB * 0.65, arcA, true, zScale);
+
+    // Low diagonal busbar discharge underneath the upper spike tips so 3D spikes stay razor-clear
+    const busArcZ = 3.35 + liftZ * 0.35;
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.18, busArcZ), Iso.gridToScreen(tx + 0.82, ty + 0.82, busArcZ), jA * 0.55, arcB, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.82, ty + 0.18, busArcZ), Iso.gridToScreen(tx + 0.18, ty + 0.82, busArcZ), jB * 0.55, arcA, true, zScale);
+
+    const tPos = [0.29, 0.50, 0.71];
+    for (let j = 0; j < tPos.length; j++) {
+      for (let i = 0; i < tPos.length; i++) {
+        const sx = tx + tPos[i];
+        const sy = ty + tPos[j];
+        const isCenter = i === 1 && j === 1;
+        const rBase = isCenter ? 0.102 : 0.078;
+        const hSpike = isCenter ? 3.25 : 2.60;
+        if (liftZ > 0.18) {
+          R.drawIsoBox(ctx, sx - 0.028, sy - 0.028, 2.65, 0.056, 0.056, liftZ + 0.25, copper, { edge: false }, zScale);
+        }
+        R.drawFrustum(ctx, sx - rBase * 0.88, sy - rBase * 0.88, 2.65 + liftZ, rBase * 1.76, rBase * 1.76, 0.75, 0.015, copper, null, zScale);
+        R.drawPyramidSpike(ctx, sx, sy, 3.20 + liftZ, rBase, rBase, hSpike, isCenter ? '#EEF4FA' : '#D5DFE9', null, zScale);
+        if (isCenter) {
+          R.drawIsoDot(ctx, Iso.gridToScreen(sx, sy, 3.20 + hSpike + liftZ), thrust > 0.25 ? 2.1 : 1.3, arcA, true, zScale);
+        }
+      }
+    }
+
+    // Front electrode + front perimeter arcs after spikes
+    drawCornerElectrode(0.855, 0.855);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.85, ty + 0.15, 4.3), Iso.gridToScreen(tx + 0.85, ty + 0.85, 4.3), jA * 0.65, arcB, true, zScale);
+    R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.85, 4.3), Iso.gridToScreen(tx + 0.85, ty + 0.85, 4.3), jB * 0.65, arcB, true, zScale);
+    if (thrust > 0.25) {
+      R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.15, ty + 0.15, 4.5 + liftZ * 0.4), Iso.gridToScreen(tx + 0.85, ty + 0.85, 4.5 + liftZ * 0.4), jA, arcB, true, zScale);
+      R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.85, ty + 0.15, 4.5 + liftZ * 0.4), Iso.gridToScreen(tx + 0.15, ty + 0.85, 4.5 + liftZ * 0.4), jB, arcB, true, zScale);
+    }
+  }
+
   function drawStructure(ctx, st, tx, ty, state, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
@@ -726,45 +930,7 @@ window.ZS = window.ZS || {};
       }
 
       case 'razor_pad': {
-        if (lv <= 1) {
-          R.drawIsoBox(ctx, tx + 0.10, ty + 0.10, 0.4, 0.80, 0.80, 2, '#4A525C', null, zScale);
-          const c = Iso.gridToScreen(tx + 0.5, ty + 0.5, 4.2);
-          ctx.strokeStyle = Iso.resolveFaceColor('#C9D3DE', 1.0, false, 0);
-          ctx.lineWidth = 1.4 * zScale;
-          for (let k = -1; k <= 1; k++) {
-            ctx.beginPath();
-            ctx.ellipse(c.x + k * 8.5 * zScale, c.y, 6.8 * zScale, 4.4 * zScale, 0.3, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        } else if (lv === 2) {
-          R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.4, 0.84, 0.84, 2.0, '#3E4650', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 0.6, 0.85, 0.85, 1.0, '#F0BD35', { noTop: true }, zScale);
-          R.drawIsoBox(ctx, tx + 0.14, ty + 0.14, 2.4, 0.72, 0.72, 0.15, '#1F252D', null, zScale);
-          const rYs = [0.27, 0.50, 0.73];
-          const rXs = [0.24, 0.41, 0.59, 0.76];
-          for (let j = 0; j < rYs.length; j++) {
-            for (let i = 0; i < rXs.length; i++) {
-              R.drawSawTooth(ctx, tx + rXs[i], ty + rYs[j], 2.5, 0.075, 2.2, P.trapBlade || '#DCE5EE', '#8E9CA9', zScale);
-            }
-          }
-        } else {
-          const copper = P.piezoCopper || '#B87333';
-          const arcA = P.piezoArc || '#FF8A3D';
-          const arcB = P.piezoSpark || '#FFD08A';
-          R.drawIsoBox(ctx, tx + 0.07, ty + 0.07, 0.4, 0.86, 0.86, 2.2, '#343C46', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.065, ty + 0.065, 1.2, 0.87, 0.87, 1.0, copper, { noTop: true }, zScale);
-          const barYs = [0.28, 0.43, 0.57, 0.72];
-          for (let i = 0; i < barYs.length; i++) {
-            R.drawIsoBox(ctx, tx + 0.18, ty + barYs[i] - 0.025, 2.6, 0.64, 0.05, 1.4, '#C9D3DE', null, zScale);
-          }
-          const studs = [[0.14, 0.14], [0.80, 0.14], [0.14, 0.80], [0.80, 0.80]];
-          for (let i = 0; i < studs.length; i++) {
-            R.drawIsoBox(ctx, tx + studs[i][0], ty + studs[i][1], 2.6, 0.06, 0.06, 1.6, copper, null, zScale);
-            R.drawIsoBox(ctx, tx + studs[i][0] + 0.01, ty + studs[i][1] + 0.01, 4.2, 0.04, 0.04, 0.8, arcA, { emissive: true }, zScale);
-          }
-          R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.17, ty + 0.17, 4.4), Iso.gridToScreen(tx + 0.83, ty + 0.83, 4.4), 2.2, arcB, true, zScale);
-          R.drawZigzagArc(ctx, Iso.gridToScreen(tx + 0.83, ty + 0.17, 4.4), Iso.gridToScreen(tx + 0.17, ty + 0.83, 4.4), -2.2, arcA, true, zScale);
-        }
+        drawRazorPadTile(ctx, st, tx, ty, lv, P, state, timeSec, zScale);
         break;
       }
 
@@ -1590,6 +1756,8 @@ window.ZS = window.ZS || {};
     getMountedVisualTopZ,
     drawWallDeck,
     drawMountedUnit,
+    getTrapThrustAmount,
+    drawRazorPadTile,
     drawStructure,
     drawHqByLevel,
     drawHqRoofBarrels,

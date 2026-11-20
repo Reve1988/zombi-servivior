@@ -3,32 +3,60 @@ window.ZS = window.ZS || {};
 (function () {
   const R = ZS._Renderer;
   const { lightCanvas, lightCtx, eyeHaloCache, thumbnailCache } = R;
+  const coldRimCache = new Map();
+
+  function getColdRimStamp(rimRatio) {
+    const key = rimRatio.toFixed(3);
+    let stamp = coldRimCache.get(key);
+    if (stamp) return stamp;
+    const sz = 128;
+    stamp = document.createElement('canvas');
+    stamp.width = sz;
+    stamp.height = sz;
+    const sctx = stamp.getContext('2d');
+    const half = sz * 0.5;
+    const grad = sctx.createRadialGradient(half, half, half * rimRatio, half, half, half);
+    grad.addColorStop(0, 'rgba(10, 22, 48, 0)');
+    grad.addColorStop(0.6, 'rgba(12, 26, 56, 0.22)');
+    grad.addColorStop(1, 'rgba(5, 11, 26, 0.42)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, sz, sz);
+    if (coldRimCache.size > 32) coldRimCache.clear();
+    coldRimCache.set(key, stamp);
+    return stamp;
+  }
 
   function drawNightLighting(ctx, w, h, state, powered, timeSec, zScale) {
-    R.ensureLightCanvas(w, h);
+    const lc = R.ensureLightCanvas(w, h);
+    const lw = lc.lw;
+    const lh = lc.lh;
+    const scaleX = lc.scaleX;
+    const scaleY = lc.scaleY;
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
     const N = DATA.GRID_SIZE;
 
     const darkness = state.nightAlpha * (powered ? 0.72 : 0.84);
     lightCtx.globalCompositeOperation = 'source-over';
-    lightCtx.clearRect(0, 0, w, h);
+    lightCtx.globalAlpha = 1;
+    lightCtx.clearRect(0, 0, lw, lh);
     lightCtx.fillStyle = `rgba(7, 13, 25, ${darkness.toFixed(3)})`;
-    lightCtx.fillRect(0, 0, w, h);
+    lightCtx.fillRect(0, 0, lw, lh);
 
     lightCtx.globalCompositeOperation = 'destination-out';
+    const holeStamp = R.getPunchHoleStamp();
 
     function punchHole(gx, gy, zPx, radiusTiles, strength) {
-      const p = Iso.gridToScreen(gx, gy, zPx);
       const rPx = radiusTiles * 36 * zScale;
-      const grad = lightCtx.createRadialGradient(p.x, p.y, rPx * 0.08, p.x, p.y, rPx);
-      grad.addColorStop(0, `rgba(0,0,0,${strength})`);
-      grad.addColorStop(0.65, `rgba(0,0,0,${strength * 0.45})`);
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      lightCtx.fillStyle = grad;
-      lightCtx.beginPath();
-      lightCtx.arc(p.x, p.y, rPx, 0, Math.PI * 2);
-      lightCtx.fill();
+      if (rPx <= 0 || strength <= 0.002) return;
+      const p = Iso.gridToScreen(gx, gy, zPx);
+      if (p.x + rPx < 0 || p.x - rPx > w || p.y + rPx < 0 || p.y - rPx > h) return;
+      const lx = p.x * scaleX;
+      const ly = p.y * scaleY;
+      const lrx = rPx * scaleX;
+      const lry = rPx * scaleY;
+      lightCtx.globalAlpha = Math.max(0, Math.min(1, strength));
+      lightCtx.drawImage(holeStamp, lx - lrx, ly - lry, lrx * 2, lry * 2);
     }
 
     const colorGlows = [];
@@ -134,40 +162,52 @@ window.ZS = window.ZS || {};
       }
     }
 
-    ctx.drawImage(lightCanvas, 0, 0);
+    lightCtx.globalAlpha = 1;
+    ctx.drawImage(lightCanvas, 0, 0, w, h);
 
     // Cold deep-navy exterior rim vignette around outer perimeter to heighten temperature contrast
     const islandCenter = Iso.gridToScreen(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 6);
     const innerR = N * 11 * zScale;
     const outerR = Math.max(w, h) * 0.68;
     if (outerR > innerR + 10) {
+      const rimRatio = Math.max(0.05, Math.min(0.85, Math.round((innerR / outerR) * 40) / 40));
+      const rimStamp = getColdRimStamp(rimRatio);
+      const rx0 = islandCenter.x - outerR;
+      const ry0 = islandCenter.y - outerR;
+      const rx1 = islandCenter.x + outerR;
+      const ry1 = islandCenter.y + outerR;
       ctx.save();
-      const coldRim = ctx.createRadialGradient(islandCenter.x, islandCenter.y, innerR, islandCenter.x, islandCenter.y, outerR);
-      coldRim.addColorStop(0, 'rgba(10, 22, 48, 0)');
-      coldRim.addColorStop(0.6, `rgba(12, 26, 56, ${(0.22 * state.nightAlpha).toFixed(3)})`);
-      coldRim.addColorStop(1, `rgba(5, 11, 26, ${(0.42 * state.nightAlpha).toFixed(3)})`);
-      ctx.fillStyle = coldRim;
-      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = state.nightAlpha;
+      ctx.drawImage(rimStamp, rx0, ry0, outerR * 2, outerR * 2);
+      ctx.fillStyle = 'rgba(5, 11, 26, 0.42)';
+      if (ry0 > 0) ctx.fillRect(0, 0, w, ry0);
+      if (ry1 < h) ctx.fillRect(0, ry1, w, h - ry1);
+      const midTop = Math.max(0, ry0);
+      const midBot = Math.min(h, ry1);
+      if (midBot > midTop) {
+        if (rx0 > 0) ctx.fillRect(0, midTop, rx0, midBot - midTop);
+        if (rx1 < w) ctx.fillRect(rx1, midTop, w - rx1, midBot - midTop);
+      }
       ctx.restore();
     }
 
-    // Subtle colored atmospheric bloom
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < colorGlows.length; i++) {
-      const g = colorGlows[i];
-      const p = Iso.gridToScreen(g.gx, g.gy, g.z);
-      const rPx = g.r * 34 * zScale;
-      const grad = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, rPx);
-      grad.addColorStop(0, g.color);
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grad;
-      ctx.globalAlpha = state.nightAlpha * 0.60;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, rPx, 0, Math.PI * 2);
-      ctx.fill();
+    // Subtle colored atmospheric bloom (pre-baked 64x64 glow stamps + radius culling)
+    const bloomAlpha = state.nightAlpha * 0.60;
+    if (bloomAlpha > 0.005 && colorGlows.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = bloomAlpha;
+      for (let i = 0; i < colorGlows.length; i++) {
+        const g = colorGlows[i];
+        const rPx = g.r * 34 * zScale;
+        if (rPx <= 0) continue;
+        const p = Iso.gridToScreen(g.gx, g.gy, g.z);
+        if (p.x + rPx < 0 || p.x - rPx > w || p.y + rPx < 0 || p.y - rPx > h) continue;
+        const stamp = R.getGlowStamp(g.color, 0.04);
+        ctx.drawImage(stamp, p.x - rPx, p.y - rPx, rPx * 2, rPx * 2);
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   function drawReconOverlay(ctx, state, timeSec, zScale) {
@@ -948,14 +988,19 @@ window.ZS = window.ZS || {};
     ctx.restore();
   }
 
-  function drawFloatingTexts(ctx, list, zScale) {
+  function drawFloatingTexts(ctx, list, zScale, viewW, viewH) {
+    if (!list || list.length === 0) return;
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const padX = 110 * zScale;
+    const padY = 50 * zScale;
     ctx.save();
     ctx.textAlign = 'center';
     for (let i = 0; i < list.length; i++) {
       const ft = list[i];
       const p = Iso.gridToScreen(ft.x, ft.y, ft.z);
+      if (p.x < -padX || p.x > vp.w + padX || p.y < -padY || p.y > vp.h + padY) continue;
       const alpha = Math.min(1, (ft.life / ft.maxLife) * 1.4);
       ctx.globalAlpha = Math.max(0, alpha);
       const fontPx = Math.max(12, Math.round((ft.size || 12) * Math.min(1.25, Math.max(0.95, zScale))));

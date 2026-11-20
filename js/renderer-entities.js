@@ -616,14 +616,23 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawProjectiles(ctx, projectiles, zScale) {
+  function drawProjectiles(ctx, projectiles, zScale, viewW, viewH) {
+    if (!projectiles || projectiles.length === 0) return;
     const Iso = ZS.Iso;
     const P = ZS.DATA.PALETTE;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const pad = Math.max(60, 80 * zScale);
     for (let i = 0; i < projectiles.length; i++) {
       const p = projectiles[i];
       if (p.kind === 'acid_glob') {
         if (isSil) continue;
+        const pStart = Iso.gridToScreen(p.startX, p.startY, 20);
+        const pEnd = Iso.gridToScreen(p.targetX, p.targetY, 20);
+        if ((pStart.x < -pad && pEnd.x < -pad) || (pStart.x > vp.w + pad && pEnd.x > vp.w + pad) ||
+            (pStart.y < -pad && pEnd.y < -pad) || (pStart.y > vp.h + pad && pEnd.y > vp.h + pad)) {
+          continue;
+        }
         const prog = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.4)));
         const arcPt = (u) => {
           const gx = p.startX + (p.targetX - p.startX) * u;
@@ -664,8 +673,9 @@ window.ZS = window.ZS || {};
       }
       if (p.kind === 'acid_mount_ring') {
         if (isSil) continue;
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.30));
         const c = Iso.gridToScreen(p.x, p.y, p.z || 22);
+        if (c.x < -pad || c.x > vp.w + pad || c.y < -pad || c.y > vp.h + pad) continue;
+        const alpha = Math.max(0, p.life / (p.maxLife || 0.30));
         ctx.save();
         ctx.globalAlpha = alpha * 0.9;
         ctx.strokeStyle = p.color || P.mutantAcid || '#C8F542';
@@ -680,6 +690,9 @@ window.ZS = window.ZS || {};
       }
       if (p.kind === 'emp_ring') {
         if (isSil) continue;
+        const c = Iso.gridToScreen(p.x, p.y, 2);
+        const rMax = (p.radius || 2.1) * 38 * zScale;
+        if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
         const t = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.35)));
         const r = Math.max(0.15, (p.radius || 2.1) * t);
         const alpha = Math.max(0, p.life / (p.maxLife || 0.35));
@@ -694,6 +707,9 @@ window.ZS = window.ZS || {};
       }
       if (p.kind === 'warcry_ring') {
         if (isSil) continue;
+        const c = Iso.gridToScreen(p.x, p.y, 2);
+        const rMax = (p.radius || 3.8) * 38 * zScale;
+        if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
         const t = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.50)));
         const r = Math.max(0.25, (p.radius || 3.8) * t);
         const alpha = Math.max(0, p.life / (p.maxLife || 0.50));
@@ -706,8 +722,9 @@ window.ZS = window.ZS || {};
       }
       if (p.kind === 'bleed_burst') {
         if (isSil) continue;
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.32));
         const b = Iso.gridToScreen(p.x, p.y, p.z || 3);
+        if (b.x < -pad || b.x > vp.w + pad || b.y < -pad || b.y > vp.h + pad) continue;
+        const alpha = Math.max(0, p.life / (p.maxLife || 0.32));
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.strokeStyle = P.danger;
@@ -723,6 +740,9 @@ window.ZS = window.ZS || {};
         continue;
       }
       if (p.kind === 'ring') {
+        const c = Iso.gridToScreen(p.x, p.y, 2);
+        const rMax = (p.radius || 0.8) * 38 * zScale;
+        if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
         const alpha = Math.max(0, p.life / (p.maxLife || 0.2));
         ctx.save();
         ctx.globalAlpha = alpha * 0.85;
@@ -731,8 +751,9 @@ window.ZS = window.ZS || {};
         continue;
       }
       if (p.kind === 'promo_ring') {
-        const t = 1 - Math.max(0, p.life / (p.maxLife || 0.8));
         const c = Iso.gridToScreen(p.x, p.y, p.z || 18);
+        if (c.x < -pad || c.x > vp.w + pad || c.y < -pad || c.y > vp.h + pad) continue;
+        const t = 1 - Math.max(0, p.life / (p.maxLife || 0.8));
         ctx.save();
         ctx.globalAlpha = (1 - t) * 0.92;
         ctx.strokeStyle = p.color || '#FFD34D';
@@ -787,6 +808,7 @@ window.ZS = window.ZS || {};
       }
 
       const cur = Iso.gridToScreen(p.x, p.y, p.z || 12);
+      if (cur.x < -pad || cur.x > vp.w + pad || cur.y < -pad || cur.y > vp.h + pad) continue;
       const prev = Iso.gridToScreen(p.x - p.vx * 0.035, p.y - p.vy * 0.035, p.z || 12);
       ctx.strokeStyle = p.color || '#ffe484';
       ctx.lineWidth = (p.width || 2.2) * zScale;
@@ -798,11 +820,16 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawGroundStains(ctx, stains, zScale) {
+  function drawGroundStains(ctx, stains, zScale, viewW, viewH) {
+    if (!stains || stains.length === 0) return;
     const Iso = ZS.Iso;
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const pad = Math.max(40, 56 * zScale);
     ctx.save();
     for (let i = 0; i < stains.length; i++) {
       const stn = stains[i];
+      const spChk = Iso.gridToScreen(stn.x, stn.y, 1);
+      if (spChk.x < -pad || spChk.x > vp.w + pad || spChk.y < -pad || spChk.y > vp.h + pad) continue;
       if (stn.kind === 'acid_puddle') {
         const fade = Math.min(1, stn.life / Math.min(1.0, stn.maxLife || 2.5));
         const p = Iso.gridToScreen(stn.x, stn.y, 0.65);
@@ -922,15 +949,19 @@ window.ZS = window.ZS || {};
     ctx.restore();
   }
 
-  function drawMuzzleFlashes(ctx, flashes, zScale) {
+  function drawMuzzleFlashes(ctx, flashes, zScale, viewW, viewH) {
+    if (!flashes || flashes.length === 0) return;
     const Iso = ZS.Iso;
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const pad = Math.max(40, 56 * zScale);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < flashes.length; i++) {
       const mf = flashes[i];
+      const origin = Iso.gridToScreen(mf.x, mf.y, mf.z);
+      if (origin.x < -pad || origin.x > vp.w + pad || origin.y < -pad || origin.y > vp.h + pad) continue;
       const alpha = Math.max(0, Math.min(1, mf.life / (mf.maxLife || 0.055)));
       const sc = (mf.scale || 1.0) * zScale;
-      const origin = Iso.gridToScreen(mf.x, mf.y, mf.z);
 
       if (mf.kind === 'emp') {
         ctx.globalAlpha = alpha * 0.9;
@@ -977,10 +1008,15 @@ window.ZS = window.ZS || {};
     ctx.restore();
   }
 
-  function drawParticles(ctx, particles, zScale) {
+  function drawParticles(ctx, particles, zScale, viewW, viewH) {
+    if (!particles || particles.length === 0) return;
     const Iso = ZS.Iso;
+    const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
+    const pad = Math.max(36, 48 * zScale);
     for (let i = 0; i < particles.length; i++) {
       const pt = particles[i];
+      const sc = Iso.gridToScreen(pt.x, pt.y, pt.z);
+      if (sc.x < -pad || sc.x > vp.w + pad || sc.y < -pad || sc.y > vp.h + pad) continue;
       const alpha = Math.max(0, pt.life / (pt.maxLife || 0.5));
       if (pt.kind === 'cube') {
         ctx.save();
@@ -993,7 +1029,6 @@ window.ZS = window.ZS || {};
         ctx.restore();
         continue;
       }
-      const sc = Iso.gridToScreen(pt.x, pt.y, pt.z);
       ctx.save();
       if (pt.kind === 'dust') {
         const grow = 1 + (1 - alpha) * 0.65;
