@@ -149,6 +149,7 @@ window.ZS = window.ZS || {};
     state.blackoutActive = nightStartsDry;
     state.blackoutTriggered = nightStartsDry;
     state.reconNightFadeTimer = 2.0;
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     if (!state.nextWaveIntel || state.nextWaveIntel.wave !== state.wave) {
       generateWaveIntel(state.wave);
@@ -277,166 +278,181 @@ window.ZS = window.ZS || {};
   // ================= MAIN SIMULATION STEP =================
   function update(rawDt) {
     if (state.phase === 'gameover') return;
+    G._inSimStep = true;
+    try {
+      // Smooth day/night ambient transition
+      const targetNight = state.isNight ? 1 : 0;
+      state.nightAlpha += (targetNight - state.nightAlpha) * Math.min(1, rawDt * 2.6);
 
-    // Smooth day/night ambient transition
-    const targetNight = state.isNight ? 1 : 0;
-    state.nightAlpha += (targetNight - state.nightAlpha) * Math.min(1, rawDt * 2.6);
+      const dt = rawDt * (state.phase === 'night' ? state.gameSpeed : 1);
 
-    const dt = rawDt * (state.phase === 'night' ? state.gameSpeed : 1);
+      // Cooldowns
+      if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
+      if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
 
-    // Cooldowns
-    if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
-    if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
-
-    // Update HQ / structure / cozy tier-up / screen shake / blackout flicker animations
-    if (state.cozyTierUpTimer > 0) {
-      state.cozyTierUpTimer = Math.max(0, state.cozyTierUpTimer - rawDt);
-    }
-    if (state.shakeTimer > 0) {
-      state.shakeTimer = Math.max(0, state.shakeTimer - rawDt);
-      if (state.shakeTimer <= 0) state.shakeAmp = 0;
-    }
-    if (state.blackoutFlickerTimer > 0) {
-      state.blackoutFlickerTimer = Math.max(0, state.blackoutFlickerTimer - rawDt);
-    }
-    const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
-    if (hqSt && hqSt.upgradeAnimTimer > 0) {
-      const prevT = hqSt.upgradeAnimTimer;
-      hqSt.upgradeAnimTimer = Math.max(0, hqSt.upgradeAnimTimer - rawDt);
-      if (prevT > 0.8 && hqSt.upgradeAnimTimer <= 0.8) {
-        G.spawnBurstParticles(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 8, '#D8C8A8', 10);
+      // Update HQ / structure / cozy tier-up / screen shake / blackout flicker animations
+      if (state.cozyTierUpTimer > 0) {
+        state.cozyTierUpTimer = Math.max(0, state.cozyTierUpTimer - rawDt);
       }
-      if (prevT > 0.3 && hqSt.upgradeAnimTimer <= 0.3) {
-        hqSt.hitFlashTimer = 0.06;
-        hqSt.hitFlash = 1.0;
+      if (state.shakeTimer > 0) {
+        state.shakeTimer = Math.max(0, state.shakeTimer - rawDt);
+        if (state.shakeTimer <= 0) state.shakeAmp = 0;
       }
-    }
-    const stepStructAnim = (node) => {
-      if (!node) return;
-      if (node.hitFlashTimer > 0) {
-        node.hitFlashTimer = Math.max(0, node.hitFlashTimer - rawDt);
-        node.hitFlash = node.hitFlashTimer > 0 ? 1.0 : 0;
-      } else if (node.hitFlash > 0) {
-        node.hitFlash = Math.max(0, node.hitFlash - rawDt * 18);
+      if (state.blackoutFlickerTimer > 0) {
+        state.blackoutFlickerTimer = Math.max(0, state.blackoutFlickerTimer - rawDt);
       }
-      if (node.buildAnimTimer > 0) {
-        node.buildAnimTimer = Math.max(0, node.buildAnimTimer - rawDt);
-      }
-      if (node.id !== 'command_hq' && node.upgradeAnimTimer > 0) {
-        node.upgradeAnimTimer = Math.max(0, node.upgradeAnimTimer - rawDt);
-      }
-      if (node.promoAnimTimer > 0) {
-        node.promoAnimTimer = Math.max(0, node.promoAnimTimer - rawDt);
-      }
-      if (node.fallAnimTimer > 0) {
-        node.fallAnimTimer = Math.max(0, node.fallAnimTimer - rawDt);
-      }
-    };
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        const s = state.structGrid[y] && state.structGrid[y][x];
-        if (!s) continue;
-        stepStructAnim(s);
-        if (s.mounted) stepStructAnim(s.mounted);
-      }
-    }
-    for (let i = 0; i < state.zombies.length; i++) {
-      const z = state.zombies[i];
-      if (z.hitFlashTimer > 0) {
-        z.hitFlashTimer = Math.max(0, z.hitFlashTimer - rawDt);
-        z.hitFlash = z.hitFlashTimer > 0 ? 1.0 : 0;
-      } else if (z.hitFlash > 0) {
-        z.hitFlash = Math.max(0, z.hitFlash - rawDt * 22);
-      }
-    }
-
-    // Update flares, muzzle flashes, dying zombies, ground decals, particles, floating texts
-    for (let i = state.muzzleFlashes.length - 1; i >= 0; i--) {
-      state.muzzleFlashes[i].life -= rawDt;
-      if (state.muzzleFlashes[i].life <= 0) state.muzzleFlashes.splice(i, 1);
-    }
-    for (let i = state.flares.length - 1; i >= 0; i--) {
-      state.flares[i].life -= dt;
-      if (state.flares[i].life <= 0) state.flares.splice(i, 1);
-    }
-    for (let i = state.dyingZombies.length - 1; i >= 0; i--) {
-      state.dyingZombies[i].timer += rawDt;
-      if (state.dyingZombies[i].timer >= state.dyingZombies[i].duration) {
-        state.dyingZombies.splice(i, 1);
-      }
-    }
-    for (let i = state.groundDecals.length - 1; i >= 0; i--) {
-      state.groundDecals[i].life -= dt;
-      if (state.groundDecals[i].life <= 0) state.groundDecals.splice(i, 1);
-    }
-    G.updateParticles(dt);
-    G.updateFloatingTexts(dt);
-    if (state.reconFlashTimer > 0) {
-      state.reconFlashTimer = Math.max(0, state.reconFlashTimer - rawDt);
-    }
-
-    if (state.phase !== 'night') return;
-
-    if (state.reconNightFadeTimer > 0) {
-      state.reconNightFadeTimer = Math.max(0, state.reconNightFadeTimer - dt);
-    }
-
-    // 1. Night Power Generation & Idle Drain (Wind Continuous + REBOOT_POWER = 12 Hysteresis)
-    const REBOOT_POWER = 12;
-    const windGen = state.nightGen || 0;
-    if (!state.blackoutActive) {
-      const netRate = windGen - (state.nightIdleDrain || 0);
-      state.power = Math.max(0, Math.min(state.powerCap, state.power + netRate * dt));
-      if (state.power <= 0.001 && windGen < (state.nightIdleDrain || 0)) {
-        enterBlackout();
-      }
-    } else {
-      if (windGen > 0) {
-        state.power = Math.min(state.powerCap, state.power + windGen * dt);
-      }
-      const rebootTarget = Math.min(state.powerCap || REBOOT_POWER, REBOOT_POWER);
-      if (state.power > 0 && state.power >= rebootTarget) {
-        state.blackoutActive = false;
-        G.banner('전력 복구 — 자동 방어 재가동!', `풍력 발전으로 전력 ${Math.floor(state.power)} 도달! 포탑과 투광등이 다시 가동됩니다.`, 'good');
-      }
-    }
-
-    // 2. Field Repair Bay real-time aura regeneration + EMP stun countdown
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        const st = state.structGrid[y][x];
-        if (!st) continue;
-        if (st.empStunTimer > 0) st.empStunTimer = Math.max(0, st.empStunTimer - dt);
-        if (st.mounted && st.mounted.empStunTimer > 0) {
-          st.mounted.empStunTimer = Math.max(0, st.mounted.empStunTimer - dt);
+      const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
+      if (hqSt && hqSt.upgradeAnimTimer > 0) {
+        const prevT = hqSt.upgradeAnimTimer;
+        hqSt.upgradeAnimTimer = Math.max(0, hqSt.upgradeAnimTimer - rawDt);
+        if (prevT > 0.8 && hqSt.upgradeAnimTimer <= 0.8) {
+          G.spawnBurstParticles(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 8, '#D8C8A8', 10);
+        }
+        if (prevT > 0.3 && hqSt.upgradeAnimTimer <= 0.3) {
+          hqSt.hitFlashTimer = 0.06;
+          hqSt.hitFlash = 1.0;
         }
       }
-    }
-    updateRepairBays(dt);
-
-    // 3. Spawn Zombies
-    if (state.spawnQueue.length > 0) {
-      state.spawnTimer -= dt;
-      if (state.spawnTimer <= 0) {
-        spawnZombie(state.spawnQueue.shift());
-        const baseInterval = Math.max(0.26, 0.92 - state.wave * 0.045);
-        state.spawnTimer = baseInterval * (0.7 + Math.random() * 0.55);
+      const stepStructAnim = (node) => {
+        if (!node) return;
+        if (node.hitFlashTimer > 0) {
+          node.hitFlashTimer = Math.max(0, node.hitFlashTimer - rawDt);
+          node.hitFlash = node.hitFlashTimer > 0 ? 1.0 : 0;
+        } else if (node.hitFlash > 0) {
+          node.hitFlash = Math.max(0, node.hitFlash - rawDt * 18);
+        }
+        if (node.buildAnimTimer > 0) {
+          node.buildAnimTimer = Math.max(0, node.buildAnimTimer - rawDt);
+        }
+        if (node.id !== 'command_hq' && node.upgradeAnimTimer > 0) {
+          node.upgradeAnimTimer = Math.max(0, node.upgradeAnimTimer - rawDt);
+        }
+        if (node.promoAnimTimer > 0) {
+          node.promoAnimTimer = Math.max(0, node.promoAnimTimer - rawDt);
+        }
+        if (node.fallAnimTimer > 0) {
+          node.fallAnimTimer = Math.max(0, node.fallAnimTimer - rawDt);
+        }
+      };
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const s = state.structGrid[y] && state.structGrid[y][x];
+          if (!s) continue;
+          stepStructAnim(s);
+          if (s.mounted) stepStructAnim(s.mounted);
+        }
       }
-    }
+      for (let i = 0; i < state.zombies.length; i++) {
+        const z = state.zombies[i];
+        if (z.hitFlashTimer > 0) {
+          z.hitFlashTimer = Math.max(0, z.hitFlashTimer - rawDt);
+          z.hitFlash = z.hitFlashTimer > 0 ? 1.0 : 0;
+        } else if (z.hitFlash > 0) {
+          z.hitFlash = Math.max(0, z.hitFlash - rawDt * 22);
+        }
+      }
 
-    // 4. Update Defenders & Auto-Turrets + Delayed Burst Shots
-    updateDefenders(dt);
-    updateBurstQueue(dt);
+      // Update flares, muzzle flashes, dying zombies, ground decals, particles, floating texts
+      for (let i = state.muzzleFlashes.length - 1; i >= 0; i--) {
+        state.muzzleFlashes[i].life -= rawDt;
+        if (state.muzzleFlashes[i].life <= 0) state.muzzleFlashes.splice(i, 1);
+      }
+      for (let i = state.flares.length - 1; i >= 0; i--) {
+        state.flares[i].life -= dt;
+        if (state.flares[i].life <= 0) state.flares.splice(i, 1);
+      }
+      for (let i = state.dyingZombies.length - 1; i >= 0; i--) {
+        state.dyingZombies[i].timer += rawDt;
+        if (state.dyingZombies[i].timer >= state.dyingZombies[i].duration) {
+          state.dyingZombies.splice(i, 1);
+        }
+      }
+      for (let i = state.groundDecals.length - 1; i >= 0; i--) {
+        state.groundDecals[i].life -= dt;
+        if (state.groundDecals[i].life <= 0) state.groundDecals.splice(i, 1);
+      }
+      G.updateParticles(dt);
+      G.updateFloatingTexts(dt);
+      if (state.reconFlashTimer > 0) {
+        state.reconFlashTimer = Math.max(0, state.reconFlashTimer - rawDt);
+      }
 
-    // 5. Update Projectiles
-    updateProjectiles(dt);
+      if (state.phase !== 'night') return;
 
-    // 6. Update Zombies & Razor Traps
-    G.updateZombies(dt);
+      if (state.reconNightFadeTimer > 0) {
+        state.reconNightFadeTimer = Math.max(0, state.reconNightFadeTimer - dt);
+      }
 
-    // 7. Check Wave Clear
-    if (state.spawnQueue.length === 0 && state.zombies.length === 0 && state.phase === 'night') {
-      G.completeWave();
+      // 1. Night Power Generation & Idle Drain (Wind Continuous + REBOOT_POWER = 12 Hysteresis)
+      const REBOOT_POWER = 12;
+      const windGen = state.nightGen || 0;
+      if (!state.blackoutActive) {
+        const netRate = windGen - (state.nightIdleDrain || 0);
+        state.power = Math.max(0, Math.min(state.powerCap, state.power + netRate * dt));
+        if (state.power <= 0.001 && windGen < (state.nightIdleDrain || 0)) {
+          enterBlackout();
+        }
+      } else {
+        if (windGen > 0) {
+          state.power = Math.min(state.powerCap, state.power + windGen * dt);
+        }
+        const rebootTarget = Math.min(state.powerCap || REBOOT_POWER, REBOOT_POWER);
+        if (state.power > 0 && state.power >= rebootTarget) {
+          state.blackoutActive = false;
+          if (G.invalidateStatsCache) G.invalidateStatsCache();
+          G.banner('전력 복구 — 자동 방어 재가동!', `풍력 발전으로 전력 ${Math.floor(state.power)} 도달! 포탑과 투광등이 다시 가동됩니다.`, 'good');
+        }
+      }
+
+      // 2. Field Repair Bay real-time aura regeneration + EMP stun countdown
+      let empExpired = false;
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const st = state.structGrid[y][x];
+          if (!st) continue;
+          if (st.empStunTimer > 0) {
+            st.empStunTimer = Math.max(0, st.empStunTimer - dt);
+            if (st.empStunTimer === 0) empExpired = true;
+          }
+          if (st.mounted && st.mounted.empStunTimer > 0) {
+            st.mounted.empStunTimer = Math.max(0, st.mounted.empStunTimer - dt);
+            if (st.mounted.empStunTimer === 0) empExpired = true;
+          }
+        }
+      }
+      if (empExpired && G.invalidateStatsCache) G.invalidateStatsCache();
+      updateRepairBays(dt);
+
+      // 3. Spawn Zombies
+      if (state.spawnQueue.length > 0) {
+        state.spawnTimer -= dt;
+        if (state.spawnTimer <= 0) {
+          spawnZombie(state.spawnQueue.shift());
+          const baseInterval = Math.max(0.26, 0.92 - state.wave * 0.045);
+          state.spawnTimer = baseInterval * (0.7 + Math.random() * 0.55);
+        }
+      }
+
+      // 4. Update Defenders & Auto-Turrets + Delayed Burst Shots
+      updateDefenders(dt);
+      updateBurstQueue(dt);
+
+      // 5. Update Projectiles
+      updateProjectiles(dt);
+
+      // 6. Update Zombies & Razor Traps
+      G.updateZombies(dt);
+
+      // 7. Check Wave Clear
+      if (state.spawnQueue.length === 0 && state.zombies.length === 0 && state.phase === 'night') {
+        G.completeWave();
+      }
+    } finally {
+      G._inSimStep = false;
+      if (G._combatHudDirty) {
+        G._combatHudDirty = false;
+        if (G.onCombatHudChange) G.onCombatHudChange();
+      }
     }
   }
 
@@ -444,6 +460,7 @@ window.ZS = window.ZS || {};
     if (state.blackoutActive) return;
     state.blackoutActive = true;
     state.power = 0;
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
     if (!state.blackoutTriggered) {
       state.blackoutTriggered = true;
       state.blackoutFlickerTimer = 0.50;
@@ -524,6 +541,7 @@ window.ZS = window.ZS || {};
             hqLvNow >= 4 ? 1.35 : 1.05
           );
           const spd = wpn.speed || 18;
+          const hqDmgMult = state.nightConsumables && state.nightConsumables.overpressureAmmo ? 1.20 : 1.0;
           state.projectiles.push({
             kind: 'bullet',
             x: hcx,
@@ -531,7 +549,7 @@ window.ZS = window.ZS || {};
             z: hqInfo.maxZ - 4,
             vx: Math.cos(hq.aimAngle) * spd,
             vy: Math.sin(hq.aimAngle) * spd,
-            damage: wpn.damage,
+            damage: Math.round(wpn.damage * hqDmgMult),
             isCrit: false,
             splash: wpn.splashRadius || 0,
             splashFlashRadius: wpn.splashRadius || 0,
@@ -854,7 +872,9 @@ window.ZS = window.ZS || {};
     const st = state.structGrid[p.targetTy] && state.structGrid[p.targetTy][p.targetTx];
     if (!st) return;
 
-    const dmg = Math.max(1, Math.round(p.damage || 13));
+    const rawDmg = Math.max(1, Math.round(p.damage || 13));
+    const dmgScale = state.phase === 'night' && state.nightConsumables && state.nightConsumables.reactiveArmor ? 0.80 : 1.0;
+    const dmg = Math.max(1, Math.round(rawDmg * dmgScale));
     st.hp -= dmg;
     st.hitFlashTimer = 0.05;
     st.hitFlash = 1.0;
@@ -863,7 +883,7 @@ window.ZS = window.ZS || {};
     if (st.id === 'command_hq') {
       G.triggerScreenShake(3.5, 0.2);
       G.addFloatingText(p.targetX, p.targetY, 28, `-${dmg}`, DATA.PALETTE.danger, 12, DATA.PALETTE.outlineDark);
-      G.notifyUi();
+      G.notifyCombatHud();
       if (st.hp <= 0) {
         st.hp = 0;
         G.spawnStructureDebris(p.targetX, p.targetY, 'command_hq', 18);
@@ -918,10 +938,8 @@ window.ZS = window.ZS || {};
     if (topologyChanged) {
       G.recalculateBaseStats();
       G.recomputeFlow();
-      G.notifyUi();
-    } else {
-      G.notifyUi();
     }
+    G.notifyCombatHud();
   }
 
   function triggerShockerEmp(cx, cy, radius, duration) {
@@ -939,6 +957,7 @@ window.ZS = window.ZS || {};
     G.spawnBurstParticles(cx, cy, 10, DATA.PALETTE.mutantEmp || '#B26BFF', 10);
     G.triggerScreenShake(2.5, 0.16);
 
+    let newlyStunned = false;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
@@ -947,16 +966,19 @@ window.ZS = window.ZS || {};
 
         const def = DATA.ITEMS[st.id];
         if (def && def.requiresPower) {
+          if ((st.empStunTimer || 0) <= 0) newlyStunned = true;
           st.empStunTimer = Math.max(st.empStunTimer || 0, dur);
         }
         if (st.mounted) {
           const mDef = DATA.ITEMS[st.mounted.id];
           if (mDef && mDef.requiresPower) {
+            if ((st.mounted.empStunTimer || 0) <= 0) newlyStunned = true;
             st.mounted.empStunTimer = Math.max(st.mounted.empStunTimer || 0, dur);
           }
         }
       }
     }
+    if (newlyStunned && G.invalidateStatsCache) G.invalidateStatsCache();
   }
 
   function updateProjectiles(dt) {

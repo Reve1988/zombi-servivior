@@ -4,12 +4,31 @@ ZS.Audio = (function () {
   let ctx = null;
   let muted = false;
   let lastShotTime = 0;
+  let sharedNoiseBuffer = null;
+
+  function ensureNoiseBuffer(c) {
+    if (sharedNoiseBuffer && sharedNoiseBuffer.sampleRate === c.sampleRate) {
+      return sharedNoiseBuffer;
+    }
+    const sampleRate = c.sampleRate || 44100;
+    const sampleCount = Math.max(1, Math.floor(sampleRate * 1.0));
+    const buffer = c.createBuffer(1, sampleCount, sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < sampleCount; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    sharedNoiseBuffer = buffer;
+    return sharedNoiseBuffer;
+  }
 
   function ensure() {
     if (muted) return null;
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) ctx = new AC();
+      if (AC) {
+        ctx = new AC();
+        ensureNoiseBuffer(ctx);
+      }
     }
     if (ctx && ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
@@ -38,14 +57,10 @@ ZS.Audio = (function () {
     const c = ensure();
     if (!c) return;
     const now = c.currentTime;
-    const sampleCount = Math.max(1, Math.floor(c.sampleRate * duration));
-    const buffer = c.createBuffer(1, sampleCount, c.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < sampleCount; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / sampleCount, 1.6);
-    }
+    const dur = Math.max(0.01, duration || 0.06);
+    const buf = ensureNoiseBuffer(c);
     const src = c.createBufferSource();
-    src.buffer = buffer;
+    src.buffer = buf;
 
     const filter = c.createBiquadFilter();
     filter.type = 'bandpass';
@@ -53,12 +68,18 @@ ZS.Audio = (function () {
 
     const g = c.createGain();
     g.gain.setValueAtTime(gainVal || 0.08, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
     src.connect(filter);
     filter.connect(g);
     g.connect(c.destination);
-    src.start(now);
+    if (dur > buf.duration) {
+      src.loop = true;
+      src.start(now);
+      if (typeof src.stop === 'function') src.stop(now + dur);
+    } else {
+      src.start(now, 0, dur);
+    }
   }
 
   return {

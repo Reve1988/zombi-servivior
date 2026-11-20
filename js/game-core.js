@@ -51,6 +51,13 @@ window.ZS = window.ZS || {};
     freeVouchers: {},
     traderOffers: [],
     traderRefreshCost: 15,
+    traderRefreshCount: 0,
+    nightConsumables: {
+      overpressureAmmo: false,
+      reactiveArmor: false
+    },
+    agentRecruitProgress: 0,
+    statsEpoch: 1,
 
     skills: {
       repairCd: 0,
@@ -99,7 +106,10 @@ window.ZS = window.ZS || {};
     pendingVeteranDemolish: null,
     screenShakeEnabled: true,
     onUiChange: null,
-    onWaveBanner: null
+    onCombatHudChange: null,
+    onWaveBanner: null,
+    _inSimStep: false,
+    _combatHudDirty: false
   });
 
   try {
@@ -176,11 +186,30 @@ window.ZS = window.ZS || {};
 
   function setCallbacks(cbs) {
     G.onUiChange = cbs.onUiChange || null;
+    G.onCombatHudChange = cbs.onCombatHudChange || null;
     G.onWaveBanner = cbs.onWaveBanner || null;
   }
 
+  function invalidateStatsCache() {
+    state.statsEpoch = (state.statsEpoch || 0) + 1;
+    return state.statsEpoch;
+  }
+
   function notifyUi() {
+    G._combatHudDirty = false;
     if (G.onUiChange) G.onUiChange();
+  }
+
+  function notifyCombatHud() {
+    if (G._inSimStep) {
+      G._combatHudDirty = true;
+      return;
+    }
+    if (G.onCombatHudChange) {
+      G.onCombatHudChange();
+    } else if (G.onUiChange) {
+      G.onUiChange();
+    }
   }
 
   function banner(title, sub, tone) {
@@ -240,6 +269,11 @@ window.ZS = window.ZS || {};
     state.agents = DATA.HQ_STATS.startingAgents;
     state.debugBonusPopCap = 0;
     state.freeVouchers = {};
+    state.traderRefreshCost = 15;
+    state.traderRefreshCount = 0;
+    state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
+    state.agentRecruitProgress = 0;
+    state.statsEpoch = 1;
     state.skills.repairCd = 0;
     state.skills.airstrikeCd = 0;
 
@@ -471,6 +505,7 @@ window.ZS = window.ZS || {};
     const prevRank = st.rank || 0;
     st.rank = newRank;
     if (newRank > prevRank) {
+      invalidateStatsCache();
       const rInfo = getVeterancyRankInfo(newRank);
       st.promoAnimTimer = 0.8;
       if (!silentBanner) {
@@ -552,7 +587,7 @@ window.ZS = window.ZS || {};
     for (let i = 0; i < 3; i++) {
       const a = -Math.PI * 0.5 + (i - 1) * 0.85;
       const spd = 0.9 + Math.random() * 0.7;
-      state.particles.push({
+      const pt = {
         x: gx,
         y: gy,
         z: 24,
@@ -563,7 +598,9 @@ window.ZS = window.ZS || {};
         size: 2.8,
         life: 0.40,
         maxLife: 0.40
-      });
+      };
+      if (G.pushParticle) G.pushParticle(pt);
+      else state.particles.push(pt);
     }
   }
 
@@ -574,6 +611,7 @@ window.ZS = window.ZS || {};
       const payload = {
         saveVersion: 2,
         defenseTierV2: true,
+        balanceV3: true,
         wave: state.wave,
         hqLevel: state.hqLevel,
         bossDefeated: state.bossDefeated,
@@ -587,6 +625,10 @@ window.ZS = window.ZS || {};
         nextWaveIntel: state.nextWaveIntel,
         freeVouchers: state.freeVouchers,
         traderOffers: state.traderOffers,
+        traderRefreshCost: state.traderRefreshCost || 15,
+        traderRefreshCount: state.traderRefreshCount || 0,
+        nightConsumables: state.nightConsumables || { overpressureAmmo: false, reactiveArmor: false },
+        agentRecruitProgress: state.agentRecruitProgress || 0,
         floorGrid: state.floorGrid,
         structGrid: state.structGrid
       };
@@ -645,6 +687,14 @@ window.ZS = window.ZS || {};
       state.agents = d.agents ?? DATA.HQ_STATS.startingAgents;
       state.debugBonusPopCap = d.debugBonusPopCap || 0;
       state.freeVouchers = d.freeVouchers || {};
+      state.traderRefreshCost = Math.max(15, Number(d.traderRefreshCost) || 15);
+      state.traderRefreshCount = Math.max(0, Number(d.traderRefreshCount) || 0);
+      state.nightConsumables = {
+        overpressureAmmo: !!(d.nightConsumables && d.nightConsumables.overpressureAmmo),
+        reactiveArmor: !!(d.nightConsumables && d.nightConsumables.reactiveArmor)
+      };
+      state.agentRecruitProgress = Math.max(0, Number(d.agentRecruitProgress) || 0);
+      invalidateStatsCache();
       const saveVersion = Number(d.saveVersion || 1);
       const isLegacyV1 = saveVersion < 2;
       const needsDefenseMigration = isLegacyV1 || !d.defenseTierV2;
@@ -816,6 +866,7 @@ window.ZS = window.ZS || {};
       state.blackoutActive = false;
       state.blackoutTriggered = false;
       state.blackoutFlickerTimer = 0;
+      invalidateStatsCache();
       ZS.Audio.playBuild();
       banner(`[DEBUG] 전력 즉시 완충 (${state.power})`, '자동 포탑 및 전기 조명 전원이 복구되었습니다.', 'good');
     }
@@ -904,7 +955,9 @@ window.ZS = window.ZS || {};
     getEnvInfo,
     getSaveKey,
     setCallbacks,
+    invalidateStatsCache,
     notifyUi,
+    notifyCombatHud,
     banner,
     getHqLevelInfo,
     createEmptyGrids,
