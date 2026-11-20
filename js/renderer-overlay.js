@@ -1097,10 +1097,10 @@ window.ZS = window.ZS || {};
       R.emissiveList = null;
 
       if (def.layer === 'floor') {
-        const zoom = (sz / 82) * 1.02;
+        const zoom = (sz * 0.88) / 68;
         Iso.cam.zoom = zoom;
         Iso.cam.x = 0;
-        Iso.cam.y = Iso.TILE_H * 0.5 - 1.5;
+        Iso.cam.y = 17.5;
 
         const t = [Iso.gridToScreen(0, 0, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(0, 1, 0)];
         const l = [Iso.gridToScreen(0, 1, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 1, -4.5), Iso.gridToScreen(0, 1, -4.5)];
@@ -1111,17 +1111,19 @@ window.ZS = window.ZS || {};
         R.drawFloorTile(tctx, 0, 0, resolvedId, zoom);
       } else {
         const topZ = resolvedId === 'command_hq' ? 36 : R.getStructVisualTopZ(resolvedId, tier);
-        const extraTop = resolvedId === 'wind_turbine' && tier >= 3 ? 14 : 3;
-        const spanY = Math.max(44, topZ + extraTop + 22);
-        const zoom = Math.min((sz * 0.88) / 72, (sz * 0.88) / spanY);
+        const extraTop = resolvedId === 'wind_turbine' ? (tier >= 3 ? 18 : 6) : 4;
+        const wyTop = Math.min(-2, 16 - (topZ + extraTop));
+        const wyBot = 38.5;
+        const spanY = Math.max(40, wyBot - wyTop);
+        const zoom = Math.min((sz * 0.87) / 72, (sz * 0.87) / spanY);
         Iso.cam.zoom = zoom;
         Iso.cam.x = 0;
-        Iso.cam.y = Iso.TILE_H * 0.5 - (topZ + extraTop - 16) * 0.5;
+        Iso.cam.y = (wyTop + wyBot) * 0.5;
 
         // Miniature diorama turf plinth under structure
         const t = [Iso.gridToScreen(0, 0, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(0, 1, 0)];
-        const l = [Iso.gridToScreen(0, 1, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 1, -4), Iso.gridToScreen(0, 1, -4)];
-        const r = [Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 0, -4), Iso.gridToScreen(1, 1, -4)];
+        const l = [Iso.gridToScreen(0, 1, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 1, -4.5), Iso.gridToScreen(0, 1, -4.5)];
+        const r = [Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 0, -4.5), Iso.gridToScreen(1, 1, -4.5)];
         R.drawPolyFace(tctx, l, '#3A3027', 1.0, false, false, zoom);
         R.drawPolyFace(tctx, r, '#2C241D', 1.0, false, false, zoom);
         R.drawPolyFace(tctx, t, '#55705A', 1.0, false, false, zoom);

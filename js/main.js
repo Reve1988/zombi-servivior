@@ -179,12 +179,49 @@ window.ZS = window.ZS || {};
       { passive: false }
     );
 
+    const settingsWrap = document.getElementById('settings-wrap');
+    const settingsBtn = document.getElementById('btn-settings');
+    const settingsPopover = document.getElementById('settings-popover');
+    const setSettingsOpen = (open) => {
+      if (!settingsPopover || !settingsBtn) return;
+      settingsPopover.classList.toggle('hidden', !open);
+      settingsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      settingsBtn.classList.toggle('active', !!open);
+    };
+
+    if (settingsBtn && settingsPopover) {
+      settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSettingsOpen(settingsPopover.classList.contains('hidden'));
+      });
+      document.addEventListener('mousedown', (e) => {
+        if (!settingsPopover.classList.contains('hidden') && settingsWrap && !settingsWrap.contains(e.target)) {
+          setSettingsOpen(false);
+        }
+      });
+    }
+
     window.addEventListener('keydown', (e) => {
       keys[e.code] = true;
+      const activeTag = document.activeElement && document.activeElement.tagName;
+      const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
       if (e.code === 'Escape') {
+        setSettingsOpen(false);
+        uiState.inspectedTile = null;
         U.setToolMode('inspect');
         document.getElementById('trader-modal').classList.add('hidden');
         document.getElementById('guide-modal').classList.add('hidden');
+      } else if (!isTyping && /^Digit([1-9])$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const traderHidden = document.getElementById('trader-modal').classList.contains('hidden');
+        const guideHidden = document.getElementById('guide-modal').classList.contains('hidden');
+        if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden) {
+          const slotIdx = Number(RegExp.$1) - 1;
+          const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
+          if (items[slotIdx]) {
+            if (uiState.dockCollapsed) U.setDockCollapsed(false);
+            if (U.selectBuildCard) U.selectBuildCard(items[slotIdx]);
+          }
+        }
       } else if (e.code === 'KeyU') {
         if (uiState.inspectedTile) {
           ZS.Game.upgradeStructure(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
@@ -232,6 +269,8 @@ window.ZS = window.ZS || {};
     }
 
     document.getElementById('btn-start-wave').addEventListener('click', () => {
+      setSettingsOpen(false);
+      uiState.inspectedTile = null;
       U.setToolMode('inspect');
       ZS.Game.startNightWave();
     });
@@ -251,11 +290,21 @@ window.ZS = window.ZS || {};
         U.showWaveBanner('야간 교전 중 교역 불가', '아침이 밝아 정비 페이즈가 되면 보급 상인과 거래할 수 있습니다.', 'warn');
         return;
       }
+      setSettingsOpen(false);
       U.renderTraderModal();
       document.getElementById('trader-modal').classList.remove('hidden');
     };
     document.getElementById('btn-trader').addEventListener('click', openTrader);
-    document.getElementById('btn-open-trader-pill').addEventListener('click', openTrader);
+    const traderPillEl = document.getElementById('btn-open-trader-pill');
+    if (traderPillEl) {
+      traderPillEl.addEventListener('click', openTrader);
+      traderPillEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          openTrader();
+        }
+      });
+    }
     document.getElementById('btn-close-trader').addEventListener('click', () => {
       document.getElementById('trader-modal').classList.add('hidden');
     });
@@ -285,18 +334,24 @@ window.ZS = window.ZS || {};
       else U.updateHud();
     });
 
-    document.getElementById('btn-sound').addEventListener('click', () => {
-      const muted = ZS.Audio.toggleMute();
-      const soundBtn = document.getElementById('btn-sound');
-      soundBtn.innerHTML = ozIcon(muted ? 'sys-sound-off' : 'sys-sound-on', 16);
-      soundBtn.classList.toggle('toggle-off', muted);
-    });
+    const soundBtn = document.getElementById('btn-sound');
+    if (soundBtn) {
+      const syncSoundBtn = (muted) => {
+        soundBtn.innerHTML = `${ozIcon(muted ? 'sys-sound-off' : 'sys-sound-on', 16)}<span>${muted ? '효과음 꺼짐' : '효과음 켜짐'}</span>`;
+        soundBtn.classList.toggle('toggle-off', !!muted);
+      };
+      syncSoundBtn(ZS.Audio.isMuted ? ZS.Audio.isMuted() : false);
+      soundBtn.addEventListener('click', () => {
+        const muted = ZS.Audio.toggleMute();
+        syncSoundBtn(muted);
+      });
+    }
 
     const shakeBtn = document.getElementById('btn-shake');
     if (shakeBtn && ZS.Game.isScreenShakeEnabled) {
       const syncShakeBtn = () => {
         const on = ZS.Game.isScreenShakeEnabled();
-        shakeBtn.innerHTML = `${ozIcon(on ? 'sys-shake-on' : 'sys-shake-off', 16)}<span>${on ? '흔들림 ON' : '흔들림 OFF'}</span>`;
+        shakeBtn.innerHTML = `${ozIcon(on ? 'sys-shake-on' : 'sys-shake-off', 16)}<span>${on ? '화면 흔들림 ON' : '화면 흔들림 OFF'}</span>`;
         shakeBtn.classList.toggle('toggle-off', !on);
       };
       syncShakeBtn();
@@ -313,18 +368,27 @@ window.ZS = window.ZS || {};
 
     const hqBoxEl = document.getElementById('hud-hq-box');
     if (hqBoxEl) {
-      hqBoxEl.addEventListener('click', () => {
+      const focusHq = () => {
         U.setToolMode('inspect');
         ZS.Iso.resetCamera();
         U.inspectTileAt(ZS.DATA.HQ_POS.x, ZS.DATA.HQ_POS.y);
+      };
+      hqBoxEl.addEventListener('click', focusHq);
+      hqBoxEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          focusHq();
+        }
       });
     }
 
     document.getElementById('btn-center').addEventListener('click', () => {
       ZS.Iso.resetCamera();
+      setSettingsOpen(false);
     });
 
     document.getElementById('btn-guide').addEventListener('click', () => {
+      setSettingsOpen(false);
       document.getElementById('guide-modal').classList.remove('hidden');
     });
     document.getElementById('btn-close-guide').addEventListener('click', () => {
@@ -332,7 +396,9 @@ window.ZS = window.ZS || {};
     });
 
     document.getElementById('btn-reset').addEventListener('click', () => {
+      setSettingsOpen(false);
       if (confirm('현재 기지를 초기화하고 WAVE 1부터 새 작전을 시작할까요?')) {
+        uiState.inspectedTile = null;
         U.setToolMode('inspect');
         ZS.Iso.resetCamera();
         ZS.Game.clearSaveAndReset();
