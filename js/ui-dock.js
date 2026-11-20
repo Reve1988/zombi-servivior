@@ -150,6 +150,7 @@ window.ZS = window.ZS || {};
     if (nextSig === lastDockSig && container.childElementCount > 0) {
       return;
     }
+    const categoryChanged = lastDockCategory !== uiState.activeCategory;
     lastDockSig = nextSig;
     lastDockCategory = uiState.activeCategory;
 
@@ -225,6 +226,7 @@ window.ZS = window.ZS || {};
 
       container.appendChild(card);
     });
+    if (categoryChanged) container.scrollLeft = 0;
   }
 
   function setToolMode(mode, itemId) {

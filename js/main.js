@@ -179,6 +179,20 @@ window.ZS = window.ZS || {};
       { passive: false }
     );
 
+    const itemCardsEl = document.getElementById('item-cards');
+    if (itemCardsEl) {
+      itemCardsEl.addEventListener(
+        'wheel',
+        (e) => {
+          if (itemCardsEl.scrollWidth > itemCardsEl.clientWidth + 1 && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            e.preventDefault();
+            itemCardsEl.scrollLeft += e.deltaY;
+          }
+        },
+        { passive: false }
+      );
+    }
+
     const settingsWrap = document.getElementById('settings-wrap');
     const settingsBtn = document.getElementById('btn-settings');
     const settingsPopover = document.getElementById('settings-popover');
