@@ -860,7 +860,7 @@ window.ZS = window.ZS || {};
       const p = 1 - Math.max(0, Math.min(1, unit.upgradeAnimTimer / 0.6));
       const scanZ = baseZ + p * getMountedVisualTopZ(unit.id);
       ctx.save();
-      ctx.globalAlpha = (1 - p) * 0.85;
+      ctx.globalAlpha *= (1 - p) * 0.85;
       Iso.drawTilePoly(ctx, tx + 0.20, ty + 0.20, scanZ, 'rgba(255,255,255,0.22)', '#FFFFFF', 1.8 * zScale);
       ctx.restore();
     }
@@ -2655,7 +2655,7 @@ window.ZS = window.ZS || {};
       const p = 1 - Math.max(0, Math.min(1, st.upgradeAnimTimer / 0.6));
       const scanZ = 1 + p * R.getStructVisualTopZ(id, lv);
       ctx.save();
-      ctx.globalAlpha = (1 - p) * 0.85;
+      ctx.globalAlpha *= (1 - p) * 0.85;
       Iso.drawTilePoly(ctx, tx + 0.08, ty + 0.08, scanZ, 'rgba(255,255,255,0.22)', '#FFFFFF', 2.0 * zScale);
       ctx.restore();
     }

@@ -1700,31 +1700,54 @@ button, input, select {
 }
 
 .dock-cards {
+  box-sizing: border-box;
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   justify-content: flex-start;
   gap: 6px;
   width: min(978px, calc(100vw - 434px));
   min-width: 0;
+  height: 166px;
+  min-height: 166px;
+  max-height: 166px;
   flex: 0 0 auto;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px;
+  padding: 4px 4px 0;
   border-radius: 6px;
   background: rgba(8, 13, 20, 0.52);
   border: 1px solid rgba(148, 178, 210, 0.14);
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.45);
-  scrollbar-width: thin;
-  scrollbar-color: #3D5066 transparent;
+}
+
+.dock-cards::-webkit-scrollbar {
+  height: 4px;
+}
+
+.dock-cards::-webkit-scrollbar-track {
+  background: rgba(8, 13, 20, 0.35);
+  border-radius: 999px;
+}
+
+.dock-cards::-webkit-scrollbar-thumb {
+  background: rgba(110, 140, 174, 0.48);
+  border-radius: 999px;
+}
+
+.dock-cards::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 178, 210, 0.75);
 }
 
 .item-card {
+  box-sizing: border-box;
   position: relative;
   z-index: 1;
   width: 102px;
   min-width: 102px;
   max-width: 102px;
-  min-height: 142px;
+  height: 154px;
+  min-height: 154px;
+  max-height: 154px;
   flex-shrink: 0;
   padding: 6px 6px 7px;
   cursor: pointer;
