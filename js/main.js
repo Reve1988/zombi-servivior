@@ -38,7 +38,7 @@ window.ZS = window.ZS || {};
       const savedN = parsed.structGrid.length;
       const N = ZS.DATA.GRID_SIZE;
       if (savedN !== N && savedN !== 22 && savedN !== 18) return null;
-      const hqLv = Math.max(1, Math.min(4, Number(parsed.hqLevel) || 1));
+      const hqLv = Math.max(1, Math.min(5, Number(parsed.hqLevel) || 1));
       const phaseLabel = parsed.phase === 'night' ? '야간 방어' : '주간 정비';
       const wavePad = String(Math.floor(waveNum)).padStart(2, '0');
       const divId = (parsed.divisionId && ZS.DATA.DIVISIONS && ZS.DATA.DIVISIONS[parsed.divisionId])
@@ -70,10 +70,137 @@ window.ZS = window.ZS || {};
     return !!(modal && !modal.classList.contains('hidden'));
   }
 
+  function isTechModalOpen() {
+    return !!(U.isTechPopModalOpen && U.isTechPopModalOpen());
+  }
+
+  function isGameOverModalOpen() {
+    const modal = document.getElementById('gameover-modal');
+    return !!(modal && !modal.classList.contains('hidden'));
+  }
+
+  function renderGameOverModal() {
+    const st = ZS.Game.state;
+    if (!st) return;
+
+    const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef(st.divisionId) : null;
+    const divName = (divDef && divDef.name) || '기동방위대';
+    const divIconId = (divDef && divDef.iconId) || 'div-mobile';
+    const divIconCls = divDef && divDef.isElectricDivision ? 'icon-power' : 'icon-coin';
+    const waveNum = Math.max(1, Math.floor(Number(st.wave) || 1));
+    const wavePad = String(waveNum).padStart(2, '0');
+    const prevBest = Number(st.gameOverPrevBestWave) || 0;
+    const isNewBest = waveNum > prevBest && waveNum >= 2;
+    const totalKills = Math.max(0, Math.floor(Number(st.totalKills) || 0));
+    const cozyLv = (st.cozyTier && st.cozyTier.level) || 1;
+    const cozyTitle = (st.cozyTier && st.cozyTier.title) || '임시 전초기지';
+    const researchedCount = st.researchedTechs ? Object.keys(st.researchedTechs).length : 0;
+
+    const subEl = document.getElementById('gameover-modal-sub');
+    if (subEl) {
+      subEl.textContent = `WAVE ${wavePad} 야간 방어전 중 지휘 본부가 함락되어 전초기지 통신이 두절되었습니다.`;
+    }
+
+    const unlockBox = document.getElementById('gameover-unlock-box');
+    const unlocked = Array.isArray(st.gameOverUnlockedDivisions) ? st.gameOverUnlockedDivisions : [];
+    if (unlockBox) {
+      if (unlocked.length > 0) {
+        unlockBox.innerHTML = `${ozIcon('state-rank', 16, 'icon-coin')}<span>이번 작전 신규 해금 분과: <b>${escapeHtml(unlocked.join(', '))}</b></span>`;
+        unlockBox.classList.remove('hidden');
+      } else {
+        unlockBox.innerHTML = '';
+        unlockBox.classList.add('hidden');
+      }
+    }
+
+    const gridEl = document.getElementById('gameover-stats-grid');
+    if (gridEl) {
+      const bestPill = isNewBest ? '<span class="gameover-best-pill">최고 기록</span>' : '';
+      const cells = [
+        {
+          icon: 'phase-night',
+          iconCls: 'icon-danger',
+          label: '도달 웨이브',
+          valHtml: `<span class="gameover-stat-val">WAVE ${wavePad}</span>${bestPill}`
+        },
+        {
+          icon: divIconId,
+          iconCls: divIconCls,
+          label: '지휘 분과 · 본부',
+          valHtml: `<span class="gameover-stat-val">${escapeHtml(divName)} · Lv.${st.hqLevel || 1}</span>`
+        },
+        {
+          icon: 'hud-enemy',
+          iconCls: 'icon-danger',
+          label: '총 격파 감염체',
+          valHtml: `<span class="gameover-stat-val">${totalKills}기</span>`
+        },
+        {
+          icon: 'res-agent',
+          iconCls: '',
+          label: '생존 인원 · 상한',
+          valHtml: `<span class="gameover-stat-val">${st.agents || 0} / ${st.popCap || 4}명</span>`
+        },
+        {
+          icon: 'res-cozy',
+          iconCls: 'icon-coin',
+          label: '최종 안락함',
+          valHtml: `<span class="gameover-stat-val">Lv.${cozyLv} · ${escapeHtml(cozyTitle)}</span>`
+        },
+        {
+          icon: 'res-rp',
+          iconCls: 'icon-rp',
+          label: '완료 연구 · 잔여 RP',
+          valHtml: `<span class="gameover-stat-val">${researchedCount}건 · ${Math.floor(st.rp || 0)} RP</span>`
+        }
+      ];
+      gridEl.innerHTML = cells
+        .map(
+          (c) => `
+          <div class="gameover-stat-cell">
+            <span class="gameover-stat-label">${ozIcon(c.icon, 13, c.iconCls)}<span>${escapeHtml(c.label)}</span></span>
+            <div class="gameover-stat-val-row">${c.valHtml}</div>
+          </div>`
+        )
+        .join('');
+    }
+  }
+
+  function closeGameOverModal() {
+    const modal = document.getElementById('gameover-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function openGameOverModal() {
+    const modal = document.getElementById('gameover-modal');
+    if (!modal) return;
+    isPanning = false;
+    isLeftPainting = false;
+    uiState.hoverTile = null;
+    uiState.inspectedTile = null;
+    uiState.movingSource = null;
+    uiState.activeSkill = null;
+    uiState.hoverB1DoorEdge = null;
+    document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
+    document.getElementById('trader-modal')?.classList.add('hidden');
+    document.getElementById('guide-modal')?.classList.add('hidden');
+    document.getElementById('settings-popover')?.classList.add('hidden');
+    document.getElementById('wave-banner')?.classList.add('hidden');
+    closeConfirmModal();
+    if (U.closeTechPopModal) U.closeTechPopModal();
+    if (U.setToolMode) U.setToolMode('inspect');
+    if (U.updateCursorTooltip) U.updateCursorTooltip();
+    renderGameOverModal();
+    modal.classList.remove('hidden');
+  }
+
   function closeDivisionModal() {
     const modal = document.getElementById('division-modal');
     if (modal) modal.classList.add('hidden');
     uiState.divisionModalOpen = false;
+    if (ZS.Game && ZS.Game.state && ZS.Game.state.phase === 'gameover' && !uiState.mainMenuOpen) {
+      openGameOverModal();
+    }
   }
 
   function getDivisionClassSuffix(divId) {
@@ -324,8 +451,11 @@ window.ZS = window.ZS || {};
       uiState.movingSource = null;
       uiState.activeSkill = null;
       uiState.pointerClient.inside = false;
+      closeConfirmModal();
+      closeGameOverModal();
       document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
       document.getElementById('trader-modal')?.classList.add('hidden');
+      if (U.closeTechPopModal) U.closeTechPopModal();
       U.updateCursorTooltip();
       refreshMainMenuState();
     } else {
@@ -340,6 +470,7 @@ window.ZS = window.ZS || {};
     if (ZS.Game.state.phase === 'gameover') {
       ZS.Game.loadGame();
     }
+    closeGameOverModal();
     uiState.inspectedTile = null;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
@@ -357,6 +488,7 @@ window.ZS = window.ZS || {};
     }
     closeDivisionModal();
     closeConfirmModal();
+    closeGameOverModal();
     uiState.inspectedTile = null;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
@@ -428,8 +560,91 @@ window.ZS = window.ZS || {};
     return removed;
   }
 
-  function handlePrimaryTileAction(tx, ty, gx, gy, isDrag) {
+  function handlePrimaryTileAction(tx, ty, gx, gy, isDrag, clientX, clientY) {
     const st = ZS.Game.state;
+
+    if (st.activeLayer === 'underground') {
+      if (st.phase !== 'day') {
+        if (!isDrag) U.inspectTileAt(tx, ty);
+        return;
+      }
+      if (uiState.mode === 'b1_dig') {
+        if (ZS.Game.digTileAt) ZS.Game.digTileAt(tx, ty, { silent: isDrag });
+        return;
+      }
+      if (uiState.mode === 'b1_door') {
+        if (!isDrag && ZS.Game.toggleB1Door) {
+          const edge = uiState.hoverB1DoorEdge || (ZS.Game.findNearestB1DoorEdge ? ZS.Game.findNearestB1DoorEdge(clientX, clientY, gx, gy) : null);
+          if (edge) {
+            ZS.Game.toggleB1Door(edge.a[0], edge.a[1], edge.b[0], edge.b[1]);
+            uiState.hoverB1DoorEdge = ZS.Game.findNearestB1DoorEdge ? ZS.Game.findNearestB1DoorEdge(clientX, clientY, gx, gy) : null;
+          } else {
+            ZS.Audio.playError();
+            U.showWaveBanner('방폭문 설치 불가', '전술 복도와 방 구역 사이의 콘크리트 격벽을 클릭하세요.', 'warn');
+          }
+        }
+        return;
+      }
+      if (uiState.mode === 'b1_zone' || uiState.mode === 'b1_unzone') {
+        if (!isDrag) {
+          uiState.b1DragStart = { tx, ty };
+          uiState.b1DragCurrent = { tx, ty };
+        }
+        return;
+      }
+      if (uiState.mode === 'build') {
+        if (!isDrag && uiState.selectedItemId && ZS.Game.placeB1Item) {
+          ZS.Game.placeB1Item(uiState.selectedItemId, tx, ty, uiState.b1BuildRot || 0);
+        }
+        return;
+      }
+      if (uiState.mode === 'remove') {
+        if (!isDrag && ZS.Game.removeB1ItemAt) {
+          ZS.Game.removeB1ItemAt(tx, ty);
+        }
+        return;
+      }
+      if (uiState.mode === 'move') {
+        if (!isDrag) {
+          const ug = st.underground;
+          if (!uiState.movingSource) {
+            const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+            if (g) {
+              uiState.movingSource = { tx, ty };
+              uiState.b1BuildRot = g.rot || 0;
+              ZS.Audio.playClick();
+              const def = ZS.DATA.ITEMS[g.id];
+              if (def && U.formatB1MoveDetailHtml && U.setDetailHtml) {
+                U.setDetailHtml(U.formatB1MoveDetailHtml(def, tx, ty));
+              }
+              if (U.updateCursorTooltip) U.updateCursorTooltip();
+            } else {
+              ZS.Audio.playError();
+              U.showWaveBanner('이동 대상 없음', '이동할 지하 가젯이 있는 타일을 먼저 클릭하세요.', 'warn');
+            }
+          } else {
+            const src = uiState.movingSource;
+            const srcG = ug && ug.b1StructGrid && ug.b1StructGrid[src.ty] && ug.b1StructGrid[src.ty][src.tx];
+            const nextRot = ((Math.round(Number(uiState.b1BuildRot) || 0) % 4) + 4) % 4;
+            const srcRot = srcG ? (((Math.round(Number(srcG.rot) || 0) % 4) + 4) % 4) : 0;
+            if (src.tx === tx && src.ty === ty && nextRot === srcRot) {
+              uiState.movingSource = null;
+              if (U.setToolMode) U.setToolMode('move');
+              ZS.Audio.playClick();
+            } else if (ZS.Game.moveB1Item && ZS.Game.moveB1Item(src.tx, src.ty, tx, ty, nextRot)) {
+              uiState.movingSource = null;
+              if (U.setToolMode) U.setToolMode('move');
+            }
+            if (U.updateCursorTooltip) U.updateCursorTooltip();
+          }
+        }
+        return;
+      }
+      if (!isDrag) {
+        U.inspectTileAt(tx, ty);
+      }
+      return;
+    }
 
     if (uiState.activeSkill === 'airstrike') {
       if (!isDrag && ZS.Game.triggerAirstrikeAt(gx, gy)) {
@@ -489,12 +704,28 @@ window.ZS = window.ZS || {};
   }
 
   function bindEvents() {
+    let rightClickTrack = null;
     window.addEventListener('resize', resizeCanvas);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
-      if (e.button === 2 || e.button === 1 || (e.button === 0 && keys['Space'])) {
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) return;
+      if (e.button === 2) {
+        const shouldTrackRotate =
+          ZS.Game.state.activeLayer === 'underground' &&
+          ZS.Game.state.phase === 'day' &&
+          ((uiState.mode === 'build' && !!uiState.selectedItemId) ||
+            (uiState.mode === 'move' && !!uiState.movingSource));
+        if (shouldTrackRotate) {
+          rightClickTrack = { startX: e.clientX, startY: e.clientY, dragged: false };
+          return;
+        }
+        isPanning = true;
+        panStart.x = e.clientX;
+        panStart.y = e.clientY;
+        return;
+      }
+      if (e.button === 1 || (e.button === 0 && keys['Space'])) {
         isPanning = true;
         panStart.x = e.clientX;
         panStart.y = e.clientY;
@@ -508,24 +739,39 @@ window.ZS = window.ZS || {};
         const g = ZS.Iso.screenToGrid(e.clientX, e.clientY);
         uiState.pointerClient = { x: e.clientX, y: e.clientY, inside: true };
         uiState.hoverTile = { tx: g.tx, ty: g.ty };
+        if (ZS.Game.state.activeLayer === 'underground' && uiState.mode === 'b1_door' && ZS.Game.findNearestB1DoorEdge) {
+          uiState.hoverB1DoorEdge = ZS.Game.findNearestB1DoorEdge(e.clientX, e.clientY, g.gx, g.gy);
+        }
         isLeftPainting = true;
         lastPaintKey = `${g.tx},${g.ty}`;
-        handlePrimaryTileAction(g.tx, g.ty, g.gx, g.gy, false);
+        handlePrimaryTileAction(g.tx, g.ty, g.gx, g.gy, false, e.clientX, e.clientY);
         U.updateCursorTooltip();
       }
     });
 
     canvas.addEventListener('mouseleave', () => {
       uiState.pointerClient.inside = false;
+      uiState.hoverB1DoorEdge = null;
       U.updateCursorTooltip();
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) {
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) {
         uiState.pointerClient.inside = false;
         uiState.hoverTile = null;
+        uiState.hoverB1DoorEdge = null;
         U.updateCursorTooltip();
         return;
+      }
+
+      if (rightClickTrack && !rightClickTrack.dragged) {
+        const dist = Math.hypot(e.clientX - rightClickTrack.startX, e.clientY - rightClickTrack.startY);
+        if (dist >= 6) {
+          rightClickTrack.dragged = true;
+          isPanning = true;
+          panStart.x = rightClickTrack.startX;
+          panStart.y = rightClickTrack.startY;
+        }
       }
 
       if (isPanning) {
@@ -541,18 +787,60 @@ window.ZS = window.ZS || {};
       uiState.pointerClient = { x: e.clientX, y: e.clientY, inside: overCanvas };
       const g = ZS.Iso.screenToGrid(e.clientX, e.clientY);
       uiState.hoverTile = { tx: g.tx, ty: g.ty };
-      U.updateCursorTooltip();
+      if (ZS.Game.state.activeLayer === 'underground' && uiState.mode === 'b1_door' && overCanvas && ZS.Game.findNearestB1DoorEdge) {
+        uiState.hoverB1DoorEdge = ZS.Game.findNearestB1DoorEdge(e.clientX, e.clientY, g.gx, g.gy);
+      } else {
+        uiState.hoverB1DoorEdge = null;
+      }
 
       if (isLeftPainting) {
+        if (
+          ZS.Game.state.activeLayer === 'underground' &&
+          uiState.b1DragStart &&
+          (uiState.mode === 'b1_zone' || uiState.mode === 'b1_unzone')
+        ) {
+          uiState.b1DragCurrent = { tx: g.tx, ty: g.ty };
+        }
         const key = `${g.tx},${g.ty}`;
         if (key !== lastPaintKey) {
           lastPaintKey = key;
-          handlePrimaryTileAction(g.tx, g.ty, g.gx, g.gy, true);
+          handlePrimaryTileAction(g.tx, g.ty, g.gx, g.gy, true, e.clientX, e.clientY);
         }
       }
+      U.updateCursorTooltip();
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 2 && rightClickTrack) {
+        const track = rightClickTrack;
+        rightClickTrack = null;
+        if (!track.dragged && U.rotateActiveB1Gadget) {
+          U.rotateActiveB1Gadget({ fromRightClick: true });
+        }
+      } else if (e.button === 2) {
+        rightClickTrack = null;
+      }
+      if (
+        ZS.Game.state.activeLayer === 'underground' &&
+        uiState.b1DragStart &&
+        uiState.b1DragCurrent
+      ) {
+        const s = uiState.b1DragStart;
+        const cur = uiState.b1DragCurrent;
+        const mode = uiState.mode;
+        const role = uiState.selectedB1Role;
+        uiState.b1DragStart = null;
+        uiState.b1DragCurrent = null;
+        if (mode === 'b1_zone' && role && ZS.Game.zoneB1Rect) {
+          ZS.Game.zoneB1Rect(s.tx, s.ty, cur.tx, cur.ty, role);
+        } else if (mode === 'b1_unzone' && ZS.Game.unzoneB1Rect) {
+          ZS.Game.unzoneB1Rect(s.tx, s.ty, cur.tx, cur.ty);
+        }
+        U.updateCursorTooltip();
+      } else {
+        uiState.b1DragStart = null;
+        uiState.b1DragCurrent = null;
+      }
       isPanning = false;
       isLeftPainting = false;
     });
@@ -560,7 +848,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener(
       'wheel',
       (e) => {
-        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
+        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.91;
         ZS.Iso.zoomAtScreen(factor, e.clientX, e.clientY);
@@ -621,6 +909,13 @@ window.ZS = window.ZS || {};
           guideEl.classList.add('hidden');
           return;
         }
+        if (isTechModalOpen()) {
+          if (U.closeTechPopModal) U.closeTechPopModal();
+          return;
+        }
+        if (isGameOverModalOpen()) {
+          return;
+        }
         if (uiState.mainMenuOpen) {
           if (uiState.menuOptionsOpen) setMenuOptionsOpen(false);
           return;
@@ -632,39 +927,90 @@ window.ZS = window.ZS || {};
         return;
       }
 
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isGameOverModalOpen()) return;
 
       keys[e.code] = true;
       const activeTag = document.activeElement && document.activeElement.tagName;
       const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      if (!isTyping && e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSettingsOpen(false);
+        if (U.toggleTechPopModal) U.toggleTechPopModal('all');
+        return;
+      }
+      if (!isTyping && e.code === 'KeyB' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const traderHidden = !traderEl || traderEl.classList.contains('hidden');
+        const guideHidden = !guideEl || guideEl.classList.contains('hidden');
+        if (traderHidden && guideHidden && !isTechModalOpen()) {
+          e.preventDefault();
+          setSettingsOpen(false);
+          if (ZS.Game.toggleActiveLayer) ZS.Game.toggleActiveLayer();
+        }
+        return;
+      }
       if (!isTyping && /^Digit([1-9])$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const traderHidden = !traderEl || traderEl.classList.contains('hidden');
         const guideHidden = !guideEl || guideEl.classList.contains('hidden');
-        if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden) {
+        if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden && !isTechModalOpen()) {
           const slotIdx = Number(RegExp.$1) - 1;
-          const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
-          if (items[slotIdx]) {
-            if (uiState.dockCollapsed) U.setDockCollapsed(false);
-            if (U.selectBuildCard) U.selectBuildCard(items[slotIdx]);
+          if (ZS.Game.state.activeLayer === 'underground') {
+            if (!uiState.activeB1Category || uiState.activeB1Category === 'b1_ops') {
+              const tools = ZS.DATA.B1_TOOLS || [];
+              if (tools[slotIdx]) {
+                if (uiState.dockCollapsed) U.setDockCollapsed(false);
+                if (U.selectB1Tool) U.selectB1Tool(tools[slotIdx]);
+              }
+            } else {
+              const b1Items = Object.values(ZS.DATA.ITEMS).filter(
+                (def) => def.domain === 'underground' && def.b1Category === uiState.activeB1Category
+              );
+              if (b1Items[slotIdx]) {
+                if (uiState.dockCollapsed) U.setDockCollapsed(false);
+                if (U.selectBuildCard) U.selectBuildCard(b1Items[slotIdx]);
+              }
+            }
+          } else {
+            const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory && def.domain !== 'underground');
+            if (items[slotIdx]) {
+              if (uiState.dockCollapsed) U.setDockCollapsed(false);
+              if (U.selectBuildCard) U.selectBuildCard(items[slotIdx]);
+            }
           }
         }
       } else if (e.code === 'KeyU') {
-        if (uiState.inspectedTile) {
+        if (ZS.Game.state.activeLayer !== 'underground' && uiState.inspectedTile) {
           ZS.Game.upgradeStructure(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
         }
       } else if (e.code === 'KeyG') {
-        if (uiState.inspectedTile && ZS.Game.upgradeWallBase) {
+        if (ZS.Game.state.activeLayer !== 'underground' && uiState.inspectedTile && ZS.Game.upgradeWallBase) {
           ZS.Game.upgradeWallBase(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
+        }
+      } else if (e.code === 'KeyR') {
+        if (
+          !isTyping &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.altKey &&
+          ZS.Game.state.activeLayer === 'underground' &&
+          ZS.Game.state.phase === 'day' &&
+          !isTechModalOpen() &&
+          U.rotateActiveB1Gadget
+        ) {
+          U.rotateActiveB1Gadget();
         }
       } else if (e.code === 'KeyV') {
         if (!isTyping && !e.ctrlKey && !e.metaKey && !e.altKey && ZS.Game.toggleWindOverlay) {
           ZS.Game.toggleWindOverlay();
         }
       } else if (e.code === 'KeyM') {
-        U.setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
+        if (ZS.Game.state.phase === 'day') {
+          U.setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
+        }
       } else if (e.code === 'KeyX') {
-        if (uiState.dockCollapsed) U.setDockCollapsed(false);
-        U.setToolMode(uiState.mode === 'remove' ? 'inspect' : 'remove');
+        if (ZS.Game.state.phase === 'day') {
+          if (uiState.dockCollapsed) U.setDockCollapsed(false);
+          U.setToolMode(uiState.mode === 'remove' ? 'inspect' : 'remove');
+        }
       } else if (e.code === 'Tab') {
         e.preventDefault();
         U.setDockCollapsed(!uiState.dockCollapsed);
@@ -712,6 +1058,14 @@ window.ZS = window.ZS || {};
       });
     }
 
+    const undergroundBtn = document.getElementById('btn-toggle-underground');
+    if (undergroundBtn) {
+      undergroundBtn.addEventListener('click', () => {
+        setSettingsOpen(false);
+        if (ZS.Game.toggleActiveLayer) ZS.Game.toggleActiveLayer();
+      });
+    }
+
     const reconCardEl = document.getElementById('recon-card');
     if (reconCardEl) {
       reconCardEl.addEventListener('click', (e) => {
@@ -747,6 +1101,46 @@ window.ZS = window.ZS || {};
     });
     document.getElementById('btn-refresh-trader').addEventListener('click', () => {
       ZS.Game.refreshTraderOffers(true);
+    });
+
+    const openTech = (focusArea) => {
+      setSettingsOpen(false);
+      if (U.openTechPopModal) U.openTechPopModal(focusArea);
+    };
+    const popPillEl = document.getElementById('pop-pill');
+    if (popPillEl) {
+      popPillEl.addEventListener('click', () => openTech('pop'));
+      popPillEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          openTech('pop');
+        }
+      });
+    }
+    const rpPillEl = document.getElementById('rp-pill');
+    if (rpPillEl) {
+      rpPillEl.addEventListener('click', () => openTech('tech'));
+      rpPillEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          openTech('tech');
+        }
+      });
+    }
+    const openTechBtn = document.getElementById('btn-open-tech');
+    if (openTechBtn) {
+      openTechBtn.addEventListener('click', () => {
+        setSettingsOpen(false);
+        if (U.toggleTechPopModal) U.toggleTechPopModal('all');
+      });
+    }
+    document.getElementById('btn-close-tech')?.addEventListener('click', () => {
+      if (U.closeTechPopModal) U.closeTechPopModal();
+    });
+    document.getElementById('tech-pop-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'tech-pop-modal') {
+        if (U.closeTechPopModal) U.closeTechPopModal();
+      }
     });
 
     document.getElementById('btn-repair-all').addEventListener('click', () => {
@@ -886,6 +1280,21 @@ window.ZS = window.ZS || {};
         closeConfirmModal();
       }
     });
+
+    // Dedicated Game Over Modal Controls
+    document.getElementById('btn-gameover-retry')?.addEventListener('click', () => {
+      const divId = (ZS.Game && ZS.Game.state && ZS.Game.state.divisionId) || 'mobile_corps';
+      closeGameOverModal();
+      executeStartNewOperation(divId);
+    });
+    document.getElementById('btn-gameover-division')?.addEventListener('click', () => {
+      closeGameOverModal();
+      openDivisionModal();
+    });
+    document.getElementById('btn-gameover-title')?.addEventListener('click', () => {
+      closeGameOverModal();
+      returnToTitleMenu();
+    });
   }
 
   // ================= MAIN ANIMATION LOOP (Fixed 60 FPS Limiter) =================
@@ -1005,7 +1414,7 @@ window.ZS = window.ZS || {};
     ZS.Iso.resetCamera();
 
     const env = ZS.Game.getEnvInfo ? ZS.Game.getEnvInfo() : { isDevBuild: false, isDevEnvironment: false, isDebugMode: false };
-    const ver = ZS.DATA.VERSION || 'v0.7.0';
+    const ver = ZS.DATA.VERSION || 'v0.8.0';
     const hudVer = document.getElementById('hud-version');
     const menuVer = document.getElementById('menu-version');
     const guideVer = document.getElementById('guide-version');
@@ -1067,6 +1476,10 @@ window.ZS = window.ZS || {};
     renderDivisionModal,
     openDivisionModal,
     closeDivisionModal,
+    isGameOverModalOpen,
+    renderGameOverModal,
+    openGameOverModal,
+    closeGameOverModal,
     setMenuOptionsOpen,
     syncSettingsButtons,
     refreshMainMenuState,

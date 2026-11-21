@@ -4,6 +4,166 @@ window.ZS = window.ZS || {};
   const G = ZS._Game;
   const { DATA, N, PROD_SAVE_KEY, DEV_SAVE_KEY, SETTINGS_KEY, state } = G;
 
+  // ================= 5-BRANCH RP TECH TREE =================
+  function getTechLevel(id) {
+    return (state.researchedTechs && state.researchedTechs[id]) || 0;
+  }
+
+  function getTechCost(id) {
+    const def = DATA.TECH_TREE && DATA.TECH_TREE[id];
+    if (!def) return null;
+    const curLv = getTechLevel(id);
+    const maxLv = def.maxLv || 1;
+    if (curLv >= maxLv) return null;
+    return (def.costRp || 0) + curLv * (def.costStep || 0);
+  }
+
+  function getHqUnlockWave(hqLevel) {
+    const lv = Math.max(1, Math.round(Number(hqLevel) || 1));
+    const levels = DATA.HQ_LEVELS || [];
+    for (let i = 0; i < levels.length; i++) {
+      if (levels[i] && levels[i].level === lv) {
+        return levels[i].reqWave || (lv > 1 ? (lv - 1) * 20 : 1);
+      }
+    }
+    return lv > 1 ? (lv - 1) * 20 : 1;
+  }
+
+  function getTechGateInfo(reqTechId) {
+    const tDef = reqTechId && DATA.TECH_TREE ? DATA.TECH_TREE[reqTechId] : null;
+    const reqTechName = tDef ? tDef.name : reqTechId;
+    const reqHqLevel = Math.max(1, Number((tDef && tDef.reqHqLevel) || (tDef && tDef.branch === 'bunker_eng' ? 2 : 1)) || 1);
+    const reqWave = getHqUnlockWave(reqHqLevel);
+    const lockedByHq = (state.hqLevel || 1) < reqHqLevel;
+    return {
+      reqTechId,
+      reqTechName,
+      reqHqLevel,
+      reqWave,
+      lockedByHq
+    };
+  }
+
+  function canResearchTech(id) {
+    if (state.phase === 'gameover') {
+      return { ok: false, reason: '작전 실패 상태에서는 연구를 진행할 수 없습니다.' };
+    }
+    const def = DATA.TECH_TREE && DATA.TECH_TREE[id];
+    if (!def) {
+      return { ok: false, reason: '존재하지 않는 연구 항목입니다.' };
+    }
+    const curLv = getTechLevel(id);
+    const maxLv = def.maxLv || 1;
+    if (curLv >= maxLv) {
+      return { ok: false, isMax: true, reason: '이미 최고 연구 단계에 도달했습니다.' };
+    }
+    const gate = getTechGateInfo(id);
+    if (gate.lockedByHq) {
+      const extraHint = gate.reqHqLevel === 2 && def.branch === 'bunker_eng' ? ' · 지하 B1 개방' : '';
+      return {
+        ok: false,
+        lockedByHq: true,
+        reqHqLevel: gate.reqHqLevel,
+        reqWave: gate.reqWave,
+        reason: `지휘 본부 Lv.${gate.reqHqLevel} (Wave ${gate.reqWave}+${extraHint}) 증축 후 연구할 수 있습니다.`
+      };
+    }
+    const reqs = Array.isArray(def.req) ? def.req : [];
+    const missing = [];
+    for (let i = 0; i < reqs.length; i++) {
+      if (getTechLevel(reqs[i]) <= 0) {
+        missing.push(reqs[i]);
+      }
+    }
+    if (missing.length > 0) {
+      const missingNames = missing.map((rid) => (DATA.TECH_TREE[rid] ? DATA.TECH_TREE[rid].name : rid));
+      return {
+        ok: false,
+        missingReq: true,
+        missingReqIds: missing,
+        reason: `선행 연구 완료 필요: ${missingNames.join(', ')}`
+      };
+    }
+    const costRp = getTechCost(id);
+    if ((state.rp || 0) < costRp) {
+      return {
+        ok: false,
+        shortRp: true,
+        costRp,
+        reason: `연구포인트(RP)가 부족합니다. (필요: ${costRp} RP)`
+      };
+    }
+    return { ok: true, costRp, nextLv: curLv + 1 };
+  }
+
+  function researchTech(id) {
+    const check = canResearchTech(id);
+    if (!check.ok) {
+      ZS.Audio.playError();
+      G.banner('연구 진행 불가', check.reason, 'warn');
+      return false;
+    }
+    const def = DATA.TECH_TREE[id];
+    state.rp -= check.costRp;
+    if (!state.researchedTechs) state.researchedTechs = {};
+    state.researchedTechs[id] = check.nextLv;
+
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
+    recalculateBaseStats(true);
+
+    if (ZS.Audio.playUpgrade) ZS.Audio.playUpgrade();
+    else ZS.Audio.playBuild();
+
+    const lvSuffix = (def.maxLv || 1) > 1 ? ` Lv.${check.nextLv}` : '';
+    G.banner(`연구 완료: ${def.name}${lvSuffix}`, def.desc, 'good');
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function getItemRequiredTech(itemId) {
+    const id = itemId === 'shelter_pod' ? 'field_tent' : itemId;
+    switch (id) {
+      case 'sniper_tower': return 'inf_sniper';
+      case 'vulcan_turret': return 'tur_vulcan';
+      case 'missile_pod': return 'tur_missile';
+      case 'emp_coil': return 'tur_emp';
+      default: {
+        const def = DATA.ITEMS && DATA.ITEMS[id];
+        return (def && def.reqTech) || null;
+      }
+    }
+  }
+
+  function getUpgradeRequiredTech(defOrId, targetLv) {
+    const def = typeof defOrId === 'string' ? DATA.ITEMS[defOrId] : defOrId;
+    if (!def || !targetLv || targetLv <= 1) return null;
+    if (def.id === 'barricade_wall' || def.id === 'tactical_gate' || def.id === 'razor_pad') {
+      if (targetLv === 2) return 'def_t1';
+      if (targetLv >= 3) return 'def_t2';
+    }
+    if (def.subType === 'manned') {
+      if (targetLv === 2) return 'inf_lv2';
+      if (targetLv >= 3) return 'inf_lv3';
+    }
+    if (def.subType === 'turret') {
+      if (targetLv === 2) return 'tur_lv2';
+      if (targetLv >= 3) return 'tur_lv3';
+    }
+    if (
+      def.id === 'solar_array' ||
+      def.id === 'wind_turbine' ||
+      def.id === 'battery_bank' ||
+      def.id === 'field_tent' ||
+      def.id === 'repair_bay'
+    ) {
+      if (targetLv === 2) return 'inf_tier2';
+      if (targetLv === 3) return 'inf_tier3';
+      if (targetLv >= 4) return 'inf_tier4';
+    }
+    return null;
+  }
+
   function getTierMap(defOrId) {
     const id = typeof defOrId === 'string' ? defOrId : defOrId && defOrId.id;
     if (!id || !DATA.TIER_MAPS) return null;
@@ -412,7 +572,7 @@ window.ZS = window.ZS || {};
       nightGen = +(nightGen * windMult).toFixed(3);
     }
     const div = G.getDivisionDef ? G.getDivisionDef() : null;
-    if (div && div.solarBatteryMult && (defId === 'solar_array' || defId === 'battery_bank')) {
+    if (div && div.solarBatteryMult && (defId === 'solar_array' || defId === 'battery_bank' || defId === 'b1_ess_rack')) {
       powerCap = Math.round(powerCap * div.solarBatteryMult);
       dayCharge = +(dayCharge * div.solarBatteryMult).toFixed(2);
     }
@@ -427,7 +587,17 @@ window.ZS = window.ZS || {};
   }
 
   function recalculateBaseStats(silentTierUp) {
+    state.undergroundUnlocked = (state.hqLevel || 1) >= 2;
+    if (!state.undergroundUnlocked && state.activeLayer === 'underground') {
+      if (G.exitUnderground) G.exitUnderground();
+      else state.activeLayer = 'surface';
+    }
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
+    const hqAura = hqInfo && hqInfo.globalAura ? hqInfo.globalAura : null;
+    const hqStructHpMult = (hqAura && hqAura.structHpMult) || 1.0;
+    const defRepeatLv = getTechLevel('def_repeat');
+    const infraRepeatLv = getTechLevel('infra_repeat');
+    const infraPowerMult = 1 + 0.10 * infraRepeatLv;
     const div = G.getDivisionDef ? G.getDivisionDef() : null;
     const prevTierLevel = state.cozyTier ? state.cozyTier.level : 1;
     let powerCap = hqInfo.basePowerCap;
@@ -466,9 +636,11 @@ window.ZS = window.ZS || {};
           const def = DATA.ITEMS[targetSt.id];
           if (!def) return;
 
-          // Update maxHp & infra stats with upgrade level/tier + floor bonus
+          // Update maxHp & infra stats with upgrade level/tier + floor bonus + HQ aura + def_repeat tech
           const prof = getStructLevelProfile(def, targetSt.level || 1);
-          const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
+          const isFort = def.subType === 'wall' || def.subType === 'gate' || def.subType === 'trap';
+          const defHpTechMult = isFort && defRepeatLv > 0 ? (1 + 0.15 * defRepeatLv) : 1.0;
+          const hpMult = (1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0)) * hqStructHpMult * defHpTechMult;
           const targetMax = Math.round(prof.baseMaxHp * hpMult);
           if (targetSt.maxHp !== targetMax) {
             const ratio = targetSt.maxHp > 0 ? targetSt.hp / targetSt.maxHp : 1;
@@ -507,6 +679,26 @@ window.ZS = window.ZS || {};
       }
     }
 
+    // Aggregate active Underground B1 gadgets (connectivity, 4th-copy diminishing, blackout pause)
+    const ugEff = G.recomputeUndergroundEffects ? G.recomputeUndergroundEffects() : null;
+    if (ugEff) {
+      powerCap += ugEff.powerCap || 0;
+      dayCharge += ugEff.dayCharge || 0;
+      nightGen += ugEff.nightGen || 0;
+      nightIdleDrain += ugEff.nightIdleDrain || 0;
+      popCap += ugEff.popCap || 0;
+      synergyScore += ugEff.cozySynergy || 0;
+      const entries = ugEff.cozyEntries || [];
+      for (let i = 0; i < entries.length; i++) {
+        const ce = entries[i];
+        const grp = normalizeCozyGroup(ce.grp);
+        if (!structGroups[grp]) structGroups[grp] = [];
+        structGroups[grp].push(ce.score);
+        groupCounts[grp] = (groupCounts[grp] || 0) + 1;
+        if (grp) uniqueGroups.add(grp);
+      }
+    }
+
     const floorCap = DATA.COZY_FLOOR_CAP || 60;
     const floorScore = Math.min(floorCap, floorRaw);
 
@@ -530,12 +722,13 @@ window.ZS = window.ZS || {};
       }
     }
 
-    state.powerCap = powerCap;
-    state.dayCharge = +dayCharge.toFixed(2);
+    state.powerCap = Math.round(powerCap * infraPowerMult);
+    state.dayCharge = +(dayCharge * infraPowerMult).toFixed(2);
     state.nightGen = +nightGen.toFixed(3);
     state.nightIdleDrain = nightIdleDrain;
     state.popCap = popCap;
     state.popUsed = popUsed;
+    if (G.normalizeJobs) G.normalizeJobs();
     state.cozyFloorRaw = floorRaw;
     state.cozyFloorScore = floorScore;
     state.cozyStructScore = structScore;
@@ -595,7 +788,24 @@ window.ZS = window.ZS || {};
     const existingCount = (state.cozyGroupCounts && state.cozyGroupCounts[grp]) || 0;
     const isDiminished = existingCount >= 3;
     let gain = isDiminished ? Math.round(cozyVal * 0.5) : cozyVal;
-    if (tx !== undefined && ty !== undefined && tx >= 0 && ty >= 0 && tx < N && ty < N) {
+    if (def.domain === 'underground') {
+      if (resolvedId === 'b1_locker' && def.adjacentBedSynergy && tx !== undefined && ty !== undefined && state.underground) {
+        const ug = state.underground;
+        const b1N = DATA.B1_SIZE || 23;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (let k = 0; k < dirs.length; k++) {
+          const nx = tx + dirs[k][0];
+          const ny = ty + dirs[k][1];
+          if (nx < 1 || ny < 1 || nx >= b1N - 1 || ny >= b1N - 1) continue;
+          const ng = ug.b1StructGrid && ug.b1StructGrid[ny] && ug.b1StructGrid[ny][nx];
+          const nc = ug.grid && ug.grid[ny] && ug.grid[ny][nx];
+          if (ng && ng.id === 'b1_bunk_bed' && nc && nc.roomId != null && ug.rooms[nc.roomId] && ug.rooms[nc.roomId].connected) {
+            gain += Math.round(def.adjacentBedSynergy * (isDiminished ? 0.5 : 1.0));
+            break;
+          }
+        }
+      }
+    } else if (tx !== undefined && ty !== undefined && tx >= 0 && ty >= 0 && tx < N && ty < N) {
       const fid = state.floorGrid[ty] && state.floorGrid[ty][tx];
       const fDef = fid ? DATA.ITEMS[fid] : null;
       if (fDef && fDef.cozyTileBonus && def.category === 'decor') {
@@ -630,6 +840,7 @@ window.ZS = window.ZS || {};
 
     if (def.subType === 'manned') {
       dmgMult += state.cozyTier.agentDmg;
+      rateMult += (state.b1MannedFireRateMult || 0);
     }
 
     if (state.phase === 'night' && state.nightConsumables && state.nightConsumables.overpressureAmmo) {
@@ -706,6 +917,9 @@ window.ZS = window.ZS || {};
     }
 
     const isCombatUnit = def.subType === 'manned' || def.subType === 'turret';
+    if (isCombatUnit && state.b1HoloCritAdd) {
+      critChance += state.b1HoloCritAdd;
+    }
     if (onPlateau && isCombatUnit) {
       critChance += pBonus.critAdd != null ? pBonus.critAdd : 0.08;
     }
@@ -718,6 +932,32 @@ window.ZS = window.ZS || {};
     }
     if (arcOverdrive && def.subType === 'turret') {
       rateMult *= (div && div.overdriveTurretFireRateMult) || 1.25;
+    }
+
+    const hqInfo = G.getHqLevelInfo ? G.getHqLevelInfo(state.hqLevel) : null;
+    const hqAura = hqInfo && hqInfo.globalAura ? hqInfo.globalAura : null;
+    if (hqAura && isCombatUnit) {
+      if (hqAura.dmgMult && hqAura.dmgMult !== 1) {
+        dmgMult *= hqAura.dmgMult;
+      }
+      if (hqAura.fireRateMult && hqAura.fireRateMult !== 1) {
+        rateMult *= hqAura.fireRateMult;
+      }
+    }
+
+    const infRepeatLv = getTechLevel('inf_repeat');
+    if (def.subType === 'manned' && infRepeatLv > 0) {
+      dmgMult *= 1 + 0.12 * infRepeatLv;
+      critChance += 0.03 * infRepeatLv;
+    }
+
+    const turRepeatLv = getTechLevel('tur_repeat');
+    let effPowerShot = prof.powerShot;
+    if (def.subType === 'turret' && turRepeatLv > 0) {
+      dmgMult *= 1 + 0.12 * turRepeatLv;
+      if (effPowerShot > 0) {
+        effPowerShot = +(effPowerShot * Math.max(0.4, 1 - 0.06 * turRepeatLv)).toFixed(3);
+      }
     }
 
     const baseDmg = (def.damage || 0) * prof.dmgScale;
@@ -769,7 +1009,7 @@ window.ZS = window.ZS || {};
       gateSlowRadius: prof.gateSlowRadius,
       critChance: Math.min(0.85, critChance),
       powerIdle: prof.powerIdle,
-      powerShot: prof.powerShot,
+      powerShot: effPowerShot,
       pellets: prof.pellets,
       knockback: prof.knockback,
       pierceCount: prof.pierceCount,
@@ -850,12 +1090,23 @@ window.ZS = window.ZS || {};
     if (state.phase !== 'day') {
       return { ok: false, reason: '정비 페이즈(낮)에만 지휘 본부를 증축할 수 있습니다.' };
     }
-    const maxLv = (DATA.HQ_LEVELS && DATA.HQ_LEVELS.length) || 4;
+    const maxLv = (DATA.HQ_LEVELS && DATA.HQ_LEVELS.length) || 5;
     if (state.hqLevel >= maxLv) {
-      return { ok: false, reason: '이미 최고 지휘 본부 등급(Lv.4)에 도달했습니다.' };
+      return { ok: false, isMax: true, reason: `이미 최고 지휘 본부 등급(Lv.${maxLv})에 도달했습니다.` };
     }
     const nextInfo = G.getHqLevelInfo(state.hqLevel + 1);
     const effCost = getEffectiveHqUpgradeCost(nextInfo.level);
+    const reqWave = nextInfo.reqWave || 1;
+    if ((state.wave || 1) < reqWave) {
+      return {
+        ok: false,
+        lockedByWave: true,
+        reqWave,
+        reason: `WAVE ${reqWave} 도달 시 증축할 수 있습니다. (현재 WAVE ${state.wave})`,
+        nextInfo,
+        cost: effCost
+      };
+    }
     if (!canAffordCost(effCost)) {
       const c = effCost || {};
       return {
@@ -890,6 +1141,15 @@ window.ZS = window.ZS || {};
       hq.upgradeAnimTimer = 1.2;
     }
 
+    if (nextInfo.level >= 2 || nextInfo.unlocksUnderground) {
+      state.undergroundUnlocked = true;
+    }
+    if (nextInfo.level === 2 && nextInfo.bonusDigAp) {
+      const apCap = Math.max(24, state.digApCap || 0);
+      state.digApCap = apCap;
+      state.digAp = Math.min(apCap, (state.digAp || 0) + nextInfo.bonusDigAp);
+    }
+
     const prevCap = state.powerCap;
     const prevPopCap = state.popCap;
     recalculateBaseStats();
@@ -900,7 +1160,8 @@ window.ZS = window.ZS || {};
       state.power = Math.min(state.powerCap, state.power + capDelta);
     }
     if (state.popCap > prevPopCap && state.agents < state.popCap) {
-      state.agents += 1;
+      if (G.grantAgents) G.grantAgents(1);
+      else state.agents += 1;
     }
 
     const hx = DATA.HQ_POS.x + 0.5;
@@ -912,12 +1173,22 @@ window.ZS = window.ZS || {};
     if (ZS.Audio.playUpgrade) ZS.Audio.playUpgrade();
     else ZS.Audio.playBuild();
 
-    const unlockedNames = Object.values(DATA.ITEMS)
-      .filter((it) => it.reqHqLevel === nextInfo.level && !it.unlockedByBoss)
-      .map((it) => it.name);
     const wpnLabel = nextInfo.weapon ? `무장 [${nextInfo.weapon.name}] 개방` : '';
-    const unlockLabel = unlockedNames.length > 0 ? `신규 해금: ${unlockedNames.join(', ')}` : '';
-    const subParts = [wpnLabel, unlockLabel].filter(Boolean).join(' · ');
+    const auraParts = [];
+    if (nextInfo.globalAura) {
+      if (nextInfo.globalAura.structHpMult && nextInfo.globalAura.structHpMult > 1) {
+        auraParts.push(`시설 HP +${Math.round((nextInfo.globalAura.structHpMult - 1) * 100)}%`);
+      }
+      if (nextInfo.globalAura.dmgMult && nextInfo.globalAura.dmgMult > 1) {
+        auraParts.push(`화력 +${Math.round((nextInfo.globalAura.dmgMult - 1) * 100)}%`);
+      }
+      if (nextInfo.globalAura.fireRateMult && nextInfo.globalAura.fireRateMult > 1) {
+        auraParts.push(`연사 +${Math.round((nextInfo.globalAura.fireRateMult - 1) * 100)}%`);
+      }
+    }
+    const auraLabel = auraParts.length > 0 ? `전역 오라(${auraParts.join(' · ')})` : '';
+    const b1Label = nextInfo.unlocksUnderground ? '지하 쉘터(B1) 개방 및 초기 굴착력 +16 AP 지급!' : '';
+    const subParts = [wpnLabel, auraLabel, b1Label].filter(Boolean).join(' · ');
 
     G.banner(`지휘 본부 Lv.${nextInfo.level} — ${nextInfo.name}`, subParts || `최대 내구도 ${nextInfo.maxHp} 확장 완료`, 'good');
     G.saveGame();
@@ -932,6 +1203,9 @@ window.ZS = window.ZS || {};
     const itemId = rawItemId === 'shelter_pod' ? 'field_tent' : rawItemId;
     const def = DATA.ITEMS[itemId];
     if (!def) return { ok: false, reason: '잘못된 시설입니다.' };
+    if (def.domain === 'underground') {
+      return { ok: false, reason: '이 설비는 지하 B1 쉘터 전용 설비입니다.' };
+    }
 
     if (tx < 0 || ty < 0 || tx >= N || ty >= N) {
       return { ok: false, reason: '맵 범위를 벗어났습니다.' };
@@ -961,14 +1235,21 @@ window.ZS = window.ZS || {};
 
     const hasPodVoucher = itemId === 'field_tent' && (state.freeVouchers.shelter_pod || 0) > 0;
     const hasVoucher = hasPodVoucher || (state.freeVouchers[itemId] || 0) > 0;
-    const reqLv = def.reqHqLevel || 1;
-    if (!hasVoucher && state.hqLevel < reqLv) {
-      const reqInfo = G.getHqLevelInfo(reqLv);
+    const reqTechId = getItemRequiredTech(itemId);
+    if (!hasVoucher && reqTechId && getTechLevel(reqTechId) <= 0) {
+      const gate = getTechGateInfo(reqTechId);
+      const reason = gate.lockedByHq
+        ? `본부 Lv.${gate.reqHqLevel} (W${gate.reqWave}) 증축 및 [${gate.reqTechName}] 연구 완료 시 해금됩니다.`
+        : `연구 [${gate.reqTechName}] 완료 시 해금됩니다.`;
       return {
         ok: false,
-        reason: `지휘 본부 Lv.${reqLv}(${reqInfo.name}) 증축 시 해금됩니다.`,
-        lockedByHq: true,
-        reqHqLevel: reqLv
+        reason,
+        techLocked: true,
+        lockedByHq: gate.lockedByHq,
+        reqHqLevel: gate.reqHqLevel,
+        reqWave: gate.reqWave,
+        reqTechId,
+        reqTechName: gate.reqTechName
       };
     }
 
@@ -997,12 +1278,21 @@ window.ZS = window.ZS || {};
           return { ok: false, reason: '이미 다른 시설이 설치된 타일입니다.' };
         }
       } else if (itemId === 'barricade_wall' && DATA.ITEMS[existing.id] && DATA.ITEMS[existing.id].canMountOnWall) {
-        if ((state.hqLevel || 1) < 2) {
+        const wallLv2Tech = getUpgradeRequiredTech(def, 2) || 'def_t1';
+        if (getTechLevel(wallLv2Tech) <= 0) {
+          const gate = getTechGateInfo(wallLv2Tech);
+          const reason = gate.lockedByHq
+            ? `Lv.2 헤스코 방벽 하부 보강은 본부 Lv.${gate.reqHqLevel} (W${gate.reqWave}) 및 [${gate.reqTechName}] 연구 완료 후 가능합니다.`
+            : `Lv.2 헤스코 방벽 하부 보강은 연구 [${gate.reqTechName}] 완료 후 가능합니다.`;
           return {
             ok: false,
-            lockedByHq: true,
-            reqHqLevel: 2,
-            reason: 'Lv.2 헤스코 방벽 하부 보강은 본부 Lv.2부터 가능합니다.'
+            techLocked: true,
+            lockedByHq: gate.lockedByHq,
+            reqHqLevel: gate.reqHqLevel,
+            reqWave: gate.reqWave,
+            reqTechId: wallLv2Tech,
+            reqTechName: gate.reqTechName,
+            reason
           };
         }
         autoUnderlay = true;
@@ -1026,6 +1316,14 @@ window.ZS = window.ZS || {};
       }
       if (state.popUsed + def.popUse > state.agents) {
         return { ok: false, reason: '대기 중인 작전 요원이 부족합니다! (상인 스카우트 또는 다음 날 합류)' };
+      }
+      const combatAssigned = (state.jobs && state.jobs.combat) || 0;
+      if (state.popUsed + def.popUse > combatAssigned) {
+        return {
+          ok: false,
+          jobShort: true,
+          reason: '전투요원 배정이 부족합니다! 상단 [인구·연구 (T)] 패널에서 연구/생산 요원을 전투요원으로 전환하세요.'
+        };
       }
     }
 
@@ -1093,20 +1391,26 @@ window.ZS = window.ZS || {};
       };
     }
     const nextLv = curLv + 1;
-    const capLv = isTierEvo
-      ? Math.min(maxLv, state.hqLevel || 1)
-      : Math.min(3, G.getHqLevelInfo(state.hqLevel).structUpgradeCap || state.hqLevel || 1);
     const cost = getEffectiveUpgradeCost(def, curLv);
     const curProf = getStructLevelProfile(def, curLv);
     const nextProf = getStructLevelProfile(def, nextLv);
-    if (nextLv > capLv) {
+    const reqTechId = getUpgradeRequiredTech(def, nextLv);
+    if (reqTechId && getTechLevel(reqTechId) <= 0) {
+      const gate = getTechGateInfo(reqTechId);
+      const baseReason = isTierEvo
+        ? `연구 [${gate.reqTechName}] 완료 시 ${nextProf.levelName || '상위 티어'}로 업그레이드됩니다.`
+        : `연구 [${gate.reqTechName}] 완료 시 Lv.${nextLv} 강화가 해금됩니다.`;
       return {
         ok: false,
-        reason: isTierEvo
-          ? `지휘 본부 Lv.${nextLv} 증축 후 ${nextProf.levelName || '상위 티어'}로 업그레이드됩니다.`
-          : `지휘 본부 Lv.${nextLv} 증축 후 Lv.${nextLv} 강화가 해금됩니다.`,
-        hqCapped: true,
-        reqHqLevel: nextLv,
+        reason: gate.lockedByHq
+          ? `본부 Lv.${gate.reqHqLevel} (W${gate.reqWave}) 달성 및 ${baseReason}`
+          : baseReason,
+        techLocked: true,
+        lockedByHq: gate.lockedByHq,
+        reqHqLevel: gate.reqHqLevel,
+        reqWave: gate.reqWave,
+        reqTechId,
+        reqTechName: gate.reqTechName,
         cost
       };
     }
@@ -1125,6 +1429,16 @@ window.ZS = window.ZS || {};
           ok: false,
           reason: `대기 중인 작전 요원이 부족합니다! (Lv.${nextLv} 개조에 추가 요원 +${popDelta}명 필요)`,
           popShort: true,
+          cost
+        };
+      }
+      const combatAssigned = (state.jobs && state.jobs.combat) || 0;
+      if (state.popUsed + popDelta > combatAssigned) {
+        return {
+          ok: false,
+          reason: '전투요원 배정이 부족합니다! 상단 [인구·연구 (T)] 패널에서 연구/생산 요원을 전투요원으로 전환하세요.',
+          popShort: true,
+          jobShort: true,
           cost
         };
       }
@@ -1741,13 +2055,26 @@ window.ZS = window.ZS || {};
   }
 
   // ================= TRADER CONVOY SYSTEM =================
+  function getEffectiveTraderOfferCost(offer) {
+    if (!offer || !offer.coinCost) return 0;
+    const disc = Math.max(0, Math.min(0.24, state.b1TraderDisc || 0));
+    return Math.max(1, Math.round(offer.coinCost * (1 - disc)));
+  }
+
+  function getEffectiveTraderRefreshCost() {
+    const baseCost = state.traderRefreshCost || 15;
+    const disc = Math.max(0, Math.min(0.24, state.b1TraderDisc || 0));
+    return Math.max(1, Math.round(baseCost * (1 - disc)));
+  }
+
   function refreshTraderOffers(paid) {
     if (paid) {
       if (state.phase !== 'day') {
         ZS.Audio.playError();
         return false;
       }
-      const curCost = state.traderRefreshCost || 15;
+      const baseCurCost = state.traderRefreshCost || 15;
+      const curCost = getEffectiveTraderRefreshCost();
       if (state.coin < curCost) {
         ZS.Audio.playError();
         G.banner('코인 부족', `보급 목록 갱신에 ${curCost} 코인이 필요합니다.`, 'warn');
@@ -1755,14 +2082,20 @@ window.ZS = window.ZS || {};
       }
       state.coin -= curCost;
       state.traderRefreshCount = (state.traderRefreshCount || 0) + 1;
-      state.traderRefreshCost = curCost + 10 + (state.traderRefreshCount - 1) * 5;
+      state.traderRefreshCost = baseCurCost + 10 + (state.traderRefreshCount - 1) * 5;
       ZS.Audio.playTrade();
     }
 
-    // Always include Wood & Scrap packs + 3 shuffled specialty deals
+    // Always include Wood, Scrap, Power Cell & Research Disk + 2 shuffled specialty deals (6 cards)
     const pool = DATA.TRADER_POOL.slice();
-    const fixed = pool.slice(0, 3); // wood, scrap, power_cell
-    const rest = pool.slice(3).sort(() => Math.random() - 0.5).slice(0, 3);
+    const fixedIds = ['wood_pack', 'scrap_pack', 'power_cell', 'research_disk'];
+    const fixed = [];
+    const specialty = [];
+    for (let i = 0; i < pool.length; i++) {
+      if (fixedIds.indexOf(pool[i].id) !== -1) fixed.push(pool[i]);
+      else specialty.push(pool[i]);
+    }
+    const rest = specialty.sort(() => Math.random() - 0.5).slice(0, Math.max(0, 6 - fixed.length));
     state.traderOffers = fixed.concat(rest).map((o) => ({
       ...o,
       sold: false
@@ -1863,7 +2196,8 @@ window.ZS = window.ZS || {};
     }
     const offer = state.traderOffers[index];
     if (!offer || offer.sold) return false;
-    if (state.coin < offer.coinCost) {
+    const effCost = getEffectiveTraderOfferCost(offer);
+    if (state.coin < effCost) {
       ZS.Audio.playError();
       return false;
     }
@@ -1874,8 +2208,9 @@ window.ZS = window.ZS || {};
         G.banner('숙소 수용량 부족!', '먼저 [전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
         return false;
       }
-      state.coin -= offer.coinCost;
-      state.agents += offer.amount;
+      state.coin -= effCost;
+      if (G.grantAgents) G.grantAgents(offer.amount);
+      else state.agents += offer.amount;
       offer.sold = true;
       ZS.Audio.playTrade();
       G.banner('베테랑 요원 합류!', `작전 요원이 기지에 배치되었습니다. (현재 요원 ${state.agents}/${state.popCap})`, 'good');
@@ -1884,13 +2219,17 @@ window.ZS = window.ZS || {};
       return true;
     }
 
-    state.coin -= offer.coinCost;
+    state.coin -= effCost;
     if (offer.type === 'resource') {
       if (offer.give.wood) state.wood += offer.give.wood;
       if (offer.give.scrap) state.scrap += offer.give.scrap;
     } else if (offer.type === 'power_boost') {
       state.power = Math.min(Math.round(state.powerCap * 1.35), state.power + offer.amount);
       if (G.invalidateStatsCache) G.invalidateStatsCache();
+    } else if (offer.type === 'rp') {
+      const rpAmt = offer.amount || 5;
+      state.rp = (state.rp || 0) + rpAmt;
+      G.banner('전술 연구 데이터 확보!', `연구포인트 +${rpAmt} RP 획득 (보유 ${state.rp} RP)`, 'good');
     } else if (offer.type === 'free_item') {
       const vKey = offer.voucherKey || (offer.id === 'crate_pod' ? 'shelter_pod' : offer.itemId);
       state.freeVouchers[vKey] = (state.freeVouchers[vKey] || 0) + 1;
@@ -1904,6 +2243,14 @@ window.ZS = window.ZS || {};
   }
 
   Object.assign(G, {
+    getTechLevel,
+    getTechCost,
+    getHqUnlockWave,
+    getTechGateInfo,
+    canResearchTech,
+    researchTech,
+    getItemRequiredTech,
+    getUpgradeRequiredTech,
     getTierMap,
     isTierEvolutionDef,
     getStructMaxTier,
@@ -1937,6 +2284,8 @@ window.ZS = window.ZS || {};
     refundCost,
     getRepairAllInfo,
     repairAllStructures,
+    getEffectiveTraderOfferCost,
+    getEffectiveTraderRefreshCost,
     refreshTraderOffers,
     exchangeResource,
     getNightConsumableCost,

@@ -1348,6 +1348,29 @@ window.ZS = window.ZS || {};
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'low';
 
+    // Optional mild camera shake ONLY on Airstrike, Boss spawn, and HQ hit (#8 + accessibility toggle)
+    const shakeActive =
+      (!ZS.Game || !ZS.Game.isScreenShakeEnabled || ZS.Game.isScreenShakeEnabled()) &&
+      state.shakeTimer > 0 &&
+      state.shakeAmp > 0;
+    if (shakeActive) {
+      const decay = Math.min(1, state.shakeTimer / (state.shakeDuration || 0.28));
+      const amp = state.shakeAmp * decay;
+      const sx = Math.sin(timeSec * 67) * amp + Math.cos(timeSec * 41) * amp * 0.35;
+      const sy = Math.cos(timeSec * 59) * amp * 0.78;
+      ctx.save();
+      ctx.translate(sx, sy);
+    }
+
+    // Subterranean B1 Layer Render Branch (uses isolated b1TerrainCache, never dirties surface terrainCache)
+    if (state.activeLayer === 'underground' && R.renderUnderground) {
+      R.renderUnderground(ctx, w, h, state, uiState, timeSec, zScale, isSil);
+      R.drawParticles(ctx, state.particles, zScale, w, h);
+      R.drawFloatingTexts(ctx, state.floatingTexts, zScale, w, h);
+      if (shakeActive) ctx.restore();
+      return;
+    }
+
     // 1. Cached Background Sky / Diorama Silhouette Backdrop (1x offscreen bake at physical DPR)
     const isNightBg = state.nightAlpha > 0.4;
     const bgDpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
@@ -1372,20 +1395,6 @@ window.ZS = window.ZS || {};
       bgCache.bakeCount += 1;
     }
     ctx.drawImage(bgCache.canvas, 0, 0, bgCache.canvas.width, bgCache.canvas.height, 0, 0, w, h);
-
-    // Optional mild camera shake ONLY on Airstrike, Boss spawn, and HQ hit (#8 + accessibility toggle)
-    const shakeActive =
-      (!ZS.Game || !ZS.Game.isScreenShakeEnabled || ZS.Game.isScreenShakeEnabled()) &&
-      state.shakeTimer > 0 &&
-      state.shakeAmp > 0;
-    if (shakeActive) {
-      const decay = Math.min(1, state.shakeTimer / (state.shakeDuration || 0.28));
-      const amp = state.shakeAmp * decay;
-      const sx = Math.sin(timeSec * 67) * amp + Math.cos(timeSec * 41) * amp * 0.35;
-      const sy = Math.cos(timeSec * 59) * amp * 0.78;
-      ctx.save();
-      ctx.translate(sx, sy);
-    }
 
     const meta = ensureTerrainMeta(N);
     const showEditGrid =
@@ -3424,7 +3433,7 @@ window.ZS = window.ZS || {};
 
   function getStructVisualTopZ(id, level) {
     switch (id) {
-      case 'command_hq': return level >= 3 ? 46 : level === 2 ? 34 : 30;
+      case 'command_hq': return level >= 5 ? 56 : level === 4 ? 48 : level >= 3 ? 40 : level === 2 ? 34 : 36;
       case 'barricade_wall': return level >= 3 ? 27.7 : level === 2 ? 14 : 10.9;
       case 'tactical_gate': return [16.5, 26.5, 28.0][Math.min(3, Math.max(1, level || 1)) - 1];
       case 'hesco_wall': return level >= 3 ? 19 : 14;
@@ -3449,6 +3458,22 @@ window.ZS = window.ZS || {};
       case 'lounge_set': return 28;
       case 'arcade_neon': return 27;
       case 'boss_trophy': return 37;
+      case 'b1_bunk_bed': return 21;
+      case 'b1_locker': return 22;
+      case 'b1_shower_booth': return 22;
+      case 'b1_air_purifier': return 21;
+      case 'b1_research_desk': return 18;
+      case 'b1_server_rack': return 23;
+      case 'b1_specimen_bench': return 19;
+      case 'b1_holo_table': return 19;
+      case 'b1_pallet_rack': return 21;
+      case 'b1_logistics_term': return 19;
+      case 'b1_coffee_bar': return 18;
+      case 'b1_media_screen': return 21;
+      case 'b1_ess_rack': return 22;
+      case 'b1_power_panel': return 21;
+      case 'b1_backup_gen': return 22;
+      case 'b1_ceiling_led': return 21;
       default: return 24;
     }
   }

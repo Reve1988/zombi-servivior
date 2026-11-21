@@ -68,6 +68,8 @@ window.ZS = window.ZS || {};
       }
       if (def.isBoss) {
         state.bossDefeated = true;
+        const bossRp = Math.round(6 * (1 + (state.b1BossRpMult || 0)));
+        state.rp = (state.rp || 0) + bossRp;
         if (G.recordDivisionProgress) {
           G.recordDivisionProgress(state.divisionId, state.wave, state.wave >= 20);
         }
@@ -76,8 +78,9 @@ window.ZS = window.ZS || {};
         }
         addFloatingText(z.x - 0.05, z.y, 25, `+${scrapGain}`, DATA.PALETTE.resScrap, 13, DATA.PALETTE.outlineDark);
         addFloatingText(z.x + 0.24, z.y, 27, `+${coinGain}`, DATA.PALETTE.coin, 13, DATA.PALETTE.outlineDark);
+        addFloatingText(z.x + 0.38, z.y, 31, `+${bossRp} RP`, '#C084FC', 13, DATA.PALETTE.outlineDark);
         const woodTxt = woodGain > 0 ? `목재 +${woodGain} · ` : '';
-        G.banner('알파 보스 격파!', `${woodTxt}고철 +${scrapGain} · 코인 +${coinGain} 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
+        G.banner('알파 보스 격파!', `${woodTxt}고철 +${scrapGain} · 코인 +${coinGain} · 연구 +${bossRp} RP 획득 · 생존 전투원 숙련도 보너스 & 특수 기념비 해금!`, 'good');
       } else if (woodGain > 0 && Math.random() < 0.45) {
         addFloatingText(z.x, z.y, 16, `+${woodGain}`, DATA.PALETTE.resWood, 12, DATA.PALETTE.outlineDark);
       } else if (scrapGain > 0 && (Math.random() < 0.35 || z.type === 'brute')) {
@@ -223,6 +226,8 @@ window.ZS = window.ZS || {};
     let structureDestroyed = false;
     const reactiveOn = state.phase === 'night' && !!(state.nightConsumables && state.nightConsumables.reactiveArmor);
     const dmgTakenMult = reactiveOn ? 0.80 : 1.0;
+    const defRepeatLv = G.getTechLevel ? G.getTechLevel('def_repeat') : 0;
+    const defRepDmgMult = 1 + 0.12 * defRepeatLv;
 
     // Collect active tactical gates once per tick instead of 5x5 grid scans per zombie
     const activeGates = state.activeGates || (state.activeGates = []);
@@ -389,7 +394,7 @@ window.ZS = window.ZS || {};
         const rProf = G.getStructLevelProfile(rDef, under.level || 1);
         slowMult = Math.min(slowMult, rProf.slowFactor);
         z.vulnOnPad = rProf.vulnMult > 1.0;
-        z.hp -= rProf.trapDps * dt;
+        z.hp -= rProf.trapDps * defRepDmgMult * dt;
         under.hp -= rProf.trapWear * dt;
         if (under.hp <= 0) {
           const rLv = under.level || 1;
@@ -648,7 +653,7 @@ window.ZS = window.ZS || {};
 
           // Wall/Gate Thorns (+15%p melee reflection when Reactive Armor Coating is active)
           const div = G.getDivisionDef ? G.getDivisionDef() : null;
-          const thornsMult = (div && div.thornsMult) || 1.0;
+          const thornsMult = ((div && div.thornsMult) || 1.0) * defRepDmgMult;
           const totalThorns = (((bProf && bProf.thornsRatio) || 0) + (reactiveOn ? 0.15 : 0)) * thornsMult;
           if (totalThorns > 0) {
             const minRefl = Math.round(((bProf && bProf.thornsMin) || 4) * thornsMult);
@@ -814,18 +819,56 @@ window.ZS = window.ZS || {};
     state.power = Math.min(maxTarget, state.power + state.dayCharge);
     const gainedPower = Math.round(state.power - beforePower);
 
+    // 3.5. Dawn 3-Job Settlement (Research RP, Production Wood/Scrap/Dig AP, HQ Lv.1 Spare Combat Scavenge)
+    const hqInfo = G.getHqLevelInfo(state.hqLevel);
+    const jobs = G.normalizeJobs ? G.normalizeJobs() : (state.jobs || { combat: state.agents, research: 0, prod: 0 });
+    const spareCombat = Math.max(0, (jobs.combat || 0) - (state.popUsed || 0));
+    let scavengeWood = 0;
+    let scavengeScrap = 0;
+    if ((state.hqLevel || 1) === 1 && spareCombat > 0) {
+      scavengeWood = spareCombat * 2;
+      scavengeScrap = spareCombat * 1;
+      state.wood += scavengeWood;
+      state.scrap += scavengeScrap;
+    }
+
+    const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (state.b1LabFlatRp || 0) + (state.b1LabFlatPerWaveRp || 0);
+    const drill2Bonus = (G.getTechLevel && G.getTechLevel('b1_drill_2') > 0) ? 0.15 : 0;
+    const rpMult = 1 + (state.b1LabMult || 0) + drill2Bonus;
+    const rpGain = Math.round(rawScientistRp * rpMult);
+    state.rp = (state.rp || 0) + rpGain;
+
+    const prodCount = jobs.prod || 0;
+    const prodWood = Math.round(prodCount * 5 + (state.b1SupplyWood || 0) + (state.b1SupplyProdWood || 0));
+    const prodScrap = Math.round(prodCount * 4 + (state.b1SupplyScrap || 0) + (state.b1SupplyProdScrap || 0));
+    const supplyCoin = Math.round(state.b1SupplyCoin || 0);
+    state.wood += prodWood;
+    state.scrap += prodScrap;
+    if (supplyCoin > 0) state.coin += supplyCoin;
+
+    let digGain = 0;
+    if ((state.hqLevel || 1) >= 2 && state.undergroundUnlocked) {
+      const digPerProd = (G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 4 : 3;
+      digGain = Math.round((2 + prodCount * digPerProd) * (1 + (state.b1DigApBonusMult || state.b1DigMult || 0)));
+      const digCap = Math.max(16, (2 + prodCount * digPerProd) * 2 + ((G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 8 : 0));
+      state.digApCap = digCap;
+      state.digAp = Math.min(digCap, (state.digAp || 0) + digGain);
+    }
+
     // 4. Morning Survivor Arrival (every day below 6 agents, every 2 waves at 6+ agents)
     let arrivedAgent = 0;
     let recruitNote = '';
     if (state.agents < state.popCap) {
       if (state.agents < 6) {
-        state.agents += 1;
+        if (G.grantAgents) G.grantAgents(1);
+        else state.agents += 1;
         arrivedAgent = 1;
         state.agentRecruitProgress = 0;
       } else {
         state.agentRecruitProgress = (state.agentRecruitProgress || 0) + 1;
         if (state.agentRecruitProgress >= 2) {
-          state.agents += 1;
+          if (G.grantAgents) G.grantAgents(1);
+          else state.agents += 1;
           arrivedAgent = 1;
           state.agentRecruitProgress = 0;
         } else {
@@ -856,10 +899,15 @@ window.ZS = window.ZS || {};
       newlyUnlocked.push(G.getDivisionDef('arc_tech').name);
     }
 
+    const rpMsg = rpGain > 0 ? ` · 연구 +${rpGain} RP` : '';
+    const prodMsg = prodWood > 0 || prodScrap > 0 ? ` · 생산 +${prodWood}W/+${prodScrap}S` : '';
+    const supplyCoinMsg = supplyCoin > 0 ? ` · 물류 +${supplyCoin}C` : '';
+    const scavMsg = scavengeWood > 0 ? ` · 수색 +${scavengeWood}W/+${scavengeScrap}S` : '';
+    const digMsg = digGain > 0 ? ` · 굴착력 +${digGain} AP` : '';
     const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
     G.banner(
       `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
-      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 주간 충전 전력 +${gainedPower}${agentMsg}`,
+      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 전력 +${gainedPower}${rpMsg}${prodMsg}${supplyCoinMsg}${scavMsg}${digMsg}${agentMsg}`,
       'good'
     );
     if (newlyUnlocked.length > 0) {
@@ -875,14 +923,33 @@ window.ZS = window.ZS || {};
   }
 
   function triggerGameOver() {
+    if (state.phase === 'gameover') return;
     state.phase = 'gameover';
+    if (state.activeLayer === 'underground') {
+      state.activeLayer = 'surface';
+      if (ZS.Iso && ZS.Iso.restoreLayerCamera) ZS.Iso.restoreLayerCamera('surface');
+      if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
+    }
+    const divId = state.divisionId || 'mobile_corps';
+    const preMeta = G.getCommanderMeta ? G.getCommanderMeta() : null;
+    const preRec = preMeta && preMeta.divisions ? preMeta.divisions[divId] : null;
+    state.gameOverPrevBestWave = (preRec && preRec.bestWave) || 0;
     if (G.recordDivisionProgress) {
-      G.recordDivisionProgress(state.divisionId, state.wave, !!(state.bossDefeated && state.wave >= 20));
+      G.recordDivisionProgress(divId, state.wave, !!(state.bossDefeated && state.wave >= 20));
+    }
+    try {
+      if (G.getSaveKey && typeof localStorage !== 'undefined') {
+        localStorage.removeItem(G.getSaveKey());
+      }
+    } catch (e) {
+      // Ignore storage removal errors
     }
     if (G.invalidateStatsCache) G.invalidateStatsCache();
     ZS.Audio.playBlackout();
-    G.banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
     G.notifyUi();
+    if (ZS._UI && ZS._UI.openGameOverModal) {
+      ZS._UI.openGameOverModal();
+    }
   }
 
   // ================= VFX HELPERS =================
@@ -911,6 +978,7 @@ window.ZS = window.ZS || {};
   }
 
   function spawnZombieDeathVfx(z, zDef) {
+    state.totalKills = (state.totalKills || 0) + 1;
     const sc = (zDef && zDef.scale) || 1.0;
     // 1. ~0.3s collapsing/toppling zombie corpse animation
     state.dyingZombies.push({
@@ -1004,6 +1072,22 @@ window.ZS = window.ZS || {};
       case 'repair_bay': return ['#475361', '#F0A93A', '#4ADE80'];
       case 'lounge_set': return ['#F4E6C8', '#E8A04A', '#E8EEF5'];
       case 'arcade_neon': return ['#3A2C54', '#FF5CE1', '#52E8FF'];
+      case 'b1_bunk_bed': return ['#3B4552', '#5F7055', '#E6DEC8'];
+      case 'b1_locker': return ['#566575', '#6B7A5E', '#C4D0DC'];
+      case 'b1_shower_booth': return ['#DCE5EE', '#8A96A4', '#D49A5A'];
+      case 'b1_air_purifier': return ['#CFD8E3', '#3B4552', '#5EF2FF'];
+      case 'b1_coffee_bar': return ['#6E5035', '#C4D0DC', '#FFB347'];
+      case 'b1_media_screen': return ['#2B333D', '#5EF2FF', '#FFC94A'];
+      case 'b1_research_desk': return ['#4B5664', '#8A6A45', '#FFB347'];
+      case 'b1_server_rack': return ['#252E3A', '#525E6B', '#5EF2FF'];
+      case 'b1_specimen_bench': return ['#8A96A4', '#3B4552', '#C084FC'];
+      case 'b1_holo_table': return ['#2D3744', '#5EF2FF', '#E2A83B'];
+      case 'b1_pallet_rack': return ['#39434F', '#D97724', '#9B7953'];
+      case 'b1_logistics_term': return ['#3B4552', '#E59838', '#5EF2FF'];
+      case 'b1_ess_rack': return ['#2D3744', '#B87333', '#5EF2FF'];
+      case 'b1_power_panel': return ['#4C5868', '#E59838', '#5EF2FF'];
+      case 'b1_backup_gen': return ['#D9822B', '#39434F', '#5EF2FF'];
+      case 'b1_ceiling_led': return ['#2E3744', '#E59838', '#FFB347'];
       case 'boss_trophy': return ['#2E3744', '#D4AF37', '#FFE066'];
       case 'command_hq': return ['#5B6B7C', '#DCE4EC', '#FFD27A'];
       default: return ['#94A3B8', '#64748B', '#D49A5A'];
@@ -1177,6 +1261,15 @@ window.ZS = window.ZS || {};
     getEffectiveUpgradeCost: G.getEffectiveUpgradeCost,
     canUpgradeHq: G.canUpgradeHq,
     upgradeHq: G.upgradeHq,
+    adjustJob: G.adjustJob,
+    getTechLevel: G.getTechLevel,
+    getTechCost: G.getTechCost,
+    getHqUnlockWave: G.getHqUnlockWave,
+    getTechGateInfo: G.getTechGateInfo,
+    canResearchTech: G.canResearchTech,
+    researchTech: G.researchTech,
+    getItemRequiredTech: G.getItemRequiredTech,
+    getUpgradeRequiredTech: G.getUpgradeRequiredTech,
     isUpgradeableDef: G.isUpgradeableDef,
     isTierEvolutionDef: G.isTierEvolutionDef,
     getStructMaxTier: G.getStructMaxTier,
@@ -1200,6 +1293,8 @@ window.ZS = window.ZS || {};
     removeAt: G.removeAt,
     getRepairAllInfo: G.getRepairAllInfo,
     repairAllStructures: G.repairAllStructures,
+    getEffectiveTraderOfferCost: G.getEffectiveTraderOfferCost,
+    getEffectiveTraderRefreshCost: G.getEffectiveTraderRefreshCost,
     refreshTraderOffers: G.refreshTraderOffers,
     exchangeResource: G.exchangeResource,
     getNightConsumableCost: G.getNightConsumableCost,
@@ -1219,6 +1314,7 @@ window.ZS = window.ZS || {};
     debugAddResources: G.debugAddResources,
     debugTogglePower: G.debugTogglePower,
     debugAddAgents: G.debugAddAgents,
+    debugAddRp: G.debugAddRp,
     debugAdvanceWave: G.debugAdvanceWave,
     debugGrantSelectedXp: G.debugGrantSelectedXp,
     update: G.update

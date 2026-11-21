@@ -23,6 +23,9 @@ window.ZS = window.ZS || {};
     shakeTimer: 0,
     shakeDuration: 0.25,
     shakeAmp: 0,
+    totalKills: 0,
+    gameOverUnlockedDivisions: [],
+    gameOverPrevBestWave: 0,
     bossDefeated: false,
     gameSpeed: 1,
 
@@ -37,9 +40,43 @@ window.ZS = window.ZS || {};
     nightIdleDrain: 0,
 
     agents: DATA.HQ_STATS.startingAgents,
+    jobs: {
+      combat: Math.max(1, DATA.HQ_STATS.startingAgents - 1),
+      research: 1,
+      prod: 0
+    },
     popCap: DATA.HQ_STATS.basePopCap,
     popUsed: 0,
     debugBonusPopCap: 0,
+    rp: 0,
+    researchedTechs: {},
+    undergroundUnlocked: false,
+    digAp: 0,
+    digApCap: 24,
+    activeLayer: 'surface',
+    underground: null,
+    b1PopCap: 0,
+    b1LabFlatRp: 0,
+    b1LabFlatPerWaveRp: 0,
+    b1LabMult: 0,
+    b1BossRpMult: 0,
+    b1HoloCritAdd: 0,
+    b1SupplyWood: 0,
+    b1SupplyScrap: 0,
+    b1SupplyProdWood: 0,
+    b1SupplyProdScrap: 0,
+    b1SupplyCoin: 0,
+    b1TraderDisc: 0,
+    b1MannedFireRateMult: 0,
+    b1MannedXpMult: 0,
+    b1DigApBonusMult: 0,
+    b1DigMult: 0,
+    b1PowerCap: 0,
+    b1DayCharge: 0,
+    b1NightGen: 0,
+    b1PowerDrainSave: 0,
+    b1NightIdleDrain: 0,
+    b1CozySynergy: 0,
 
     cozyScore: 0,
     cozyFloorRaw: 0,
@@ -284,6 +321,9 @@ window.ZS = window.ZS || {};
     rec.unlocked = true;
     meta.divisions[id] = rec;
     saveCommanderMeta(meta);
+    if (Array.isArray(state.gameOverUnlockedDivisions) && divs[id].name && state.gameOverUnlockedDivisions.indexOf(divs[id].name) === -1) {
+      state.gameOverUnlockedDivisions.push(divs[id].name);
+    }
     return true;
   }
 
@@ -347,6 +387,10 @@ window.ZS = window.ZS || {};
     if (G.onWaveBanner) G.onWaveBanner(title, sub, tone || 'info');
   }
 
+  function isUndergroundUnlocked() {
+    return (state.hqLevel || 1) >= 2;
+  }
+
   function getHqLevelInfo(lv) {
     const targetLv = lv || state.hqLevel || 1;
     const list = DATA.HQ_LEVELS || [];
@@ -356,18 +400,153 @@ window.ZS = window.ZS || {};
     return (
       list[0] || {
         level: 1,
+        reqWave: 1,
         name: DATA.HQ_STATS.name,
         cost: null,
         maxHp: DATA.HQ_STATS.maxHp,
         basePowerCap: DATA.HQ_STATS.basePowerCap,
         baseDayCharge: DATA.HQ_STATS.baseDayCharge,
         basePopCap: DATA.HQ_STATS.basePopCap,
-        structUpgradeCap: 1,
+        baseRpPerScientist: 2,
+        structUpgradeCap: 3,
         maxZ: 36,
         hpBarWidth: 38,
-        weapon: null
+        weapon: null,
+        globalAura: null
       }
     );
+  }
+
+  function normalizeJobs() {
+    const totalAgents = Math.max(0, Math.floor(Number(state.agents) || 0));
+    const minCombat = Math.min(totalAgents, Math.max(0, Math.floor(Number(state.popUsed) || 0)));
+    if (!state.jobs || typeof state.jobs !== 'object') {
+      const rDefault = totalAgents > minCombat ? 1 : 0;
+      state.jobs = {
+        combat: Math.max(minCombat, totalAgents - rDefault),
+        research: rDefault,
+        prod: 0
+      };
+    }
+
+    let c = Math.max(0, Math.floor(Number(state.jobs.combat) || 0));
+    let r = Math.max(0, Math.floor(Number(state.jobs.research) || 0));
+    let p = Math.max(0, Math.floor(Number(state.jobs.prod) || 0));
+
+    let sum = c + r + p;
+    if (sum > totalAgents) {
+      let excess = sum - totalAgents;
+      const takeP = Math.min(p, excess);
+      p -= takeP;
+      excess -= takeP;
+      if (excess > 0) {
+        const takeR = Math.min(r, excess);
+        r -= takeR;
+        excess -= takeR;
+      }
+      if (excess > 0) {
+        const takeC = Math.min(c, excess);
+        c -= takeC;
+        excess -= takeC;
+      }
+    }
+
+    if (c < minCombat) {
+      let need = minCombat - c;
+      const unassigned = Math.max(0, totalAgents - (c + r + p));
+      const fromUn = Math.min(unassigned, need);
+      c += fromUn;
+      need -= fromUn;
+      if (need > 0) {
+        const fromP = Math.min(p, need);
+        p -= fromP;
+        c += fromP;
+        need -= fromP;
+      }
+      if (need > 0) {
+        const fromR = Math.min(r, need);
+        r -= fromR;
+        c += fromR;
+        need -= fromR;
+      }
+    }
+
+    state.jobs = { combat: c, research: r, prod: p };
+    return state.jobs;
+  }
+
+  function grantAgents(count) {
+    const add = Math.max(0, Math.floor(Number(count) || 0));
+    if (add <= 0) return 0;
+    normalizeJobs();
+    state.agents += add;
+    let rem = add;
+    if ((state.jobs.research || 0) === 0 && rem > 0) {
+      state.jobs.research = 1;
+      rem -= 1;
+    }
+    if (rem > 0) {
+      state.jobs.combat = (state.jobs.combat || 0) + rem;
+    }
+    normalizeJobs();
+    return add;
+  }
+
+  function adjustJob(role, delta) {
+    if (role !== 'combat' && role !== 'research' && role !== 'prod') return false;
+    if (state.phase === 'gameover') return false;
+    const rawDelta = Math.trunc(Number(delta) || 0);
+    if (rawDelta === 0) return false;
+
+    normalizeJobs();
+    const steps = Math.abs(rawDelta);
+    const sign = rawDelta > 0 ? 1 : -1;
+    let changed = false;
+
+    for (let s = 0; s < steps; s++) {
+      if (sign < 0) {
+        if (role === 'combat' && state.jobs.combat <= (state.popUsed || 0)) {
+          ZS.Audio.playError();
+          banner('전투요원 감원 불가', '초소에 배치된 전투요원(' + state.popUsed + '명) 미만으로 줄일 수 없습니다.', 'warn');
+          break;
+        }
+        if ((state.jobs[role] || 0) <= 0) break;
+        state.jobs[role] -= 1;
+        changed = true;
+      } else {
+        const used = (state.jobs.combat || 0) + (state.jobs.research || 0) + (state.jobs.prod || 0);
+        const unassigned = state.agents - used;
+        if (unassigned > 0) {
+          state.jobs[role] += 1;
+          changed = true;
+        } else {
+          const donorOrder = ['prod', 'combat', 'research'];
+          let donor = null;
+          for (let i = 0; i < donorOrder.length; i++) {
+            const dRole = donorOrder[i];
+            if (dRole === role) continue;
+            const hasSpare = dRole === 'combat'
+              ? state.jobs.combat > (state.popUsed || 0)
+              : (state.jobs[dRole] || 0) > 0;
+            if (hasSpare) {
+              donor = dRole;
+              break;
+            }
+          }
+          if (!donor) break;
+          state.jobs[donor] -= 1;
+          state.jobs[role] += 1;
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) return false;
+    normalizeJobs();
+    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
+    saveGame();
+    notifyUi();
+    return true;
   }
 
   function createEmptyGrids() {
@@ -383,6 +562,7 @@ window.ZS = window.ZS || {};
   }
 
   function getTerrainElevationAt(gx, gy) {
+    if (state.activeLayer === 'underground') return 0;
     const tx = Math.floor(gx);
     const ty = Math.floor(gy);
     if (tx < 0 || ty < 0 || tx >= N || ty >= N) return 0;
@@ -1156,6 +1336,9 @@ window.ZS = window.ZS || {};
     state.blackoutFlickerTimer = 0;
     state.shakeTimer = 0;
     state.shakeAmp = 0;
+    state.totalKills = 0;
+    state.gameOverUnlockedDivisions = [];
+    state.gameOverPrevBestWave = 0;
     state.bossDefeated = false;
     state.gameSpeed = 1;
 
@@ -1165,7 +1348,43 @@ window.ZS = window.ZS || {};
 
     const hqInfo = getHqLevelInfo(1);
     state.agents = DATA.HQ_STATS.startingAgents + (divDef.startingAgentsBonus || 0);
+    state.jobs = {
+      combat: Math.max(1, state.agents - 1),
+      research: state.agents >= 1 ? 1 : 0,
+      prod: 0
+    };
     state.debugBonusPopCap = 0;
+    state.rp = 0;
+    state.researchedTechs = {};
+    state.undergroundUnlocked = false;
+    state.digAp = 0;
+    state.digApCap = 24;
+    state.activeLayer = 'surface';
+    state.underground = G.createDefaultUnderground ? G.createDefaultUnderground() : null;
+    state.b1PopCap = 0;
+    state.b1LabFlatRp = 0;
+    state.b1LabFlatPerWaveRp = 0;
+    state.b1LabMult = 0;
+    state.b1BossRpMult = 0;
+    state.b1HoloCritAdd = 0;
+    state.b1SupplyWood = 0;
+    state.b1SupplyScrap = 0;
+    state.b1SupplyProdWood = 0;
+    state.b1SupplyProdScrap = 0;
+    state.b1SupplyCoin = 0;
+    state.b1TraderDisc = 0;
+    state.b1MannedFireRateMult = 0;
+    state.b1MannedXpMult = 0;
+    state.b1DigApBonusMult = 0;
+    state.b1DigMult = 0;
+    state.b1PowerCap = 0;
+    state.b1DayCharge = 0;
+    state.b1NightGen = 0;
+    state.b1PowerDrainSave = 0;
+    state.b1NightIdleDrain = 0;
+    state.b1CozySynergy = 0;
+    if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
+    if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
     state.freeVouchers = divDef.startingVouchers ? { ...divDef.startingVouchers } : {};
     state.showWindOverlay = false;
     state.traderRefreshCost = 15;
@@ -1395,6 +1614,7 @@ window.ZS = window.ZS || {};
   }
 
   function toggleWindOverlay() {
+    if (state.activeLayer === 'underground') return false;
     state.showWindOverlay = !state.showWindOverlay;
     notifyUi();
     return state.showWindOverlay;
@@ -1487,7 +1707,8 @@ window.ZS = window.ZS || {};
     const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
     const div = getDivisionDef();
     const divXpMult = (def.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
-    const gained = rawXp * cozyXpMult * divXpMult;
+    const b1XpMult = def.subType === 'manned' ? (1.0 + (state.b1MannedXpMult || 0)) : 1.0;
+    const gained = rawXp * cozyXpMult * divXpMult * b1XpMult;
     st.xp = +((st.xp || 0) + gained).toFixed(3);
     st.kills = (st.kills || 0) + 1;
     const onWall = isMounted !== undefined
@@ -1510,20 +1731,21 @@ window.ZS = window.ZS || {};
       const bonus = xpTable.bossGlobalBonus || 4.0;
       const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
       const div = getDivisionDef();
+      const b1MannedMult = 1.0 + (state.b1MannedXpMult || 0);
       for (let y = 0; y < N; y++) {
         for (let x = 0; x < N; x++) {
           const s = state.structGrid[y] && state.structGrid[y][x];
           if (!s || s.id === 'command_hq' || s.hp <= 0) continue;
           const d = DATA.ITEMS[s.id];
           if (isCombatVeterancyDef(d)) {
-            const dMult = (d.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+            const dMult = ((d.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0) * (d.subType === 'manned' ? b1MannedMult : 1.0);
             s.xp = +((s.xp || 0) + bonus * cozyXpMult * dMult).toFixed(3);
             applyPromoteCheck(s, d, x, y, false, true);
           }
           if (s.mounted && s.mounted.hp > 0) {
             const md = DATA.ITEMS[s.mounted.id];
             if (isCombatVeterancyDef(md)) {
-              const mdMult = (md.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+              const mdMult = ((md.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0) * (md.subType === 'manned' ? b1MannedMult : 1.0);
               s.mounted.xp = +((s.mounted.xp || 0) + bonus * cozyXpMult * mdMult).toFixed(3);
               applyPromoteCheck(s.mounted, md, x, y, true, true);
             }
@@ -1560,7 +1782,7 @@ window.ZS = window.ZS || {};
     if (state.phase !== 'day') return;
     try {
       const payload = {
-        saveVersion: 2,
+        saveVersion: 3,
         defenseTierV2: true,
         balanceV3: true,
         divisionId: state.divisionId || 'mobile_corps',
@@ -1568,12 +1790,21 @@ window.ZS = window.ZS || {};
         wave: state.wave,
         hqLevel: state.hqLevel,
         bossDefeated: state.bossDefeated,
+        totalKills: state.totalKills || 0,
+        runUnlockedDivisions: Array.isArray(state.gameOverUnlockedDivisions) ? state.gameOverUnlockedDivisions.slice() : [],
         wood: state.wood,
         scrap: state.scrap,
         coin: state.coin,
         power: state.power,
         agents: state.agents,
+        jobs: state.jobs ? { ...state.jobs } : { combat: state.agents, research: 0, prod: 0 },
         debugBonusPopCap: state.debugBonusPopCap || 0,
+        rp: state.rp || 0,
+        researchedTechs: state.researchedTechs ? { ...state.researchedTechs } : {},
+        undergroundUnlocked: !!state.undergroundUnlocked,
+        digAp: state.digAp || 0,
+        digApCap: state.digApCap || 24,
+        underground: G.serializeUnderground ? G.serializeUnderground() : null,
         showReconPaths: state.showReconPaths !== false,
         showWindOverlay: !!state.showWindOverlay,
         nextWaveIntel: state.nextWaveIntel,
@@ -1684,7 +1915,8 @@ window.ZS = window.ZS || {};
       state.skills.repairMaxCd = loadedDiv.repairMaxCd || 18;
       state.skills.repairCd = Math.min(state.skills.repairCd || 0, state.skills.repairMaxCd);
       state.wave = d.wave || 1;
-      state.hqLevel = Math.max(1, Math.min(4, d.hqLevel || 1));
+      const maxHqLv = (DATA.HQ_LEVELS && DATA.HQ_LEVELS.length) || 5;
+      state.hqLevel = Math.max(1, Math.min(maxHqLv, d.hqLevel || 1));
       state.phase = 'day';
       state.isNight = false;
       state.nightAlpha = 0;
@@ -1693,6 +1925,22 @@ window.ZS = window.ZS || {};
       state.blackoutFlickerTimer = 0;
       state.shakeTimer = 0;
       state.shakeAmp = 0;
+      if (Number.isFinite(Number(d.totalKills))) {
+        state.totalKills = Math.max(0, Math.floor(Number(d.totalKills)));
+      } else {
+        let sumKills = 0;
+        for (let yy = 0; yy < N; yy++) {
+          for (let xx = 0; xx < N; xx++) {
+            const cell = state.structGrid[yy] && state.structGrid[yy][xx];
+            if (!cell) continue;
+            sumKills += cell.kills || 0;
+            if (cell.mounted) sumKills += cell.mounted.kills || 0;
+          }
+        }
+        state.totalKills = sumKills;
+      }
+      state.gameOverUnlockedDivisions = Array.isArray(d.runUnlockedDivisions) ? d.runUnlockedDivisions.slice() : [];
+      state.gameOverPrevBestWave = 0;
       state.dyingZombies = [];
       state.groundDecals = [];
       state.muzzleFlashes = [];
@@ -1702,6 +1950,63 @@ window.ZS = window.ZS || {};
       state.coin = d.coin ?? DATA.INITIAL_RESOURCES.coin;
       state.agents = d.agents ?? DATA.HQ_STATS.startingAgents;
       state.debugBonusPopCap = d.debugBonusPopCap || 0;
+      state.rp = Math.max(0, Number(d.rp) || 0);
+      state.digApCap = Math.max(16, Number(d.digApCap) || 24);
+      state.digAp = Math.max(0, Number(d.digAp) || 0);
+
+      let migratedTechOrJobs = false;
+      if (d.researchedTechs && typeof d.researchedTechs === 'object') {
+        const sanitizedTechs = {};
+        const tTree = DATA.TECH_TREE || {};
+        const keys = Object.keys(d.researchedTechs);
+        for (let i = 0; i < keys.length; i++) {
+          const tid = keys[i];
+          const tDef = tTree[tid];
+          const lvVal = Math.floor(Number(d.researchedTechs[tid]) || 0);
+          if (tDef && lvVal > 0) {
+            sanitizedTechs[tid] = Math.min(tDef.maxLv || 1, lvVal);
+          }
+        }
+        state.researchedTechs = sanitizedTechs;
+        const expectedUgUnlock = state.hqLevel >= 2;
+        if (!!d.undergroundUnlocked !== expectedUgUnlock) migratedTechOrJobs = true;
+        state.undergroundUnlocked = expectedUgUnlock;
+        if (!state.undergroundUnlocked) {
+          state.digAp = 0;
+        }
+      } else {
+        // Legacy save (v0.7.0 and earlier) tech auto-unlock migration based on saved hqLevel
+        const inferred = {};
+        if (state.hqLevel >= 2) {
+          inferred.def_t1 = 1;
+          inferred.inf_sniper = 1;
+          inferred.inf_lv2 = 1;
+          inferred.tur_vulcan = 1;
+          inferred.tur_lv2 = 1;
+          inferred.inf_tier2 = 1;
+          state.undergroundUnlocked = true;
+          if (d.digAp === undefined) {
+            state.digAp = Math.min(state.digApCap, 16);
+          }
+        } else {
+          if (d.undergroundUnlocked) migratedTechOrJobs = true;
+          state.undergroundUnlocked = false;
+          state.digAp = 0;
+        }
+        if (state.hqLevel >= 3) {
+          inferred.def_t2 = 1;
+          inferred.inf_lv3 = 1;
+          inferred.tur_missile = 1;
+          inferred.tur_lv3 = 1;
+          inferred.inf_tier3 = 1;
+        }
+        if (state.hqLevel >= 4) {
+          inferred.tur_emp = 1;
+          inferred.inf_tier4 = 1;
+        }
+        state.researchedTechs = inferred;
+        migratedTechOrJobs = true;
+      }
       state.freeVouchers = d.freeVouchers || {};
       state.traderRefreshCost = Math.max(15, Number(d.traderRefreshCost) || 15);
       state.traderRefreshCount = Math.max(0, Number(d.traderRefreshCount) || 0);
@@ -1798,9 +2103,34 @@ window.ZS = window.ZS || {};
         }
       }
 
+      state.jobs = (d.jobs && typeof d.jobs === 'object')
+        ? {
+            combat: Math.max(0, Math.floor(Number(d.jobs.combat) || 0)),
+            research: Math.max(0, Math.floor(Number(d.jobs.research) || 0)),
+            prod: Math.max(0, Math.floor(Number(d.jobs.prod) || 0))
+          }
+        : null;
+      if (!state.jobs) migratedTechOrJobs = true;
+
+      state.activeLayer = 'surface';
+      if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
+      if (G.deserializeUnderground) {
+        G.deserializeUnderground(d.underground);
+      } else if (G.createDefaultUnderground) {
+        state.underground = G.createDefaultUnderground();
+      }
       G.recalculateBaseStats(true);
+      if (!d.jobs || typeof d.jobs !== 'object') {
+        const minC = Math.min(state.agents, Math.max(1, state.popUsed || 0));
+        const rem = Math.max(0, state.agents - minC);
+        const rCount = rem >= 1 ? 1 : 0;
+        const cCount = minC + Math.max(0, rem - rCount);
+        state.jobs = { combat: cCount, research: rCount, prod: 0 };
+      }
+      normalizeJobs();
       state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
+      if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
       state.showReconPaths = d.showReconPaths !== undefined ? !!d.showReconPaths : true;
       state.showWindOverlay = !!d.showWindOverlay;
       state.reconNightFadeTimer = 0;
@@ -1833,7 +2163,7 @@ window.ZS = window.ZS || {};
       } else {
         G.refreshTraderOffers(false);
       }
-      if (offset > 0 || savedN !== N || migratedWalls || isLegacyV1 || needsDefenseMigration || migratedV2) saveGame();
+      if (offset > 0 || savedN !== N || migratedWalls || isLegacyV1 || needsDefenseMigration || migratedV2 || migratedTechOrJobs) saveGame();
       notifyUi();
       return true;
     } catch (e) {
@@ -1941,10 +2271,21 @@ window.ZS = window.ZS || {};
     if (!isDebugAllowed()) return false;
     const n = Number(count) || 2;
     state.debugBonusPopCap = (state.debugBonusPopCap || 0) + n;
+    grantAgents(n);
     G.recalculateBaseStats(true);
-    state.agents += n;
     ZS.Audio.playTrade();
     banner(`[DEBUG] 요원 +${n}명 충원`, `가용 요원 ${state.agents}명 · 숙소 수용량 ${state.popCap}명으로 확장`, 'good');
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function debugAddRp(amount) {
+    if (!isDebugAllowed()) return false;
+    const add = Number(amount) || 20;
+    state.rp = (state.rp || 0) + add;
+    ZS.Audio.playTrade();
+    banner(`[DEBUG] +${add} RP 지급`, `연구포인트 +${add} RP 추가 완료 (보유 ${state.rp} RP)`, 'good');
     saveGame();
     notifyUi();
     return true;
@@ -2033,7 +2374,11 @@ window.ZS = window.ZS || {};
     notifyUi,
     notifyCombatHud,
     banner,
+    isUndergroundUnlocked,
     getHqLevelInfo,
+    normalizeJobs,
+    grantAgents,
+    adjustJob,
     createEmptyGrids,
     getTerrainAt,
     getTerrainElevationAt,
@@ -2066,6 +2411,7 @@ window.ZS = window.ZS || {};
     debugAddResources,
     debugTogglePower,
     debugAddAgents,
+    debugAddRp,
     debugAdvanceWave,
     debugGrantSelectedXp
   });
