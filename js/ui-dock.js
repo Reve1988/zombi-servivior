@@ -529,6 +529,69 @@ window.ZS = window.ZS || {};
     if (categoryChanged) container.scrollLeft = 0;
   }
 
+  const B1_ROT_LABELS = ['남서(기본)', '남동(90°)', '북동(180°)', '북서(270°)'];
+
+  function getB1RotLabel(rot) {
+    const idx = ((Math.round(Number(rot) || 0) % 4) + 4) % 4;
+    return B1_ROT_LABELS[idx];
+  }
+
+  function formatB1BuildDetailHtml(def) {
+    const rDef = def.requiredRole && ZS.DATA.B1_ROOMS ? ZS.DATA.B1_ROOMS[def.requiredRole] : null;
+    const catIcon = (rDef && rDef.iconId) || (def.b1Category === 'b1_living' ? 'b1-living' : 'b1-systems');
+    const roleHint = rDef ? ` [배치 구역: ${rDef.name} 내부]` : ' [배치 구역: 굴착된 지하 공간 자유 배치]';
+    const pwrHint = def.requiresPower && def.powerIdle ? ` [야간 전력 -${def.powerIdle}/s]` : '';
+    const rotHint = ` [우클릭/R 회전: ${getB1RotLabel(uiState.b1BuildRot)}]`;
+    return `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + roleHint + pwrHint + rotHint)}`;
+  }
+
+  function formatB1MoveDetailHtml(def, tx, ty) {
+    const rotLabel = getB1RotLabel(uiState.b1BuildRot);
+    return `${ozIcon('tool-move', 14)} <b>[${escapeHtml(def.name)} 이동 중]</b> (${tx}, ${ty})에서 이동할 빈 타일을 클릭하세요. · 방향: ${rotLabel} (우클릭/R 회전)`;
+  }
+
+  function rotateActiveB1Gadget(options) {
+    const st = ZS.Game.state;
+    if (!st || st.activeLayer !== 'underground') return false;
+    const allowInspect = !(options && options.fromRightClick);
+
+    if (uiState.mode === 'build' && uiState.selectedItemId) {
+      const def = ZS.DATA.ITEMS[uiState.selectedItemId];
+      if (!def || def.domain !== 'underground') return false;
+      uiState.b1BuildRot = ((uiState.b1BuildRot || 0) + 1) % 4;
+      if (ZS.Audio && ZS.Audio.playClick) ZS.Audio.playClick();
+      setDetailHtml(formatB1BuildDetailHtml(def));
+      updateCursorTooltip();
+      return true;
+    }
+
+    if (uiState.mode === 'move' && uiState.movingSource) {
+      const ug = st.underground;
+      const src = uiState.movingSource;
+      const g = ug && ug.b1StructGrid && ug.b1StructGrid[src.ty] && ug.b1StructGrid[src.ty][src.tx];
+      const def = g ? ZS.DATA.ITEMS[g.id] : null;
+      if (!def) return false;
+      uiState.b1BuildRot = ((uiState.b1BuildRot || 0) + 1) % 4;
+      if (ZS.Audio && ZS.Audio.playClick) ZS.Audio.playClick();
+      setDetailHtml(formatB1MoveDetailHtml(def, src.tx, src.ty));
+      updateCursorTooltip();
+      return true;
+    }
+
+    if (allowInspect && uiState.mode === 'inspect' && uiState.inspectedTile) {
+      const { tx, ty } = uiState.inspectedTile;
+      const ug = st.underground;
+      const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+      if (!g) return false;
+      if (ZS.Game.rotateB1ItemAt && ZS.Game.rotateB1ItemAt(tx, ty, 1)) {
+        inspectTileAt(tx, ty);
+        updateCursorTooltip();
+        return true;
+      }
+    }
+    return false;
+  }
+
   function setToolMode(mode, itemId, b1Role) {
     const st = ZS.Game && ZS.Game.state;
     const isUg = !!(st && st.activeLayer === 'underground');
@@ -559,11 +622,7 @@ window.ZS = window.ZS || {};
           cozyHint = ` [도배 감쇠 적용: 안락함 +${prev.gain} (50%)]`;
         }
         if (def.domain === 'underground') {
-          const rDef = def.requiredRole && ZS.DATA.B1_ROOMS ? ZS.DATA.B1_ROOMS[def.requiredRole] : null;
-          const catIcon = (rDef && rDef.iconId) || (def.b1Category === 'b1_living' ? 'b1-living' : 'b1-systems');
-          const roleHint = rDef ? ` [배치 구역: ${rDef.name} 내부]` : ' [배치 구역: 굴착된 지하 공간 자유 배치]';
-          const pwrHint = def.requiresPower && def.powerIdle ? ` [야간 전력 -${def.powerIdle}/s]` : '';
-          setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + roleHint + pwrHint + cozyHint)}`);
+          setDetailHtml(formatB1BuildDetailHtml(def));
         } else {
           const catIcon = def.category === 'defense' ? 'cat-defense' : def.category === 'infra' ? 'cat-infra' : 'cat-decor';
           let mountHint = '';
@@ -755,7 +814,7 @@ window.ZS = window.ZS || {};
         ? `${uiState.b1DragStart.tx},${uiState.b1DragStart.ty}:${uiState.b1DragCurrent.tx},${uiState.b1DragCurrent.ty}`
         : '';
       const srcKey = uiState.movingSource ? `${uiState.movingSource.tx},${uiState.movingSource.ty}` : '';
-      const ugKey = `b1|${uiState.mode}|${uiState.selectedB1Role || ''}|${uiState.selectedItemId || ''}|${srcKey}|${tx},${ty}|${Math.floor(st.digAp || 0)}|${ug ? ug.rev : 0}|${doorKey}|${dragKey}`;
+      const ugKey = `b1|${uiState.mode}|${uiState.selectedB1Role || ''}|${uiState.selectedItemId || ''}|${uiState.b1BuildRot || 0}|${srcKey}|${tx},${ty}|${Math.floor(st.digAp || 0)}|${ug ? ug.rev : 0}|${doorKey}|${dragKey}`;
       if (ugKey !== lastTipStateKey) {
         lastTipStateKey = ugKey;
         let tipText = null;
@@ -849,7 +908,7 @@ window.ZS = window.ZS || {};
           const def = ZS.DATA.ITEMS[uiState.selectedItemId];
           const check = ZS.Game.canPlaceB1Item ? ZS.Game.canPlaceB1Item(uiState.selectedItemId, tx, ty) : null;
           if (check && check.ok) {
-            tipText = `[${def ? def.name : '설비'}] 설치 가능 (${tx}, ${ty})`;
+            tipText = `[${def ? def.name : '설비'}] 설치 가능 (${tx}, ${ty}) · ${getB1RotLabel(uiState.b1BuildRot)} (우클릭 회전)`;
             tipKind = 'ok';
             tipIcon = 'b1-systems';
             tipIconCls = 'icon-heal';
@@ -875,11 +934,13 @@ window.ZS = window.ZS || {};
             }
           } else {
             const src = uiState.movingSource;
-            const check = ZS.Game.canMoveB1Item ? ZS.Game.canMoveB1Item(src.tx, src.ty, tx, ty) : null;
+            const check = ZS.Game.canMoveB1Item ? ZS.Game.canMoveB1Item(src.tx, src.ty, tx, ty, uiState.b1BuildRot || 0) : null;
             if (check && check.ok) {
-              tipText = `클릭하여 (${tx}, ${ty}) 위치로 무료 이동`;
+              tipText = check.inPlaceRotate
+                ? `클릭하여 제자리 회전 적용 · ${getB1RotLabel(uiState.b1BuildRot)}`
+                : `클릭하여 (${tx}, ${ty}) 위치로 무료 이동 · ${getB1RotLabel(uiState.b1BuildRot)} (우클릭 회전)`;
               tipKind = 'ok';
-              tipIcon = 'tool-move';
+              tipIcon = check.inPlaceRotate ? 'sys-reset' : 'tool-move';
               tipIconCls = 'icon-heal';
             } else if (check && check.reason) {
               tipText = check.reason;
@@ -1427,20 +1488,23 @@ window.ZS = window.ZS || {};
       } else if (status && status.diminished) {
         statusHtml = `<span class="cost-chip b1-ap-cost"><span>활성 · 도배 감쇠 50%</span></span>`;
       }
+      const rotLabel = getB1RotLabel(gadget.rot || 0);
       const actionBtns =
         st.phase === 'day'
-          ? `${statusHtml}<button id="btn-b1-inspect-move" class="detail-upgrade-btn b1-action-btn">${ozIcon('tool-move', 14)}<span>이동 (M)</span></button><button id="btn-b1-inspect-remove" class="detail-upgrade-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>철거 80% (X)</span></button>`
+          ? `${statusHtml}<button id="btn-b1-inspect-rotate" class="detail-upgrade-btn b1-action-btn">${ozIcon('sys-reset', 14)}<span>회전 (R)</span></button><button id="btn-b1-inspect-move" class="detail-upgrade-btn b1-action-btn">${ozIcon('tool-move', 14)}<span>이동 (M)</span></button><button id="btn-b1-inspect-remove" class="detail-upgrade-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>철거 80% (X)</span></button>`
           : statusHtml;
       setDetailHtml(
-        `${ozIcon((rDef && rDef.iconId) || 'b1-systems', 14)} <b>[${escapeHtml(def.name)}]</b> (${escapeHtml(roleTitle)} · ${tx}, ${ty}) — ${escapeHtml(def.desc)}`,
+        `${ozIcon((rDef && rDef.iconId) || 'b1-systems', 14)} <b>[${escapeHtml(def.name)}]</b> (${escapeHtml(roleTitle)} · ${tx}, ${ty} · ${rotLabel}) — ${escapeHtml(def.desc)}`,
         actionBtns
       );
+      document.getElementById('btn-b1-inspect-rotate')?.addEventListener('click', () => {
+        rotateActiveB1Gadget();
+      });
       document.getElementById('btn-b1-inspect-move')?.addEventListener('click', () => {
         setToolMode('move');
         uiState.movingSource = { tx, ty };
-        setDetailHtml(
-          `${ozIcon('tool-move', 14)} <b>[${escapeHtml(def.name)} 이동 중]</b> (${tx}, ${ty})에서 이동할 같은 역할의 빈 타일을 클릭하세요.`
-        );
+        uiState.b1BuildRot = gadget.rot || 0;
+        setDetailHtml(formatB1MoveDetailHtml(def, tx, ty));
         updateCursorTooltip();
       });
       document.getElementById('btn-b1-inspect-remove')?.addEventListener('click', () => {
@@ -1933,6 +1997,8 @@ window.ZS = window.ZS || {};
     setDetailHtml,
     setCompositeDetailHtml,
     renderTraderModal,
+    formatB1MoveDetailHtml,
+    rotateActiveB1Gadget,
     inspectTileAt
   });
 })();

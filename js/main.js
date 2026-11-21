@@ -467,7 +467,7 @@ window.ZS = window.ZS || {};
       }
       if (uiState.mode === 'build') {
         if (!isDrag && uiState.selectedItemId && ZS.Game.placeB1Item) {
-          ZS.Game.placeB1Item(uiState.selectedItemId, tx, ty);
+          ZS.Game.placeB1Item(uiState.selectedItemId, tx, ty, uiState.b1BuildRot || 0);
         }
         return;
       }
@@ -484,7 +484,12 @@ window.ZS = window.ZS || {};
             const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
             if (g) {
               uiState.movingSource = { tx, ty };
+              uiState.b1BuildRot = g.rot || 0;
               ZS.Audio.playClick();
+              const def = ZS.DATA.ITEMS[g.id];
+              if (def && U.formatB1MoveDetailHtml && U.setDetailHtml) {
+                U.setDetailHtml(U.formatB1MoveDetailHtml(def, tx, ty));
+              }
               if (U.updateCursorTooltip) U.updateCursorTooltip();
             } else {
               ZS.Audio.playError();
@@ -492,11 +497,16 @@ window.ZS = window.ZS || {};
             }
           } else {
             const src = uiState.movingSource;
-            if (src.tx === tx && src.ty === ty) {
+            const srcG = ug && ug.b1StructGrid && ug.b1StructGrid[src.ty] && ug.b1StructGrid[src.ty][src.tx];
+            const nextRot = ((Math.round(Number(uiState.b1BuildRot) || 0) % 4) + 4) % 4;
+            const srcRot = srcG ? (((Math.round(Number(srcG.rot) || 0) % 4) + 4) % 4) : 0;
+            if (src.tx === tx && src.ty === ty && nextRot === srcRot) {
               uiState.movingSource = null;
+              if (U.setToolMode) U.setToolMode('move');
               ZS.Audio.playClick();
-            } else if (ZS.Game.moveB1Item && ZS.Game.moveB1Item(src.tx, src.ty, tx, ty)) {
+            } else if (ZS.Game.moveB1Item && ZS.Game.moveB1Item(src.tx, src.ty, tx, ty, nextRot)) {
               uiState.movingSource = null;
+              if (U.setToolMode) U.setToolMode('move');
             }
             if (U.updateCursorTooltip) U.updateCursorTooltip();
           }
@@ -567,12 +577,28 @@ window.ZS = window.ZS || {};
   }
 
   function bindEvents() {
+    let rightClickTrack = null;
     window.addEventListener('resize', resizeCanvas);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
       if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) return;
-      if (e.button === 2 || e.button === 1 || (e.button === 0 && keys['Space'])) {
+      if (e.button === 2) {
+        const shouldTrackRotate =
+          ZS.Game.state.activeLayer === 'underground' &&
+          ZS.Game.state.phase === 'day' &&
+          ((uiState.mode === 'build' && !!uiState.selectedItemId) ||
+            (uiState.mode === 'move' && !!uiState.movingSource));
+        if (shouldTrackRotate) {
+          rightClickTrack = { startX: e.clientX, startY: e.clientY, dragged: false };
+          return;
+        }
+        isPanning = true;
+        panStart.x = e.clientX;
+        panStart.y = e.clientY;
+        return;
+      }
+      if (e.button === 1 || (e.button === 0 && keys['Space'])) {
         isPanning = true;
         panStart.x = e.clientX;
         panStart.y = e.clientY;
@@ -611,6 +637,16 @@ window.ZS = window.ZS || {};
         return;
       }
 
+      if (rightClickTrack && !rightClickTrack.dragged) {
+        const dist = Math.hypot(e.clientX - rightClickTrack.startX, e.clientY - rightClickTrack.startY);
+        if (dist >= 6) {
+          rightClickTrack.dragged = true;
+          isPanning = true;
+          panStart.x = rightClickTrack.startX;
+          panStart.y = rightClickTrack.startY;
+        }
+      }
+
       if (isPanning) {
         const dx = e.clientX - panStart.x;
         const dy = e.clientY - panStart.y;
@@ -647,7 +683,16 @@ window.ZS = window.ZS || {};
       U.updateCursorTooltip();
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 2 && rightClickTrack) {
+        const track = rightClickTrack;
+        rightClickTrack = null;
+        if (!track.dragged && U.rotateActiveB1Gadget) {
+          U.rotateActiveB1Gadget({ fromRightClick: true });
+        }
+      } else if (e.button === 2) {
+        rightClickTrack = null;
+      }
       if (
         ZS.Game.state.activeLayer === 'underground' &&
         uiState.b1DragStart &&
@@ -809,6 +854,19 @@ window.ZS = window.ZS || {};
       } else if (e.code === 'KeyG') {
         if (ZS.Game.state.activeLayer !== 'underground' && uiState.inspectedTile && ZS.Game.upgradeWallBase) {
           ZS.Game.upgradeWallBase(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
+        }
+      } else if (e.code === 'KeyR') {
+        if (
+          !isTyping &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.altKey &&
+          ZS.Game.state.activeLayer === 'underground' &&
+          ZS.Game.state.phase === 'day' &&
+          !isTechModalOpen() &&
+          U.rotateActiveB1Gadget
+        ) {
+          U.rotateActiveB1Gadget();
         }
       } else if (e.code === 'KeyV') {
         if (!isTyping && !e.ctrlKey && !e.metaKey && !e.altKey && ZS.Game.toggleWindOverlay) {
