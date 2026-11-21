@@ -1855,7 +1855,7 @@ window.ZS = window.ZS || {};
         banner('[DEBUG] 전력 강제 방전 (0)', '블랙아웃 테스트를 위해 배터리를 0으로 방전했습니다.', 'warn');
       }
     } else {
-      state.power = Math.max(85, state.powerCap);
+      state.power = Math.max(DATA.HQ_STATS.basePowerCap || 70, state.powerCap);
       state.blackoutActive = false;
       state.blackoutTriggered = false;
       state.blackoutFlickerTimer = 0;

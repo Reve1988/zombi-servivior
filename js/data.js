@@ -180,10 +180,10 @@ ZS.DATA = (function () {
   };
 
   const SOLAR_TIERS = {
-    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 38, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
-    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 75, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
-    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 135, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
-    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 220, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
+    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 28, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
+    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 56, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
+    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 100, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
+    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 165, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
   };
 
   const WIND_TIERS = {
@@ -194,10 +194,10 @@ ZS.DATA = (function () {
   };
 
   const BATTERY_TIERS = {
-    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 70, dayCharge: 6, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
-    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 155, dayCharge: 14, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
-    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 290, dayCharge: 26, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
-    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 480, dayCharge: 42, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
+    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 60, dayCharge: 4, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
+    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 135, dayCharge: 10, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
+    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 250, dayCharge: 18, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
+    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 410, dayCharge: 30, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
   };
 
   const BARRACKS_TIERS = {
@@ -302,17 +302,17 @@ ZS.DATA = (function () {
   PALETTE,
 
   INITIAL_RESOURCES: {
-    wood: 150,
-    scrap: 130,
-    coin: 95
+    wood: 100,
+    scrap: 95,
+    coin: 60
   },
 
   HQ_STATS: {
     id: 'command_hq',
     name: '전술 지휘 본부',
     maxHp: 800,
-    basePowerCap: 85,
-    baseDayCharge: 42,
+    basePowerCap: 70,
+    baseDayCharge: 32,
     basePopCap: 2,
     startingAgents: 2
   },
@@ -323,8 +323,8 @@ ZS.DATA = (function () {
       name: '임시 지휘소',
       cost: null,
       maxHp: 800,
-      basePowerCap: 85,
-      baseDayCharge: 42,
+      basePowerCap: 70,
+      baseDayCharge: 32,
       basePopCap: 2,
       structUpgradeCap: 1,
       maxZ: 36,
@@ -336,8 +336,8 @@ ZS.DATA = (function () {
       name: '전술 작전 본부',
       cost: { wood: 90, scrap: 70, coin: 45 },
       maxHp: 1150,
-      basePowerCap: 115,
-      baseDayCharge: 55,
+      basePowerCap: 95,
+      baseDayCharge: 42,
       basePopCap: 3,
       structUpgradeCap: 2,
       maxZ: 30,
@@ -359,8 +359,8 @@ ZS.DATA = (function () {
       name: '통합 요새 사령부',
       cost: { wood: 170, scrap: 140, coin: 95 },
       maxHp: 1600,
-      basePowerCap: 150,
-      baseDayCharge: 72,
+      basePowerCap: 125,
+      baseDayCharge: 55,
       basePopCap: 4,
       structUpgradeCap: 3,
       maxZ: 38,
@@ -382,8 +382,8 @@ ZS.DATA = (function () {
       name: '이지스 코어 사령부',
       cost: { wood: 280, scrap: 240, coin: 170 },
       maxHp: 2200,
-      basePowerCap: 200,
-      baseDayCharge: 95,
+      basePowerCap: 165,
+      baseDayCharge: 72,
       basePopCap: 5,
       structUpgradeCap: 3,
       maxZ: 48,
@@ -403,14 +403,14 @@ ZS.DATA = (function () {
   ],
 
   COZY_TIERS: [
-    { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.10 },
-    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.08, xpBonus: 0.10, freeRepair: 0.18 },
-    { level: 3, min: 65,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.26 },
-    { level: 4, min: 130, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.34 },
-    { level: 5, min: 225, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.42 },
-    { level: 6, min: 340, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.50 },
-    { level: 7, min: 480, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.58 },
-    { level: 8, min: 640, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.65 }
+    { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.06 },
+    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.08, xpBonus: 0.10, freeRepair: 0.12 },
+    { level: 3, min: 65,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.18 },
+    { level: 4, min: 130, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.24 },
+    { level: 5, min: 225, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.30 },
+    { level: 6, min: 340, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.36 },
+    { level: 7, min: 480, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.42 },
+    { level: 8, min: 640, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.48 }
   ],
 
   COZY_FLOOR_CAP: 60,
@@ -435,7 +435,7 @@ ZS.DATA = (function () {
     rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
-    vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
+    vulcan_turret: '초전도 급탄 (사격 전력 0.28 절감 · 치명타 +12%p)',
     missile_pod: '6연장 융단 포격 (1회 6발 연속 포격 · 광역 제압)',
     emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
@@ -618,8 +618,8 @@ ZS.DATA = (function () {
       reqHqLevel: 2,
       cost: { wood: 8, scrap: 36 },
       requiresPower: true,
-      powerIdle: 0.55,
-      powerShot: 0.38,
+      powerIdle: 0.70,
+      powerShot: 0.44,
       maxHp: 240,
       range: 4.6,
       damage: 13,
@@ -638,8 +638,8 @@ ZS.DATA = (function () {
       reqHqLevel: 3,
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
-      powerIdle: 0.85,
-      powerShot: 2.0,
+      powerIdle: 1.05,
+      powerShot: 2.4,
       maxHp: 260,
       minRange: 2.2,
       range: 8.0,
@@ -660,8 +660,8 @@ ZS.DATA = (function () {
       reqHqLevel: 4,
       cost: { wood: 10, scrap: 52, coin: 15 },
       requiresPower: true,
-      powerIdle: 1.0,
-      powerShot: 2.3,
+      powerIdle: 1.25,
+      powerShot: 2.7,
       maxHp: 235,
       range: 3.8,
       damage: 30,
@@ -682,12 +682,12 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 10, scrap: 20 },
       maxHp: 135,
-      dayCharge: 38,
+      dayCharge: 28,
       nightGen: 0,
       powerCap: 15,
       cozy: 1,
       cozyGroup: 'solar_t1',
-      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+220)까지 진화합니다.'
+      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+165)까지 진화합니다.'
     },
     wind_turbine: {
       id: 'wind_turbine',
@@ -714,12 +714,12 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 6, scrap: 18 },
       maxHp: 165,
-      dayCharge: 6,
+      dayCharge: 4,
       nightGen: 0,
-      powerCap: 70,
+      powerCap: 60,
       cozy: 1,
       cozyGroup: 'battery_t1',
-      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+480)까지 진화합니다.'
+      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+410)까지 진화합니다.'
     },
     field_tent: {
       id: 'field_tent',
@@ -778,7 +778,7 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 6, scrap: 16 },
       requiresPower: true,
-      powerIdle: 0.4,
+      powerIdle: 0.55,
       maxHp: 140,
       cozy: 7,
       cozyGroup: 'decor_flood',
@@ -873,7 +873,7 @@ ZS.DATA = (function () {
     walker: {
       id: 'walker',
       name: '감염 보행자',
-      hp: 58,
+      hp: 64,
       speed: 1.05,
       damage: 14,
       attackRate: 1.0,
@@ -904,7 +904,7 @@ ZS.DATA = (function () {
     brute: {
       id: 'brute',
       name: '방탄복 저거너트',
-      hp: 215,
+      hp: 245,
       speed: 0.68,
       damage: 34,
       attackRate: 0.85,
@@ -980,9 +980,9 @@ ZS.DATA = (function () {
     boss: {
       id: 'boss',
       name: '알파 타이탄 변이체',
-      hp: 860,
-      speed: 0.56,
-      damage: 58,
+      hp: 1180,
+      speed: 0.64,
+      damage: 68,
       attackRate: 0.8,
       woodDrop: [10, 16],
       scrapDrop: [30, 42],
