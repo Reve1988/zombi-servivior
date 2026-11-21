@@ -847,7 +847,7 @@ window.ZS = window.ZS || {};
     if (supplyCoin > 0) state.coin += supplyCoin;
 
     let digGain = 0;
-    if (state.undergroundUnlocked) {
+    if ((state.hqLevel || 1) >= 2 && state.undergroundUnlocked) {
       const digPerProd = (G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 4 : 3;
       digGain = Math.round((2 + prodCount * digPerProd) * (1 + (state.b1DigApBonusMult || state.b1DigMult || 0)));
       const digCap = Math.max(16, (2 + prodCount * digPerProd) * 2 + ((G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 8 : 0));

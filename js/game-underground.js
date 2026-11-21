@@ -272,15 +272,30 @@ window.ZS = window.ZS || {};
   }
 
   // ================= LAYER SWITCHING (DAYTIME ONLY) =================
+  function isB1Unlocked() {
+    return (state.hqLevel || 1) >= 2 && !!state.undergroundUnlocked;
+  }
+
   function clearTransientLayerVfx() {
     state.particles = [];
     state.floatingTexts = [];
   }
 
   function enterUnderground() {
-    if (!state.undergroundUnlocked) {
+    if (!isB1Unlocked()) {
       if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
-      G.banner('지하 쉘터 미개방', '지휘 본부 Lv.2(Wave 20+) 증축 시 지하 B1 승강기가 개방됩니다.', 'warn');
+      if ((state.wave || 1) >= 20) {
+        G.banner(
+          '지휘 본부 Lv.2 증축 필요',
+          'WAVE 20에 도달했습니다! 먼저 중앙 지휘 본부를 Lv.2(전술 작전 본부)로 증축해야 지하 B1이 개방됩니다.',
+          'warn'
+        );
+        if (ZS._UI && ZS._UI.inspectTileAt && state.phase === 'day') {
+          ZS._UI.inspectTileAt(DATA.HQ_POS.x, DATA.HQ_POS.y);
+        }
+      } else {
+        G.banner('지하 쉘터 미개방', 'WAVE 20 도달 후 지휘 본부를 Lv.2로 증축하면 지하 B1 승강기가 개방됩니다.', 'warn');
+      }
       return false;
     }
     if (state.phase !== 'day') {
@@ -351,8 +366,8 @@ window.ZS = window.ZS || {};
   }
 
   function canDigTile(tx, ty) {
-    if (!state.undergroundUnlocked) {
-      return { ok: false, cost: 0, tier: 1, reason: '지하 B1이 아직 개방되지 않았습니다.' };
+    if (!isB1Unlocked()) {
+      return { ok: false, cost: 0, tier: 1, reason: '지휘 본부 Lv.2 증축 시 지하 B1이 개방됩니다.' };
     }
     if (state.phase !== 'day') {
       return { ok: false, cost: 0, tier: 1, reason: '야간 전투 중에는 지하 굴착을 진행할 수 없습니다.' };
@@ -772,7 +787,7 @@ window.ZS = window.ZS || {};
   }
 
   function canZoneB1Rect(x0, y0, x1, y1, role) {
-    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+    if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       return { ok: false, validTiles: [], blockedTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 지정할 수 있습니다.' };
     }
     if (!getB1RoomDef(role)) {
@@ -909,7 +924,7 @@ window.ZS = window.ZS || {};
   }
 
   function canUnzoneB1Rect(x0, y0, x1, y1) {
-    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+    if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       return { ok: false, validTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 해제할 수 있습니다.' };
     }
     const ug = ensureUndergroundState();
@@ -980,7 +995,7 @@ window.ZS = window.ZS || {};
 
   // ================= BLAST DOORS =================
   function findNearestB1DoorEdge(sx, sy, gx, gy) {
-    if (!state.undergroundUnlocked || state.activeLayer !== 'underground') return null;
+    if (!isB1Unlocked() || state.activeLayer !== 'underground') return null;
     const ug = ensureUndergroundState();
     const Iso = ZS.Iso;
     const wallMidZ = (DATA.B1_WALL_Z || 10) * 0.45;
@@ -1041,7 +1056,7 @@ window.ZS = window.ZS || {};
   }
 
   function toggleB1Door(x1, y1, x2, y2) {
-    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+    if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
       return false;
     }
@@ -1073,8 +1088,8 @@ window.ZS = window.ZS || {};
 
   // ================= B1 GADGET PLACEMENT, MOVE, DEMOLISH & EFFECTS =================
   function canPlaceB1Item(rawItemId, tx, ty) {
-    if (!state.undergroundUnlocked) {
-      return { ok: false, reason: '지하 B1이 아직 개방되지 않았습니다.' };
+    if (!isB1Unlocked()) {
+      return { ok: false, reason: '지휘 본부 Lv.2 증축 시 지하 B1이 개방됩니다.' };
     }
     if (state.phase !== 'day') {
       return { ok: false, reason: '정비 페이즈(낮)에만 지하 설비를 배치할 수 있습니다.' };
@@ -1196,7 +1211,7 @@ window.ZS = window.ZS || {};
   }
 
   function canMoveB1Item(fromX, fromY, toX, toY) {
-    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+    if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       return { ok: false, reason: '주간 지하 B1 레이어에서만 이동할 수 있습니다.' };
     }
     if (fromX === toX && fromY === toY) {
@@ -1270,7 +1285,7 @@ window.ZS = window.ZS || {};
   }
 
   function removeB1ItemAt(tx, ty) {
-    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+    if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       return false;
     }
     const ug = ensureUndergroundState();
@@ -1310,6 +1325,42 @@ window.ZS = window.ZS || {};
     recomputeUndergroundConnectivity();
     const statusMap = {};
     ug._gadgetStatusMap = statusMap;
+
+    if (!isB1Unlocked()) {
+      state.b1PopCap = 0;
+      state.b1LabFlatRp = 0;
+      state.b1LabFlatPerWaveRp = 0;
+      state.b1LabMult = 0;
+      state.b1BossRpMult = 0;
+      state.b1HoloCritAdd = 0;
+      state.b1SupplyWood = 0;
+      state.b1SupplyScrap = 0;
+      state.b1SupplyProdWood = 0;
+      state.b1SupplyProdScrap = 0;
+      state.b1SupplyCoin = 0;
+      state.b1TraderDisc = 0;
+      state.b1MannedFireRateMult = 0;
+      state.b1MannedXpMult = 0;
+      state.b1DigApBonusMult = 0;
+      state.b1DigMult = 0;
+      state.b1PowerCap = 0;
+      state.b1DayCharge = 0;
+      state.b1NightGen = 0;
+      state.b1PowerDrainSave = 0;
+      state.b1NightIdleDrain = 0;
+      state.b1CozySynergy = 0;
+      return {
+        popCap: 0,
+        powerCap: 0,
+        dayCharge: 0,
+        nightGen: 0,
+        nightIdleDrain: 0,
+        cozyEntries: [],
+        cozySynergy: 0,
+        roomPurifierPct: {},
+        statusMap
+      };
+    }
 
     const activeCounts = {};
     const cozyEntries = [];
@@ -1612,19 +1663,24 @@ window.ZS = window.ZS || {};
 
   function debugAddDigAp(amount) {
     if (!G.isDebugAllowed || !G.isDebugAllowed()) return false;
+    if ((state.hqLevel || 1) < 2) {
+      if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
+      G.banner('[DEBUG] 본부 Lv.2 증축 필요', '먼저 지휘 본부를 Lv.2 이상으로 증축해 지하 B1을 개방한 뒤 굴착 AP를 충전하세요.', 'warn');
+      return false;
+    }
     const add = Number(amount) || 20;
-    state.undergroundUnlocked = true;
     ensureUndergroundState();
     state.digApCap = Math.max(state.digApCap || 24, (state.digAp || 0) + add);
     state.digAp = (state.digAp || 0) + add;
     if (ZS.Audio && ZS.Audio.playTrade) ZS.Audio.playTrade();
-    G.banner(`[DEBUG] +${add} 굴착 AP 지급`, `지하 B1 개방 · 보유 굴착력 ${state.digAp}/${state.digApCap} AP`, 'good');
+    G.banner(`[DEBUG] +${add} 굴착 AP 지급`, `보유 굴착력 ${state.digAp}/${state.digApCap} AP`, 'good');
     G.saveGame();
     G.notifyUi();
     return true;
   }
 
   Object.assign(G, {
+    isUndergroundUnlocked: isB1Unlocked,
     getB1ChebyshevDist,
     getB1RockTier,
     getB1RockTierName,
@@ -1672,6 +1728,7 @@ window.ZS = window.ZS || {};
 
   if (ZS.Game) {
     Object.assign(ZS.Game, {
+      isUndergroundUnlocked: isB1Unlocked,
       getB1ChebyshevDist,
       getB1RockTier,
       getB1RockTierName,

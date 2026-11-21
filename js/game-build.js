@@ -31,6 +31,14 @@ window.ZS = window.ZS || {};
     if (curLv >= maxLv) {
       return { ok: false, isMax: true, reason: '이미 최고 연구 단계에 도달했습니다.' };
     }
+    if (def.branch === 'bunker_eng' && (state.hqLevel || 1) < 2) {
+      return {
+        ok: false,
+        lockedByHq: true,
+        reqHqLevel: 2,
+        reason: '지휘 본부 Lv.2 증축(지하 B1 개방) 후 연구할 수 있습니다.'
+      };
+    }
     const reqs = Array.isArray(def.req) ? def.req : [];
     const missing = [];
     for (let i = 0; i < reqs.length; i++) {
@@ -550,6 +558,11 @@ window.ZS = window.ZS || {};
   }
 
   function recalculateBaseStats(silentTierUp) {
+    state.undergroundUnlocked = (state.hqLevel || 1) >= 2;
+    if (!state.undergroundUnlocked && state.activeLayer === 'underground') {
+      if (G.exitUnderground) G.exitUnderground();
+      else state.activeLayer = 'surface';
+    }
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
     const hqAura = hqInfo && hqInfo.globalAura ? hqInfo.globalAura : null;
     const hqStructHpMult = (hqAura && hqAura.structHpMult) || 1.0;

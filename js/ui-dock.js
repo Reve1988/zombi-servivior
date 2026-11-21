@@ -1515,7 +1515,7 @@ window.ZS = window.ZS || {};
         actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`;
       }
 
-      if (st.undergroundUnlocked) {
+      if ((st.hqLevel || 1) >= 2 && st.undergroundUnlocked) {
         const b1Dis = st.phase !== 'day' ? 'disabled' : '';
         actionHtml += `<button id="btn-enter-b1" class="detail-upgrade-btn b1-action-btn" ${b1Dis} title="지하 B1 쉘터 레이어 진입 (주간 전용 · 단축키 B)">${ozIcon('b1-elevator', 15, 'icon-ap')}<span>지하 B1 진입</span></button>`;
       }

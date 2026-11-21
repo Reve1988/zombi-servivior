@@ -381,6 +381,10 @@ window.ZS = window.ZS || {};
     if (G.onWaveBanner) G.onWaveBanner(title, sub, tone || 'info');
   }
 
+  function isUndergroundUnlocked() {
+    return (state.hqLevel || 1) >= 2;
+  }
+
   function getHqLevelInfo(lv) {
     const targetLv = lv || state.hqLevel || 1;
     const list = DATA.HQ_LEVELS || [];
@@ -1937,7 +1941,12 @@ window.ZS = window.ZS || {};
           }
         }
         state.researchedTechs = sanitizedTechs;
-        state.undergroundUnlocked = d.undergroundUnlocked !== undefined ? !!d.undergroundUnlocked : state.hqLevel >= 2;
+        const expectedUgUnlock = state.hqLevel >= 2;
+        if (!!d.undergroundUnlocked !== expectedUgUnlock) migratedTechOrJobs = true;
+        state.undergroundUnlocked = expectedUgUnlock;
+        if (!state.undergroundUnlocked) {
+          state.digAp = 0;
+        }
       } else {
         // Legacy save (v0.7.0 and earlier) tech auto-unlock migration based on saved hqLevel
         const inferred = {};
@@ -1953,7 +1962,9 @@ window.ZS = window.ZS || {};
             state.digAp = Math.min(state.digApCap, 16);
           }
         } else {
-          state.undergroundUnlocked = !!d.undergroundUnlocked;
+          if (d.undergroundUnlocked) migratedTechOrJobs = true;
+          state.undergroundUnlocked = false;
+          state.digAp = 0;
         }
         if (state.hqLevel >= 3) {
           inferred.def_t2 = 1;
@@ -2336,6 +2347,7 @@ window.ZS = window.ZS || {};
     notifyUi,
     notifyCombatHud,
     banner,
+    isUndergroundUnlocked,
     getHqLevelInfo,
     normalizeJobs,
     grantAgents,
