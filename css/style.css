@@ -4611,6 +4611,10 @@ body.main-menu-active #game-canvas {
   color: #94A3B8;
 }
 
+.tech-req-line.hq-lock {
+  color: #FBBF24;
+}
+
 @media (max-width: 1120px) {
   .tech-branches-grid {
     grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));

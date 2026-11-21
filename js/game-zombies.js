@@ -1249,6 +1249,8 @@ window.ZS = window.ZS || {};
     adjustJob: G.adjustJob,
     getTechLevel: G.getTechLevel,
     getTechCost: G.getTechCost,
+    getHqUnlockWave: G.getHqUnlockWave,
+    getTechGateInfo: G.getTechGateInfo,
     canResearchTech: G.canResearchTech,
     researchTech: G.researchTech,
     getItemRequiredTech: G.getItemRequiredTech,

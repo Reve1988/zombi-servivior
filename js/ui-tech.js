@@ -200,6 +200,8 @@ window.ZS = window.ZS || {};
             } else if (check.ok) {
               stateCls = 'tech-ready';
               badgeHtml = `<span class="tech-state-pill ready"><span>연구 가능</span></span>`;
+            } else if (check.lockedByHq) {
+              badgeHtml = `<span class="tech-state-pill locked">${ozIcon('state-lock', 12, 'icon-muted')}<span>본부 Lv.${check.reqHqLevel}</span></span>`;
             } else if (!check.missingReq) {
               stateCls = 'tech-short';
               badgeHtml = `<span class="tech-state-pill short"><span>RP 부족</span></span>`;
@@ -213,7 +215,8 @@ window.ZS = window.ZS || {};
 
             let reqHtml = '';
             if (check.lockedByHq) {
-              reqHtml = `<div class="tech-req-line">조건: 지휘 본부 Lv.${check.reqHqLevel || 2} 증축 필요</div>`;
+              const reqWave = check.reqWave || (ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(check.reqHqLevel) : (check.reqHqLevel > 1 ? (check.reqHqLevel - 1) * 20 : 1));
+              reqHtml = `<div class="tech-req-line hq-lock">본부 Lv.${check.reqHqLevel} (W${reqWave}) 필요</div>`;
             } else if (Array.isArray(t.req) && t.req.length > 0 && check.missingReq) {
               const reqNames = t.req.map((rid) => (tree[rid] ? tree[rid].name : rid));
               reqHtml = `<div class="tech-req-line">선행: ${escapeHtml(reqNames.join(' + '))}</div>`;
@@ -277,7 +280,7 @@ window.ZS = window.ZS || {};
 
     const rpBadge = document.getElementById('tech-modal-rp-badge');
     if (rpBadge) {
-      rpBadge.innerHTML = `${ozIcon('res-rp', 16, 'icon-rp')}<span>보유 ${Math.floor(st.rp || 0)} RP</span>`;
+      rpBadge.innerHTML = `${ozIcon('res-rp', 16, 'icon-rp')}<span>본부 Lv.${st.hqLevel || 1} 인가 · 보유 ${Math.floor(st.rp || 0)} RP</span>`;
     }
 
     renderJobBar(st);

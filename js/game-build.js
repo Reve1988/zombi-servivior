@@ -18,6 +18,32 @@ window.ZS = window.ZS || {};
     return (def.costRp || 0) + curLv * (def.costStep || 0);
   }
 
+  function getHqUnlockWave(hqLevel) {
+    const lv = Math.max(1, Math.round(Number(hqLevel) || 1));
+    const levels = DATA.HQ_LEVELS || [];
+    for (let i = 0; i < levels.length; i++) {
+      if (levels[i] && levels[i].level === lv) {
+        return levels[i].reqWave || (lv > 1 ? (lv - 1) * 20 : 1);
+      }
+    }
+    return lv > 1 ? (lv - 1) * 20 : 1;
+  }
+
+  function getTechGateInfo(reqTechId) {
+    const tDef = reqTechId && DATA.TECH_TREE ? DATA.TECH_TREE[reqTechId] : null;
+    const reqTechName = tDef ? tDef.name : reqTechId;
+    const reqHqLevel = Math.max(1, Number((tDef && tDef.reqHqLevel) || (tDef && tDef.branch === 'bunker_eng' ? 2 : 1)) || 1);
+    const reqWave = getHqUnlockWave(reqHqLevel);
+    const lockedByHq = (state.hqLevel || 1) < reqHqLevel;
+    return {
+      reqTechId,
+      reqTechName,
+      reqHqLevel,
+      reqWave,
+      lockedByHq
+    };
+  }
+
   function canResearchTech(id) {
     if (state.phase === 'gameover') {
       return { ok: false, reason: '작전 실패 상태에서는 연구를 진행할 수 없습니다.' };
@@ -31,12 +57,15 @@ window.ZS = window.ZS || {};
     if (curLv >= maxLv) {
       return { ok: false, isMax: true, reason: '이미 최고 연구 단계에 도달했습니다.' };
     }
-    if (def.branch === 'bunker_eng' && (state.hqLevel || 1) < 2) {
+    const gate = getTechGateInfo(id);
+    if (gate.lockedByHq) {
+      const extraHint = gate.reqHqLevel === 2 && def.branch === 'bunker_eng' ? ' · 지하 B1 개방' : '';
       return {
         ok: false,
         lockedByHq: true,
-        reqHqLevel: 2,
-        reason: '지휘 본부 Lv.2 증축(지하 B1 개방) 후 연구할 수 있습니다.'
+        reqHqLevel: gate.reqHqLevel,
+        reqWave: gate.reqWave,
+        reason: `지휘 본부 Lv.${gate.reqHqLevel} (Wave ${gate.reqWave}+${extraHint}) 증축 후 연구할 수 있습니다.`
       };
     }
     const reqs = Array.isArray(def.req) ? def.req : [];
@@ -1208,14 +1237,19 @@ window.ZS = window.ZS || {};
     const hasVoucher = hasPodVoucher || (state.freeVouchers[itemId] || 0) > 0;
     const reqTechId = getItemRequiredTech(itemId);
     if (!hasVoucher && reqTechId && getTechLevel(reqTechId) <= 0) {
-      const tDef = DATA.TECH_TREE && DATA.TECH_TREE[reqTechId];
-      const tName = tDef ? tDef.name : reqTechId;
+      const gate = getTechGateInfo(reqTechId);
+      const reason = gate.lockedByHq
+        ? `본부 Lv.${gate.reqHqLevel} (W${gate.reqWave}) 증축 및 [${gate.reqTechName}] 연구 완료 시 해금됩니다.`
+        : `연구 [${gate.reqTechName}] 완료 시 해금됩니다.`;
       return {
         ok: false,
-        reason: `연구 [${tName}] 완료 시 해금됩니다.`,
+        reason,
         techLocked: true,
+        lockedByHq: gate.lockedByHq,
+        reqHqLevel: gate.reqHqLevel,
+        reqWave: gate.reqWave,
         reqTechId,
-        reqTechName: tName
+        reqTechName: gate.reqTechName
       };
     }
 
@@ -1246,14 +1280,19 @@ window.ZS = window.ZS || {};
       } else if (itemId === 'barricade_wall' && DATA.ITEMS[existing.id] && DATA.ITEMS[existing.id].canMountOnWall) {
         const wallLv2Tech = getUpgradeRequiredTech(def, 2) || 'def_t1';
         if (getTechLevel(wallLv2Tech) <= 0) {
-          const tDef = DATA.TECH_TREE && DATA.TECH_TREE[wallLv2Tech];
-          const tName = tDef ? tDef.name : wallLv2Tech;
+          const gate = getTechGateInfo(wallLv2Tech);
+          const reason = gate.lockedByHq
+            ? `Lv.2 헤스코 방벽 하부 보강은 본부 Lv.${gate.reqHqLevel} (W${gate.reqWave}) 및 [${gate.reqTechName}] 연구 완료 후 가능합니다.`
+            : `Lv.2 헤스코 방벽 하부 보강은 연구 [${gate.reqTechName}] 완료 후 가능합니다.`;
           return {
             ok: false,
             techLocked: true,
+            lockedByHq: gate.lockedByHq,
+            reqHqLevel: gate.reqHqLevel,
+            reqWave: gate.reqWave,
             reqTechId: wallLv2Tech,
-            reqTechName: tName,
-            reason: `Lv.2 헤스코 방벽 하부 보강은 연구 [${tName}] 완료 후 가능합니다.`
+            reqTechName: gate.reqTechName,
+            reason
           };
         }
         autoUnderlay = true;
@@ -1357,16 +1396,21 @@ window.ZS = window.ZS || {};
     const nextProf = getStructLevelProfile(def, nextLv);
     const reqTechId = getUpgradeRequiredTech(def, nextLv);
     if (reqTechId && getTechLevel(reqTechId) <= 0) {
-      const tDef = DATA.TECH_TREE && DATA.TECH_TREE[reqTechId];
-      const tName = tDef ? tDef.name : reqTechId;
+      const gate = getTechGateInfo(reqTechId);
+      const baseReason = isTierEvo
+        ? `연구 [${gate.reqTechName}] 완료 시 ${nextProf.levelName || '상위 티어'}로 업그레이드됩니다.`
+        : `연구 [${gate.reqTechName}] 완료 시 Lv.${nextLv} 강화가 해금됩니다.`;
       return {
         ok: false,
-        reason: isTierEvo
-          ? `연구 [${tName}] 완료 시 ${nextProf.levelName || '상위 티어'}로 업그레이드됩니다.`
-          : `연구 [${tName}] 완료 시 Lv.${nextLv} 강화가 해금됩니다.`,
+        reason: gate.lockedByHq
+          ? `본부 Lv.${gate.reqHqLevel} (W${gate.reqWave}) 달성 및 ${baseReason}`
+          : baseReason,
         techLocked: true,
+        lockedByHq: gate.lockedByHq,
+        reqHqLevel: gate.reqHqLevel,
+        reqWave: gate.reqWave,
         reqTechId,
-        reqTechName: tName,
+        reqTechName: gate.reqTechName,
         cost
       };
     }
@@ -2201,6 +2245,8 @@ window.ZS = window.ZS || {};
   Object.assign(G, {
     getTechLevel,
     getTechCost,
+    getHqUnlockWave,
+    getTechGateInfo,
     canResearchTech,
     researchTech,
     getItemRequiredTech,

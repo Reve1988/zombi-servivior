@@ -332,6 +332,10 @@ window.ZS = window.ZS || {};
     if (rpEl) {
       rpEl.textContent = `${Math.floor(st.rp || 0)} RP`;
     }
+    const rpPillEl = document.getElementById('rp-pill');
+    if (rpPillEl) {
+      rpPillEl.title = `연구포인트(RP) · 현재 본부 Lv.${st.hqLevel || 1} 연구 티어 인가 (잔여 RP는 상위 본부 증축 시까지 누적 이월 — 클릭해 연구창 [T])`;
+    }
 
     // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip (dirty-memoized)
     const tier = st.cozyTier;

@@ -1244,14 +1244,24 @@ window.ZS = window.ZS || {};
     const hasVoucher = !!(state.freeVouchers && (state.freeVouchers[itemId] || 0) > 0);
     const reqTechId = G.getItemRequiredTech ? G.getItemRequiredTech(itemId) : (def.reqTech || null);
     if (!hasVoucher && reqTechId && (!G.getTechLevel || G.getTechLevel(reqTechId) <= 0)) {
+      const gate = G.getTechGateInfo ? G.getTechGateInfo(reqTechId) : null;
       const tDef = DATA.TECH_TREE && DATA.TECH_TREE[reqTechId];
-      const tName = tDef ? tDef.name : reqTechId;
+      const tName = (gate && gate.reqTechName) || (tDef ? tDef.name : reqTechId);
+      const lockedByHq = !!(gate && gate.lockedByHq);
+      const reqHqLevel = (gate && gate.reqHqLevel) || 1;
+      const reqWave = (gate && gate.reqWave) || 1;
+      const reason = lockedByHq
+        ? `본부 Lv.${reqHqLevel} (W${reqWave}) 달성 및 [${tName}] 연구 완료 후 설치할 수 있습니다. (단축키 T)`
+        : `[${tName}] 연구 완료 후 설치할 수 있습니다. (단축키 T)`;
       return {
         ok: false,
         techLocked: true,
+        lockedByHq,
+        reqHqLevel,
+        reqWave,
         reqTechId,
         reqTechName: tName,
-        reason: `[${tName}] 연구 완료 후 설치할 수 있습니다. (단축키 T)`
+        reason
       };
     }
 
