@@ -168,6 +168,8 @@ window.ZS = window.ZS || {};
     let pierceCount = 1;
     let burstSecondMult = 0;
     let splashRadius = def.splashRadius || 0;
+    let salvoCount = def.salvoCount || 1;
+    let salvoScatter = def.salvoScatter || 0;
     let chainCount = def.chainCount || 3;
     let slowDuration = def.slowDuration || 1.5;
 
@@ -247,6 +249,31 @@ window.ZS = window.ZS || {};
           pierceCount = 2;
         }
       }
+    } else if (def.id === 'missile_pod') {
+      if (lv === 1) {
+        salvoCount = 2;
+        salvoScatter = 0.25;
+        powerShot = 2.0;
+        splashRadius = 1.20;
+      } else if (lv === 2) {
+        dmgScale = 26 / 24;
+        rateScale = 1.0;
+        hpScale = 1.25;
+        powerIdle = +(powerIdle * 1.15).toFixed(2);
+        powerShot = 2.6;
+        salvoCount = 3;
+        salvoScatter = 0.50;
+        splashRadius = 1.20;
+      } else if (lv === 3) {
+        dmgScale = 28 / 24;
+        rateScale = 1.0;
+        hpScale = 1.55;
+        powerIdle = +(powerIdle * 1.30).toFixed(2);
+        powerShot = 3.4;
+        salvoCount = 6;
+        salvoScatter = 0.80;
+        splashRadius = 1.20;
+      }
     } else if (def.subType === 'turret') {
       if (lv === 2) {
         dmgScale = 1.30;
@@ -261,8 +288,6 @@ window.ZS = window.ZS || {};
         if (def.id === 'vulcan_turret') {
           powerShot = 0.24;
           critAdd = 0.12;
-        } else if (def.id === 'missile_pod') {
-          splashRadius = 1.95;
         } else if (def.id === 'emp_coil') {
           chainCount = 5;
           slowDuration = 2.4;
@@ -363,6 +388,8 @@ window.ZS = window.ZS || {};
       pierceCount,
       burstSecondMult,
       splashRadius,
+      salvoCount,
+      salvoScatter,
       chainCount,
       slowDuration,
       perkLabel: !isTierEvo && lv >= 3 && DATA.LV3_PERK_LABELS ? DATA.LV3_PERK_LABELS[def.id] || null : null
@@ -748,6 +775,8 @@ window.ZS = window.ZS || {};
       pierceCount: prof.pierceCount,
       burstSecondMult: prof.burstSecondMult,
       splashRadius: prof.splashRadius,
+      salvoCount: prof.salvoCount || def.salvoCount || 1,
+      salvoScatter: prof.salvoScatter != null ? prof.salvoScatter : (def.salvoScatter || 0),
       chainCount: prof.chainCount,
       slowDuration: prof.slowDuration,
       perkLabel: prof.perkLabel,

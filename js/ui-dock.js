@@ -1067,17 +1067,19 @@ window.ZS = window.ZS || {};
       const tBonusHint = eff.onPlateau ? ' · ★고지대(사거리+1.0, 치명+8%p)' : '';
       const rangeLabel = eff.minRange > 0 ? `${eff.minRange.toFixed(1)}~${eff.range.toFixed(1)}` : eff.range.toFixed(1);
       const splashTxt = eff.splashRadius > 0 ? ` · 폭발 ${eff.splashRadius.toFixed(2)}` : '';
+      const dmgLabel = (eff.salvoCount || 1) > 1 ? `${eff.damage.toFixed(1)}×${eff.salvoCount}발` : eff.damage.toFixed(1);
       let nextPreview = '';
       if (lv < 3) {
         const nextEff = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
         const nextPopHint = def.subType === 'manned' && lv + 1 === 3 ? ' · 요원 2명' : '';
+        const nextDmgLabel = (nextEff.salvoCount || 1) > 1 ? `${nextEff.damage.toFixed(1)}×${nextEff.salvoCount}발` : nextEff.damage.toFixed(1);
         const perkHint = lv + 1 === 3 && nextEff.perkLabel ? ` · ★${escapeHtml(nextEff.perkLabel.split(' (')[0])}` : '';
-        nextPreview = ` → [Lv.${lv + 1}: 화력 ${nextEff.damage.toFixed(1)} · 연사 ${nextEff.fireRate.toFixed(2)}/s${nextPopHint}${perkHint}]`;
+        nextPreview = ` → [Lv.${lv + 1}: 화력 ${nextDmgLabel} · 연사 ${nextEff.fireRate.toFixed(2)}/s${nextPopHint}${perkHint}]`;
       } else if (eff.perkLabel) {
         nextPreview = ` · ★${escapeHtml(eff.perkLabel)}`;
       }
       setDetailHtml(
-        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${rangeLabel}${splashTxt} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${auraInfo}${tBonusHint}${nextPreview}`,
+        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${dmgLabel} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${rangeLabel}${splashTxt} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${auraInfo}${tBonusHint}${nextPreview}`,
         actionHtml
       );
     } else if (ZS.Game.isUpgradeableDef(def)) {

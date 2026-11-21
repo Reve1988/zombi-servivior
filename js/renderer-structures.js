@@ -1976,15 +1976,14 @@ window.ZS = window.ZS || {};
           }
         }
 
-        // Cellular multi-tube rocket launcher matrix on the pitched front muzzle face:
-        // Lv.1 = 2x2 (4 tubes), Lv.2 = 3x2 (6 tubes), Lv.3 = 3x3 (9 tubes)
+        // Cellular multi-tube rocket launcher matrix matching Lv.1 (2 tubes) -> Lv.2 (3 tubes) -> Lv.3 (6 tubes)
         const cols = lv >= 2 ? 3 : 2;
-        const rows = lv >= 3 ? 3 : 2;
-        const cellR = lv >= 3 ? 2.15 : lv === 2 ? 2.35 : 2.85;
+        const rows = lv >= 3 ? 2 : 1;
+        const cellR = lv >= 3 ? 2.40 : lv === 2 ? 2.75 : 3.15;
         const bezelCol = Iso.resolveFaceColor('#5A6775', 0.9, false, 0) || '#5A6775';
         const boreCol = Iso.resolveFaceColor('#141A20', 1.0, false, 0) || '#141A20';
         for (let rIdx = 0; rIdx < rows; rIdx++) {
-          const v = 0.20 + ((rIdx + 0.5) / rows) * 0.62;
+          const v = rows === 1 ? 0.51 : 0.28 + rIdx * 0.44;
           for (let cIdx = 0; cIdx < cols; cIdx++) {
             const u = 0.16 + ((cIdx + 0.5) / cols) * 0.68;
             const gxTube = x0 + (x1 - x0) * u;

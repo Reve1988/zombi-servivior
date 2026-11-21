@@ -710,12 +710,104 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function spawnSingleRocketProjectile(sourceUid, cx, cy, zOff, txGoal, tyGoal, dmgPerRocket, critChance, splashR, isLv3, tubeIdx) {
+    const isCrit = Math.random() < (critChance || 0);
+    const finalDmg = dmgPerRocket * (isCrit ? 1.65 : 1.0);
+    const angle = Math.atan2(tyGoal - cy, txGoal - cx);
+    const perpX = -Math.sin(angle);
+    const perpY = Math.cos(angle);
+    const latOff = (((tubeIdx || 0) % 3) - 1) * 0.09;
+    const sx = cx + perpX * latOff;
+    const sy = cy + perpY * latOff;
+    const launchZ = 17.5 + (zOff || 0);
+    const targetZ = G.getTerrainElevationAt ? G.getTerrainElevationAt(txGoal, tyGoal) : 0;
+    const dist = Math.hypot(txGoal - sx, tyGoal - sy);
+    const flightDur = Math.max(0.48, Math.min(0.76, 0.34 + dist * 0.052));
+    const peakZ = Math.max(58, Math.min(72, 48 + dist * 2.6 + Math.max(launchZ, targetZ) * 0.45));
+
+    ZS.Audio.playShoot('rocket');
+    G.spawnMuzzleFlash(sx + Math.cos(angle) * 0.24, sy + 0.12 + Math.sin(angle) * 0.16, launchZ, angle, '#FF9F43', 1.15);
+    G.spawnBurstParticles(sx, sy, launchZ, '#CBD5E1', 3);
+
+    state.projectiles.push({
+      kind: 'rocket',
+      sourceUid,
+      startX: sx,
+      startY: sy,
+      startZ: launchZ,
+      x: sx,
+      y: sy,
+      z: launchZ,
+      targetX: txGoal,
+      targetY: tyGoal,
+      targetZ,
+      peakZ,
+      damage: finalDmg,
+      isCrit,
+      splash: splashR,
+      isLv3: !!isLv3,
+      life: flightDur,
+      maxLife: flightDur,
+      smokeAcc: 0
+    });
+  }
+
+  function computeSalvoImpactPoint(cx, cy, anchorX, anchorY, minR, maxR, scatter, k, count) {
+    let tx = anchorX;
+    let ty = anchorY;
+    if (scatter > 0.01) {
+      if (k === 0) {
+        const ang = Math.random() * Math.PI * 2;
+        const r = scatter * 0.25 * Math.random();
+        tx += Math.cos(ang) * r;
+        ty += Math.sin(ang) * r;
+      } else {
+        const baseA = k * 2.39996 + (Math.random() - 0.5) * 0.45;
+        const frac = Math.sqrt(k / Math.max(1, count - 1));
+        const r = scatter * (0.45 + 0.55 * frac);
+        tx += Math.cos(baseA) * r;
+        ty += Math.sin(baseA) * r;
+      }
+    }
+    tx = Math.max(0.6, Math.min(N - 0.6, tx));
+    ty = Math.max(0.6, Math.min(N - 0.6, ty));
+    const dx = tx - cx;
+    const dy = ty - cy;
+    const d = Math.hypot(dx, dy);
+    if (minR > 0 && d < minR) {
+      const safeAng = d > 1e-4 ? Math.atan2(dy, dx) : Math.atan2(anchorY - cy, anchorX - cx);
+      tx = Math.max(0.6, Math.min(N - 0.6, cx + Math.cos(safeAng) * (minR + 0.05)));
+      ty = Math.max(0.6, Math.min(N - 0.6, cy + Math.sin(safeAng) * (minR + 0.05)));
+    } else if (maxR > 0 && d > maxR + 0.5) {
+      const ang = Math.atan2(dy, dx);
+      tx = Math.max(0.6, Math.min(N - 0.6, cx + Math.cos(ang) * (maxR + 0.5)));
+      ty = Math.max(0.6, Math.min(N - 0.6, cy + Math.sin(ang) * (maxR + 0.5)));
+    }
+    return { x: tx, y: ty };
+  }
+
   function updateBurstQueue(dt) {
     for (let i = state.burstQueue.length - 1; i >= 0; i--) {
       const b = state.burstQueue[i];
       b.delay -= dt;
       if (b.delay <= 0) {
         state.burstQueue.splice(i, 1);
+        if (b.kind === 'rocket_salvo') {
+          spawnSingleRocketProjectile(
+            b.sourceUid,
+            b.cx,
+            b.cy,
+            b.zOff,
+            b.targetX,
+            b.targetY,
+            b.damage,
+            b.critChance,
+            b.splash,
+            b.isLv3,
+            b.tubeIdx
+          );
+          continue;
+        }
         const a = b.angle + (Math.random() - 0.5) * 0.08;
         const spd = 18;
         const bz = b.z !== undefined ? b.z : 9.0;
@@ -765,6 +857,40 @@ window.ZS = window.ZS || {};
     const sourceUid = st && st.id !== 'command_hq' ? st.uid : null;
     const zOff = mountBaseZ || 0;
 
+    if (def.id === 'missile_pod' || def.projType === 'rocket') {
+      const salvoCount = eff.salvoCount || def.salvoCount || 2;
+      const scatter = eff.salvoScatter != null ? eff.salvoScatter : (def.salvoScatter != null ? def.salvoScatter : 0.25);
+      const minR = eff.minRange || def.minRange || 2.2;
+      const maxR = eff.range || def.range || 8.0;
+      const splashR = eff.splashRadius !== undefined ? eff.splashRadius : (def.splashRadius || 1.20);
+      const isLv3 = (eff.level || 1) >= 3;
+      const anchorX = Math.max(0.6, Math.min(N - 0.6, target.x));
+      const anchorY = Math.max(0.6, Math.min(N - 0.6, target.y));
+
+      const p0 = computeSalvoImpactPoint(cx, cy, anchorX, anchorY, minR, maxR, scatter, 0, salvoCount);
+      spawnSingleRocketProjectile(sourceUid, cx, cy, zOff, p0.x, p0.y, eff.damage, eff.critChance, splashR, isLv3, 0);
+
+      for (let k = 1; k < salvoCount; k++) {
+        const pk = computeSalvoImpactPoint(cx, cy, anchorX, anchorY, minR, maxR, scatter, k, salvoCount);
+        state.burstQueue.push({
+          kind: 'rocket_salvo',
+          delay: k * 0.07,
+          sourceUid,
+          cx,
+          cy,
+          zOff,
+          targetX: pk.x,
+          targetY: pk.y,
+          damage: eff.damage,
+          critChance: eff.critChance,
+          splash: splashR,
+          isLv3,
+          tubeIdx: k
+        });
+      }
+      return;
+    }
+
     const isCrit = Math.random() < eff.critChance;
     const finalDmg = eff.damage * (isCrit ? 1.65 : 1.0);
     const angle = Math.atan2(target.y - cy, target.x - cx);
@@ -784,43 +910,6 @@ window.ZS = window.ZS || {};
       const vDist = lvNow >= 3 ? 0.62 : 0.50;
       const vZ = (lvNow >= 2 ? 10.1 : 7.5) + 5.0 + zOff;
       G.spawnMuzzleFlash(cx + Math.cos(angle) * vDist, cy + Math.sin(angle) * vDist, vZ, angle, '#FFE8B6', 1.0);
-    } else if (def.id === 'missile_pod' || def.projType === 'rocket') {
-      const launchZ = 17.5 + zOff;
-      G.spawnMuzzleFlash(cx + Math.cos(angle) * 0.24, cy + 0.12 + Math.sin(angle) * 0.16, launchZ, angle, '#FF9F43', 1.35);
-      G.spawnBurstParticles(cx, cy, launchZ, '#CBD5E1', 4);
-    }
-
-    if (def.id === 'missile_pod' || def.projType === 'rocket') {
-      const txGoal = Math.max(0.6, Math.min(N - 0.6, target.x));
-      const tyGoal = Math.max(0.6, Math.min(N - 0.6, target.y));
-      const dist = Math.hypot(txGoal - cx, tyGoal - cy);
-      const flightDur = Math.max(0.48, Math.min(0.76, 0.34 + dist * 0.052));
-      const startZ = 17.5 + zOff;
-      const targetZ = G.getTerrainElevationAt ? G.getTerrainElevationAt(txGoal, tyGoal) : 0;
-      const peakZ = Math.max(58, Math.min(72, 48 + dist * 2.6 + Math.max(startZ, targetZ) * 0.45));
-      const splashR = eff.splashRadius !== undefined ? eff.splashRadius : (def.splashRadius || 1.50);
-      state.projectiles.push({
-        kind: 'rocket',
-        sourceUid,
-        startX: cx,
-        startY: cy,
-        startZ,
-        x: cx,
-        y: cy,
-        z: startZ,
-        targetX: txGoal,
-        targetY: tyGoal,
-        targetZ,
-        peakZ,
-        damage: finalDmg,
-        isCrit,
-        splash: splashR,
-        isLv3: (eff.level || 1) >= 3,
-        life: flightDur,
-        maxLife: flightDur,
-        smokeAcc: 0
-      });
-      return;
     }
 
     if (def.projType === 'emp') {
@@ -1086,10 +1175,10 @@ window.ZS = window.ZS || {};
     const ix = p.targetX;
     const iy = p.targetY;
     const impElev = p.targetZ || 0;
-    const splashR = p.splash || 1.50;
+    const splashR = p.splash || 1.20;
     ZS.Audio.playExplosion();
-    G.spawnBurstParticles(ix, iy, impElev + 4, '#FF8A3D', p.isLv3 ? 16 : 12);
-    state.flares.push({ x: ix, y: iy, radius: p.isLv3 ? 2.5 : 2.1, life: 0.22 });
+    G.spawnBurstParticles(ix, iy, impElev + 4, '#FF8A3D', p.isLv3 ? 7 : 6);
+    state.flares.push({ x: ix, y: iy, radius: p.isLv3 ? 2.0 : 1.7, life: 0.18 });
     if (state.groundDecals.length >= 45) {
       state.groundDecals.shift();
     }
@@ -1099,8 +1188,8 @@ window.ZS = window.ZS || {};
       y: iy,
       radius: Math.min(0.65, splashR * 0.36),
       seed: Math.random() * 10,
-      life: 4.5,
-      maxLife: 4.5
+      life: 4.0,
+      maxLife: 4.0
     });
     state.projectiles.push({
       kind: 'ring',
@@ -1108,17 +1197,8 @@ window.ZS = window.ZS || {};
       y: iy,
       radius: splashR,
       color: p.isLv3 ? '#FF6B4A' : '#FF9F43',
-      life: 0.28,
-      maxLife: 0.28
-    });
-    state.projectiles.push({
-      kind: 'ring',
-      x: ix,
-      y: iy,
-      radius: splashR * 0.55,
-      color: '#FFE082',
-      life: 0.18,
-      maxLife: 0.18
+      life: 0.24,
+      maxLife: 0.24
     });
     for (let k = state.zombies.length - 1; k >= 0; k--) {
       const zk = state.zombies[k];
@@ -1147,7 +1227,7 @@ window.ZS = window.ZS || {};
         p.y = p.startY + (p.targetY - p.startY) * u;
         p.z = linZ + 4 * lift * u * (1 - u);
         p.smokeAcc = (p.smokeAcc || 0) + dt;
-        if (p.smokeAcc >= 0.032 && p.life > 0) {
+        if (p.smokeAcc >= 0.055 && p.life > 0) {
           p.smokeAcc = 0;
           if (state.particles.length < 240) {
             const locElev = G.getTerrainElevationAt ? G.getTerrainElevationAt(p.x, p.y) : 0;
