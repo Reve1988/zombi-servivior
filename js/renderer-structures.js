@@ -63,13 +63,50 @@ window.ZS = window.ZS || {};
     return !!(def && (def.subType === 'wall' || def.subType === 'gate'));
   }
 
-  function getWallConnectMask(structGrid, tx, ty) {
+  function getTerrainStepElev(terrainGrid, tx, ty) {
+    const t = terrainGrid && terrainGrid[ty] && terrainGrid[ty][tx];
+    if (!t) return 0;
+    if (t.kind === 'plateau') return 10;
+    if (t.kind === 'ramp') return 5;
+    return 0;
+  }
+
+  function shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, nx, ny) {
+    const tGrid = terrainGrid !== undefined ? terrainGrid : (ZS.Game && ZS.Game.state && ZS.Game.state.terrainGrid);
+    const N = (ZS.DATA && ZS.DATA.GRID_SIZE) || (structGrid && structGrid.length) || 26;
+    if (nx < 0 || ny < 0 || nx >= N || ny >= N) return false;
+    const nbT = tGrid && tGrid[ny] && tGrid[ny][nx];
+    if (nbT && nbT.kind === 'rock') return true;
+    if (tGrid) {
+      const myT = tGrid[ty] && tGrid[ty][tx];
+      const myElev = getTerrainStepElev(tGrid, tx, ty);
+      const nbElev = getTerrainStepElev(tGrid, nx, ny);
+      if (myElev !== nbElev) {
+        const dx = nx - tx;
+        const dy = ny - ty;
+        if (nbT && nbT.kind === 'ramp' && nbT.rampDir) {
+          if ((dx === nbT.rampDir.dx && dy === nbT.rampDir.dy) || (dx === -nbT.rampDir.dx && dy === -nbT.rampDir.dy)) {
+            return false;
+          }
+        }
+        if (myT && myT.kind === 'ramp' && myT.rampDir) {
+          if ((dx === myT.rampDir.dx && dy === myT.rampDir.dy) || (dx === -myT.rampDir.dx && dy === -myT.rampDir.dy)) {
+            return false;
+          }
+        }
+        return true;
+      }
+    }
+    return isWallConnectableCell(structGrid, nx, ny);
+  }
+
+  function getWallConnectMask(structGrid, tx, ty, terrainGrid) {
     if (!structGrid) return 0;
     return (
-      (isWallConnectableCell(structGrid, tx, ty - 1) ? 1 : 0) |
-      (isWallConnectableCell(structGrid, tx + 1, ty) ? 2 : 0) |
-      (isWallConnectableCell(structGrid, tx, ty + 1) ? 4 : 0) |
-      (isWallConnectableCell(structGrid, tx - 1, ty) ? 8 : 0)
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx, ty - 1) ? 1 : 0) |
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx + 1, ty) ? 2 : 0) |
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx, ty + 1) ? 4 : 0) |
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx - 1, ty) ? 8 : 0)
     );
   }
 
@@ -2318,7 +2355,8 @@ window.ZS = window.ZS || {};
       }
 
       if (id === 'solar_array') {
-        const solarOff = !!(state.isNight || !powered || (st.empStunTimer || 0) > 0);
+        const onEnergy = !!(state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx] && state.terrainGrid[ty][tx].kind === 'energy');
+        const solarOff = onEnergy ? !!((st.empStunTimer || 0) > 0) : !!(state.isNight || !powered || (st.empStunTimer || 0) > 0);
         const stamp = ensureStructureStamp(`solar|${lv}|${solarOff ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawFullStaticStructBody(sctx, id, lv, 0, 0, isUnpowered, solarOff, P, steelCol, maxAccent, 1.0);
@@ -2638,7 +2676,10 @@ window.ZS = window.ZS || {};
       }
 
       default: {
-        const defaultSolarOff = id === 'solar_array' ? !!(state.isNight || !powered || (st.empStunTimer || 0) > 0) : !powered;
+        const onEnergy = id === 'solar_array' && !!(state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx] && state.terrainGrid[ty][tx].kind === 'energy');
+        const defaultSolarOff = id === 'solar_array'
+          ? (onEnergy ? !!((st.empStunTimer || 0) > 0) : !!(state.isNight || !powered || (st.empStunTimer || 0) > 0))
+          : !powered;
         drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, defaultSolarOff, P, steelCol, maxAccent, zScale);
         break;
       }

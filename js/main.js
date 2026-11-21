@@ -37,7 +37,7 @@ window.ZS = window.ZS || {};
       if (!Array.isArray(parsed.structGrid) || !Array.isArray(parsed.floorGrid)) return null;
       const savedN = parsed.structGrid.length;
       const N = ZS.DATA.GRID_SIZE;
-      if (savedN !== N && savedN !== 18) return null;
+      if (savedN !== N && savedN !== 22 && savedN !== 18) return null;
       const hqLv = Math.max(1, Math.min(4, Number(parsed.hqLevel) || 1));
       const phaseLabel = parsed.phase === 'night' ? '야간 방어' : '주간 정비';
       const wavePad = String(Math.floor(waveNum)).padStart(2, '0');

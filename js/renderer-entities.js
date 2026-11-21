@@ -190,37 +190,65 @@ window.ZS = window.ZS || {};
     const N = DATA.GRID_SIZE;
     const tx = Math.floor(z.x);
     const ty = Math.floor(z.y);
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
     const offsets = [
       [1, 0],
       [0, 1],
       [1, 1]
     ];
-    for (let k = 0; k < offsets.length; k++) {
-      const sx = tx + offsets[k][0];
-      const sy = ty + offsets[k][1];
-      if (sx < 0 || sy < 0 || sx >= N || sy >= N) continue;
-      const st = state.structGrid[sy] && state.structGrid[sy][sx];
-      if (!st) continue;
-      const def = st.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[st.id];
-      if (def && def.passable) continue;
-      if (sx + sy + 1.0 <= z.x + z.y + 0.05) continue;
+    try {
+      for (let k = 0; k < offsets.length; k++) {
+        const sx = tx + offsets[k][0];
+        const sy = ty + offsets[k][1];
+        if (sx < 0 || sy < 0 || sx >= N || sy >= N) continue;
+        if (sx + sy + 1.0 <= z.x + z.y + 0.05) continue;
 
-      const hqLv = state.hqLevel || 1;
-      const hqOccH = hqLv === 1 ? 18 : hqLv === 2 ? 26 : hqLv === 3 ? 36 : 46;
-      const structH = st.id === 'command_hq' ? hqOccH : R.getStructVisualTopZ(st.id, st.level || 1);
-      const topPos = Iso.projectTo(sx + 0.5, sy + 0.5, structH, _occTop);
-      const botPos = Iso.projectTo(sx + 1, sy + 1, 0, _occBot);
-      const halfW = 26 * zScale;
-      if (
-        eyes.cx >= topPos.x - halfW &&
-        eyes.cx <= topPos.x + halfW &&
-        eyes.cy >= topPos.y &&
-        eyes.cy <= botPos.y
-      ) {
-        return true;
+        const tCell = state.terrainGrid && state.terrainGrid[sy] && state.terrainGrid[sy][sx];
+        const sElev = getElev(sx + 0.5, sy + 0.5);
+        if (Iso.setElevationOffset) Iso.setElevationOffset(sElev);
+
+        const st = state.structGrid[sy] && state.structGrid[sy][sx];
+        if (st) {
+          const def = st.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[st.id];
+          if (!(def && def.passable)) {
+            const hqLv = state.hqLevel || 1;
+            const hqOccH = hqLv === 1 ? 18 : hqLv === 2 ? 26 : hqLv === 3 ? 36 : 46;
+            const structH = st.id === 'command_hq' ? hqOccH : R.getStructVisualTopZ(st.id, st.level || 1);
+            const topPos = Iso.projectTo(sx + 0.5, sy + 0.5, structH, _occTop);
+            const botPos = Iso.projectTo(sx + 1, sy + 1, 0, _occBot);
+            const halfW = 26 * zScale;
+            if (
+              eyes.cx >= topPos.x - halfW &&
+              eyes.cx <= topPos.x + halfW &&
+              eyes.cy >= topPos.y &&
+              eyes.cy <= botPos.y
+            ) {
+              return true;
+            }
+          }
+        }
+
+        if (tCell && tCell.kind === 'rock') {
+          if (Iso.setElevationOffset) Iso.setElevationOffset(0);
+          const rockH = DATA.ROCK_TOP_Z != null ? DATA.ROCK_TOP_Z : 17;
+          const topPos = Iso.projectTo(sx + 0.5, sy + 0.5, rockH, _occTop);
+          const botPos = Iso.projectTo(sx + 1, sy + 1, 0, _occBot);
+          const halfW = 24 * zScale;
+          if (
+            eyes.cx >= topPos.x - halfW &&
+            eyes.cx <= topPos.x + halfW &&
+            eyes.cy >= topPos.y &&
+            eyes.cy <= botPos.y
+          ) {
+            return true;
+          }
+        }
       }
+      return false;
+    } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
     }
-    return false;
   }
 
   function drawZombieCore(ctx, z, zDef, m, timeSec, zScale, isNightLit, isGhost, isSil, P) {
@@ -747,200 +775,213 @@ window.ZS = window.ZS || {};
     const isSil = !!window.ZS_SILHOUETTE_MODE;
     const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
     const pad = Math.max(60, 80 * zScale);
-    for (let i = 0; i < projectiles.length; i++) {
-      const p = projectiles[i];
-      if (p.kind === 'acid_glob') {
-        if (isSil) continue;
-        const pStart = Iso.gridToScreen(p.startX, p.startY, 20);
-        const pEnd = Iso.gridToScreen(p.targetX, p.targetY, 20);
-        if ((pStart.x < -pad && pEnd.x < -pad) || (pStart.x > vp.w + pad && pEnd.x > vp.w + pad) ||
-            (pStart.y < -pad && pEnd.y < -pad) || (pStart.y > vp.h + pad && pEnd.y > vp.h + pad)) {
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+    try {
+      for (let i = 0; i < projectiles.length; i++) {
+        const p = projectiles[i];
+        if (Iso.setElevationOffset) Iso.setElevationOffset(0);
+        if (p.kind === 'acid_glob') {
+          if (isSil) continue;
+          const elevS = getElev(p.startX, p.startY);
+          const elevT = getElev(p.targetX, p.targetY);
+          const pStart = Iso.gridToScreen(p.startX, p.startY, 20 + elevS);
+          const pEnd = Iso.gridToScreen(p.targetX, p.targetY, 20 + elevT);
+          if ((pStart.x < -pad && pEnd.x < -pad) || (pStart.x > vp.w + pad && pEnd.x > vp.w + pad) ||
+              (pStart.y < -pad && pEnd.y < -pad) || (pStart.y > vp.h + pad && pEnd.y > vp.h + pad)) {
+            continue;
+          }
+          const prog = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.4)));
+          const arcPt = (u) => {
+            const gx = p.startX + (p.targetX - p.startX) * u;
+            const gy = p.startY + (p.targetY - p.startY) * u;
+            const gz = 11 + elevS + (elevT - elevS) * u + Math.sin(Math.PI * u) * 18;
+            return Iso.gridToScreen(gx, gy, gz);
+          };
+          ctx.save();
+          ctx.setLineDash([2, 4]);
+          ctx.strokeStyle = 'rgba(200, 245, 66, 0.45)';
+          ctx.lineWidth = 1.4 * zScale;
+          ctx.beginPath();
+          for (let k = 0; k <= 10; k++) {
+            const u = (prog * k) / 10;
+            const pt = arcPt(u);
+            if (k === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          const trailOffsets = [0.16, 0.10, 0.05];
+          for (let k = 0; k < trailOffsets.length; k++) {
+            const tu = Math.max(0, prog - trailOffsets[k]);
+            const tp = arcPt(tu);
+            ctx.fillStyle = `rgba(200, 245, 66, ${(0.20 + k * 0.20).toFixed(2)})`;
+            ctx.beginPath();
+            ctx.arc(tp.x, tp.y, (2.0 + k * 0.6) * zScale, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          const cur = arcPt(prog);
+          ctx.fillStyle = P.mutantAcid || '#C8F542';
+          ctx.beginPath();
+          ctx.arc(cur.x, cur.y, 4.0 * zScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
           continue;
         }
-        const prog = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.4)));
-        const arcPt = (u) => {
-          const gx = p.startX + (p.targetX - p.startX) * u;
-          const gy = p.startY + (p.targetY - p.startY) * u;
-          const gz = 11 + Math.sin(Math.PI * u) * 18;
-          return Iso.gridToScreen(gx, gy, gz);
-        };
-        ctx.save();
-        ctx.setLineDash([2, 4]);
-        ctx.strokeStyle = 'rgba(200, 245, 66, 0.45)';
-        ctx.lineWidth = 1.4 * zScale;
-        ctx.beginPath();
-        for (let k = 0; k <= 10; k++) {
-          const u = (prog * k) / 10;
-          const pt = arcPt(u);
-          if (k === 0) ctx.moveTo(pt.x, pt.y);
-          else ctx.lineTo(pt.x, pt.y);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        const trailOffsets = [0.16, 0.10, 0.05];
-        for (let k = 0; k < trailOffsets.length; k++) {
-          const tu = Math.max(0, prog - trailOffsets[k]);
-          const tp = arcPt(tu);
-          ctx.fillStyle = `rgba(200, 245, 66, ${(0.20 + k * 0.20).toFixed(2)})`;
+        if (p.kind === 'acid_mount_ring') {
+          if (isSil) continue;
+          const c = Iso.gridToScreen(p.x, p.y, (p.z || 22) + getElev(p.x, p.y));
+          if (c.x < -pad || c.x > vp.w + pad || c.y < -pad || c.y > vp.h + pad) continue;
+          const alpha = Math.max(0, p.life / (p.maxLife || 0.30));
+          ctx.save();
+          ctx.globalAlpha = alpha * 0.9;
+          ctx.strokeStyle = p.color || P.mutantAcid || '#C8F542';
+          ctx.lineWidth = 1.6 * zScale;
+          ctx.setLineDash([3, 2]);
           ctx.beginPath();
-          ctx.arc(tp.x, tp.y, (2.0 + k * 0.6) * zScale, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        const cur = arcPt(prog);
-        ctx.fillStyle = P.mutantAcid || '#C8F542';
-        ctx.beginPath();
-        ctx.arc(cur.x, cur.y, 4.0 * zScale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'acid_mount_ring') {
-        if (isSil) continue;
-        const c = Iso.gridToScreen(p.x, p.y, p.z || 22);
-        if (c.x < -pad || c.x > vp.w + pad || c.y < -pad || c.y > vp.h + pad) continue;
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.30));
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.9;
-        ctx.strokeStyle = p.color || P.mutantAcid || '#C8F542';
-        ctx.lineWidth = 1.6 * zScale;
-        ctx.setLineDash([3, 2]);
-        ctx.beginPath();
-        ctx.ellipse(c.x, c.y, (p.radius || 0.18) * 32 * zScale, (p.radius || 0.18) * 16 * zScale, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'emp_ring') {
-        if (isSil) continue;
-        const c = Iso.gridToScreen(p.x, p.y, 2);
-        const rMax = (p.radius || 2.1) * 38 * zScale;
-        if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
-        const t = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.35)));
-        const r = Math.max(0.15, (p.radius || 2.1) * t);
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.35));
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, alpha * 1.1);
-        R.drawIsoCircle(ctx, p.x, p.y, r, p.color || P.mutantEmp || '#B26BFF', 'rgba(178, 107, 255, 0.10)', [], 2.0 * zScale);
-        if (r > 0.65) {
-          R.drawIsoCircle(ctx, p.x, p.y, r * 0.66, 'rgba(178, 107, 255, 0.5)', null, [3, 3], 1.4 * zScale);
-        }
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'warcry_ring') {
-        if (isSil) continue;
-        const c = Iso.gridToScreen(p.x, p.y, 2);
-        const rMax = (p.radius || 3.8) * 38 * zScale;
-        if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
-        const t = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.50)));
-        const r = Math.max(0.25, (p.radius || 3.8) * t);
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.50));
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.9;
-        R.drawIsoCircle(ctx, p.x, p.y, r, p.color || '#E040FB', 'rgba(224, 64, 251, 0.06)', [], 2.2 * zScale);
-        R.drawIsoCircle(ctx, p.x, p.y, r * 0.68, 'rgba(224, 64, 251, 0.55)', null, [], 1.8 * zScale);
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'bleed_burst') {
-        if (isSil) continue;
-        const b = Iso.gridToScreen(p.x, p.y, p.z || 3);
-        if (b.x < -pad || b.x > vp.w + pad || b.y < -pad || b.y > vp.h + pad) continue;
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.32));
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.strokeStyle = P.danger;
-        ctx.lineWidth = 2.0 * zScale;
-        for (let k = 0; k < 8; k++) {
-          const a = (k / 8) * Math.PI * 2;
-          ctx.beginPath();
-          ctx.moveTo(b.x + Math.cos(a) * 8 * zScale, b.y + Math.sin(a) * 5 * zScale);
-          ctx.lineTo(b.x + Math.cos(a) * 16 * zScale, b.y + Math.sin(a) * 9.5 * zScale);
+          ctx.ellipse(c.x, c.y, (p.radius || 0.18) * 32 * zScale, (p.radius || 0.18) * 16 * zScale, 0, 0, Math.PI * 2);
           ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+          continue;
         }
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'ring') {
-        const c = Iso.gridToScreen(p.x, p.y, 2);
-        const rMax = (p.radius || 0.8) * 38 * zScale;
-        if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
-        const alpha = Math.max(0, p.life / (p.maxLife || 0.2));
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.85;
-        R.drawIsoCircle(ctx, p.x, p.y, p.radius || 0.8, p.color || '#FF9F43', 'rgba(255, 159, 67, 0.22)');
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'promo_ring') {
-        const c = Iso.gridToScreen(p.x, p.y, p.z || 18);
-        if (c.x < -pad || c.x > vp.w + pad || c.y < -pad || c.y > vp.h + pad) continue;
-        const t = 1 - Math.max(0, p.life / (p.maxLife || 0.8));
-        ctx.save();
-        ctx.globalAlpha = (1 - t) * 0.92;
-        ctx.strokeStyle = p.color || '#FFD34D';
-        ctx.lineWidth = 2.4 * zScale;
-        ctx.beginPath();
-        ctx.ellipse(c.x, c.y, (10 + t * 24) * zScale, (5.5 + t * 13) * zScale, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'spark') {
-        const p1 = Iso.gridToScreen(p.x1, p.y1, p.z || 10);
-        const p2 = Iso.gridToScreen(p.x2, p.y2, p.z || 10);
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, p.life / (p.maxLife || 0.12));
-        ctx.strokeStyle = p.color || '#FF8A3D';
-        ctx.lineWidth = 2.4 * zScale;
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo((p1.x + p2.x) * 0.5 + 3 * zScale, (p1.y + p2.y) * 0.5 - 4 * zScale);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-        ctx.restore();
-        continue;
-      }
-      if (p.kind === 'sniper_trail') {
-        const p1 = Iso.gridToScreen(p.x1, p.y1, p.z || 24);
-        const p2 = Iso.gridToScreen(p.x2, p.y2, p.z || 24);
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, p.life / (p.maxLife || 0.15)) * 0.9;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 3.2 * zScale;
+        if (p.kind === 'emp_ring') {
+          if (isSil) continue;
+          if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(p.x, p.y));
+          const c = Iso.gridToScreen(p.x, p.y, 2);
+          const rMax = (p.radius || 2.1) * 38 * zScale;
+          if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
+          const t = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.35)));
+          const r = Math.max(0.15, (p.radius || 2.1) * t);
+          const alpha = Math.max(0, p.life / (p.maxLife || 0.35));
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, alpha * 1.1);
+          R.drawIsoCircle(ctx, p.x, p.y, r, p.color || P.mutantEmp || '#B26BFF', 'rgba(178, 107, 255, 0.10)', [], 2.0 * zScale);
+          if (r > 0.65) {
+            R.drawIsoCircle(ctx, p.x, p.y, r * 0.66, 'rgba(178, 107, 255, 0.5)', null, [3, 3], 1.4 * zScale);
+          }
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'warcry_ring') {
+          if (isSil) continue;
+          if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(p.x, p.y));
+          const c = Iso.gridToScreen(p.x, p.y, 2);
+          const rMax = (p.radius || 3.8) * 38 * zScale;
+          if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
+          const t = Math.max(0, Math.min(1, 1 - p.life / (p.maxLife || 0.50)));
+          const r = Math.max(0.25, (p.radius || 3.8) * t);
+          const alpha = Math.max(0, p.life / (p.maxLife || 0.50));
+          ctx.save();
+          ctx.globalAlpha = alpha * 0.9;
+          R.drawIsoCircle(ctx, p.x, p.y, r, p.color || '#E040FB', 'rgba(224, 64, 251, 0.06)', [], 2.2 * zScale);
+          R.drawIsoCircle(ctx, p.x, p.y, r * 0.68, 'rgba(224, 64, 251, 0.55)', null, [], 1.8 * zScale);
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'bleed_burst') {
+          if (isSil) continue;
+          const b = Iso.gridToScreen(p.x, p.y, (p.z || 3) + getElev(p.x, p.y));
+          if (b.x < -pad || b.x > vp.w + pad || b.y < -pad || b.y > vp.h + pad) continue;
+          const alpha = Math.max(0, p.life / (p.maxLife || 0.32));
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = P.danger;
+          ctx.lineWidth = 2.0 * zScale;
+          for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(b.x + Math.cos(a) * 8 * zScale, b.y + Math.sin(a) * 5 * zScale);
+            ctx.lineTo(b.x + Math.cos(a) * 16 * zScale, b.y + Math.sin(a) * 9.5 * zScale);
+            ctx.stroke();
+          }
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'ring') {
+          if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(p.x, p.y));
+          const c = Iso.gridToScreen(p.x, p.y, 2);
+          const rMax = (p.radius || 0.8) * 38 * zScale;
+          if (c.x + rMax < 0 || c.x - rMax > vp.w || c.y + rMax < 0 || c.y - rMax > vp.h) continue;
+          const alpha = Math.max(0, p.life / (p.maxLife || 0.2));
+          ctx.save();
+          ctx.globalAlpha = alpha * 0.85;
+          R.drawIsoCircle(ctx, p.x, p.y, p.radius || 0.8, p.color || '#FF9F43', 'rgba(255, 159, 67, 0.22)');
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'promo_ring') {
+          const c = Iso.gridToScreen(p.x, p.y, (p.z || 18) + getElev(p.x, p.y));
+          if (c.x < -pad || c.x > vp.w + pad || c.y < -pad || c.y > vp.h + pad) continue;
+          const t = 1 - Math.max(0, p.life / (p.maxLife || 0.8));
+          ctx.save();
+          ctx.globalAlpha = (1 - t) * 0.92;
+          ctx.strokeStyle = p.color || '#FFD34D';
+          ctx.lineWidth = 2.4 * zScale;
+          ctx.beginPath();
+          ctx.ellipse(c.x, c.y, (10 + t * 24) * zScale, (5.5 + t * 13) * zScale, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'spark') {
+          const p1 = Iso.gridToScreen(p.x1, p.y1, (p.z || 10) + getElev(p.x1, p.y1));
+          const p2 = Iso.gridToScreen(p.x2, p.y2, (p.z || 10) + getElev(p.x2, p.y2));
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life / (p.maxLife || 0.12));
+          ctx.strokeStyle = p.color || '#FF8A3D';
+          ctx.lineWidth = 2.4 * zScale;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo((p1.x + p2.x) * 0.5 + 3 * zScale, (p1.y + p2.y) * 0.5 - 4 * zScale);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'sniper_trail') {
+          const p1 = Iso.gridToScreen(p.x1, p.y1, p.z || 24);
+          const p2 = Iso.gridToScreen(p.x2, p.y2, p.z || 24);
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life / (p.maxLife || 0.15)) * 0.9;
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 3.2 * zScale;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        if (p.kind === 'chain') {
+          ctx.strokeStyle = ZS.DATA.PALETTE.power;
+          ctx.lineWidth = 2.2 * (p.widthMult || 1.0) * zScale;
+          ctx.beginPath();
+          for (let k = 0; k < p.points.length; k++) {
+            const ptG = p.points[k];
+            const pt = Iso.gridToScreen(ptG.x, ptG.y, 14 + getElev(ptG.x, ptG.y));
+            if (k === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x + (Math.random() - 0.5) * 6, pt.y + (Math.random() - 0.5) * 6);
+          }
+          ctx.stroke();
+          continue;
+        }
+
+        const cur = Iso.gridToScreen(p.x, p.y, p.z || 12);
+        if (cur.x < -pad || cur.x > vp.w + pad || cur.y < -pad || cur.y > vp.h + pad) continue;
+        const prev = Iso.gridToScreen(p.x - p.vx * 0.035, p.y - p.vy * 0.035, p.z || 12);
+        ctx.strokeStyle = p.color || '#ffe484';
+        ctx.lineWidth = (p.width || 2.2) * zScale;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(cur.x, cur.y);
         ctx.stroke();
-        ctx.restore();
-        continue;
       }
-      if (p.kind === 'chain') {
-        ctx.strokeStyle = ZS.DATA.PALETTE.power;
-        ctx.lineWidth = 2.2 * (p.widthMult || 1.0) * zScale;
-        ctx.beginPath();
-        for (let k = 0; k < p.points.length; k++) {
-          const pt = Iso.gridToScreen(p.points[k].x, p.points[k].y, 14);
-          if (k === 0) ctx.moveTo(pt.x, pt.y);
-          else ctx.lineTo(pt.x + (Math.random() - 0.5) * 6, pt.y + (Math.random() - 0.5) * 6);
-        }
-        ctx.stroke();
-        continue;
-      }
-
-      const cur = Iso.gridToScreen(p.x, p.y, p.z || 12);
-      if (cur.x < -pad || cur.x > vp.w + pad || cur.y < -pad || cur.y > vp.h + pad) continue;
-      const prev = Iso.gridToScreen(p.x - p.vx * 0.035, p.y - p.vy * 0.035, p.z || 12);
-      ctx.strokeStyle = p.color || '#ffe484';
-      ctx.lineWidth = (p.width || 2.2) * zScale;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(prev.x, prev.y);
-      ctx.lineTo(cur.x, cur.y);
-      ctx.stroke();
+    } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
     }
   }
 
@@ -949,14 +990,16 @@ window.ZS = window.ZS || {};
     const Iso = ZS.Iso;
     const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
     const pad = Math.max(40, 56 * zScale);
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
     ctx.save();
     for (let i = 0; i < stains.length; i++) {
       const stn = stains[i];
-      const spChk = Iso.gridToScreen(stn.x, stn.y, 1);
+      const elev = getElev(stn.x, stn.y);
+      const spChk = Iso.gridToScreen(stn.x, stn.y, 1 + elev);
       if (spChk.x < -pad || spChk.x > vp.w + pad || spChk.y < -pad || spChk.y > vp.h + pad) continue;
       if (stn.kind === 'acid_puddle') {
         const fade = Math.min(1, stn.life / Math.min(1.0, stn.maxLife || 2.5));
-        const p = Iso.gridToScreen(stn.x, stn.y, 0.65);
+        const p = Iso.gridToScreen(stn.x, stn.y, 0.65 + elev);
         const rx = (stn.radius || 0.32) * 30 * zScale;
         const ry = (stn.radius || 0.32) * 15 * zScale;
         ctx.globalAlpha = fade;
@@ -979,7 +1022,7 @@ window.ZS = window.ZS || {};
       }
       if (stn.kind === 'crater_crack') {
         const fade = Math.min(1, stn.life / Math.min(1.6, stn.maxLife || 5.5));
-        const p = Iso.gridToScreen(stn.x, stn.y, 0.7);
+        const p = Iso.gridToScreen(stn.x, stn.y, 0.7 + elev);
         ctx.globalAlpha = fade * 0.78;
         ctx.strokeStyle = '#1B2430';
         ctx.lineWidth = 2.0 * zScale;
@@ -995,7 +1038,7 @@ window.ZS = window.ZS || {};
         continue;
       }
       const fade = Math.min(1, stn.life / Math.min(2.2, stn.maxLife || 7.5));
-      const p = Iso.gridToScreen(stn.x, stn.y, 1.05);
+      const p = Iso.gridToScreen(stn.x, stn.y, 1.05 + elev);
       const rx = stn.radius * 30 * zScale;
       const ry = stn.radius * 15 * zScale;
 
@@ -1137,38 +1180,46 @@ window.ZS = window.ZS || {};
     const Iso = ZS.Iso;
     const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
     const pad = Math.max(36, 48 * zScale);
-    for (let i = 0; i < particles.length; i++) {
-      const pt = particles[i];
-      const sc = Iso.gridToScreen(pt.x, pt.y, pt.z);
-      if (sc.x < -pad || sc.x > vp.w + pad || sc.y < -pad || sc.y > vp.h + pad) continue;
-      const alpha = Math.max(0, pt.life / (pt.maxLife || 0.5));
-      if (pt.kind === 'cube') {
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+    try {
+      for (let i = 0; i < particles.length; i++) {
+        const pt = particles[i];
+        const elev = getElev(pt.x, pt.y);
+        if (Iso.setElevationOffset) Iso.setElevationOffset(elev);
+        const sc = Iso.gridToScreen(pt.x, pt.y, pt.z);
+        if (sc.x < -pad || sc.x > vp.w + pad || sc.y < -pad || sc.y > vp.h + pad) continue;
+        const alpha = Math.max(0, pt.life / (pt.maxLife || 0.5));
+        if (pt.kind === 'cube') {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, alpha * 1.25);
+          const w = pt.w || 0.10;
+          Iso.drawVoxelBox(ctx, pt.x - w * 0.5, pt.y - w * 0.5, pt.z, w, w, pt.h || 3.0, {
+            base: pt.color || '#94A3B8',
+            stroke: 'rgba(27, 36, 48, 0.38)'
+          });
+          ctx.restore();
+          continue;
+        }
         ctx.save();
-        ctx.globalAlpha = Math.min(1, alpha * 1.25);
-        const w = pt.w || 0.10;
-        Iso.drawVoxelBox(ctx, pt.x - w * 0.5, pt.y - w * 0.5, pt.z, w, w, pt.h || 3.0, {
-          base: pt.color || '#94A3B8',
-          stroke: 'rgba(27, 36, 48, 0.38)'
-        });
+        if (pt.kind === 'dust') {
+          const grow = 1 + (1 - alpha) * 0.65;
+          ctx.globalAlpha = alpha * 0.52;
+          ctx.fillStyle = pt.color || '#DDD2BE';
+          ctx.beginPath();
+          ctx.arc(sc.x, sc.y, pt.size * grow * zScale, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(sc.x, sc.y, pt.size * zScale, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
-        continue;
       }
-      ctx.save();
-      if (pt.kind === 'dust') {
-        const grow = 1 + (1 - alpha) * 0.65;
-        ctx.globalAlpha = alpha * 0.52;
-        ctx.fillStyle = pt.color || '#DDD2BE';
-        ctx.beginPath();
-        ctx.arc(sc.x, sc.y, pt.size * grow * zScale, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = pt.color;
-        ctx.beginPath();
-        ctx.arc(sc.x, sc.y, pt.size * zScale, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
+    } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
     }
   }
 

@@ -1564,13 +1564,18 @@ button, input, select {
   font-weight: 700;
   line-height: 1.3;
   box-shadow: 0 3px 0 #0B1119, 0 8px 20px rgba(0, 0, 0, 0.55);
-  max-width: 340px;
-  white-space: nowrap;
+  max-width: 390px;
+  white-space: normal;
 }
 
 .cursor-tooltip.ok {
   border-color: var(--col-ok, #4ADE80);
   color: #ddfbe7;
+}
+
+.cursor-tooltip.info {
+  border-color: rgba(255, 201, 74, 0.72);
+  color: #f1f5f9;
 }
 
 .dock-tabs {
