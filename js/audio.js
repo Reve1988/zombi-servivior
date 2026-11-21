@@ -130,7 +130,7 @@ ZS.Audio = (function () {
       } else if (projType === 'shotgun') {
         noise(0.11, 0.10, 750);
         tone(190, 65, 0.09, 'square', 0.06);
-      } else if (projType === 'missile' || projType === 'hq_aegis') {
+      } else if (projType === 'missile' || projType === 'rocket' || projType === 'hq_aegis') {
         noise(0.16, 0.08, 600);
         tone(280, 130, 0.15, 'triangle', 0.06);
       } else if (projType === 'emp') {

@@ -433,6 +433,97 @@ window.ZS = window.ZS || {};
     return x >= 2 && x <= N - 3 && y >= 2 && y <= N - 3;
   }
 
+  function findFirstPeakOnSegment(x0, y0, x1, y1, ignoreTx, ignoreTy) {
+    const tGrid = state.terrainGrid;
+    if (!tGrid) return null;
+    let cx = Math.floor(x0);
+    let cy = Math.floor(y0);
+    const endX = Math.floor(x1);
+    const endY = Math.floor(y1);
+    const skipX = ignoreTx !== undefined ? ignoreTx : cx;
+    const skipY = ignoreTy !== undefined ? ignoreTy : cy;
+
+    if (cx === endX && cy === endY) {
+      if (!(cx === skipX && cy === skipY) && cx >= 0 && cy >= 0 && cx < N && cy < N) {
+        const t = tGrid[cy] && tGrid[cy][cx];
+        if (t && t.kind === 'rock' && t.isPeak) return { tx: cx, ty: cy };
+      }
+      return null;
+    }
+
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const stepX = dx > 1e-8 ? 1 : dx < -1e-8 ? -1 : 0;
+    const stepY = dy > 1e-8 ? 1 : dy < -1e-8 ? -1 : 0;
+    const tDeltaX = stepX !== 0 ? Math.abs(1 / dx) : 1e9;
+    const tDeltaY = stepY !== 0 ? Math.abs(1 / dy) : 1e9;
+
+    let tMaxX = 1e9;
+    if (stepX > 0) tMaxX = (cx + 1 - x0) * tDeltaX;
+    else if (stepX < 0) {
+      const dist = x0 - cx;
+      tMaxX = (dist > 1e-7 ? dist : 1) * tDeltaX;
+    }
+    let tMaxY = 1e9;
+    if (stepY > 0) tMaxY = (cy + 1 - y0) * tDeltaY;
+    else if (stepY < 0) {
+      const dist = y0 - cy;
+      tMaxY = (dist > 1e-7 ? dist : 1) * tDeltaY;
+    }
+
+    const maxSteps = N * 3;
+    for (let s = 0; s < maxSteps; s++) {
+      if (!(cx === skipX && cy === skipY) && cx >= 0 && cy >= 0 && cx < N && cy < N) {
+        const t = tGrid[cy] && tGrid[cy][cx];
+        if (t && t.kind === 'rock' && t.isPeak) {
+          return { tx: cx, ty: cy };
+        }
+      }
+      if (cx === endX && cy === endY) break;
+      if (tMaxX > 1.0001 && tMaxY > 1.0001) break;
+      if (tMaxX < tMaxY) {
+        cx += stepX;
+        tMaxX += tDeltaX;
+      } else {
+        cy += stepY;
+        tMaxY += tDeltaY;
+      }
+    }
+    return null;
+  }
+
+  function hasDirectLineOfSight(x0, y0, x1, y1) {
+    return !findFirstPeakOnSegment(x0, y0, x1, y1);
+  }
+
+  function rotatePlateauTemplate(rawCells, rotIdx, flipX) {
+    let minX = 1e9;
+    let minY = 1e9;
+    const pts = [];
+    for (let i = 0; i < rawCells.length; i++) {
+      let x = rawCells[i][0];
+      let y = rawCells[i][1];
+      if (flipX) x = -x;
+      let rx = x;
+      let ry = y;
+      if (rotIdx === 1) { rx = -y; ry = x; }
+      else if (rotIdx === 2) { rx = -x; ry = -y; }
+      else if (rotIdx === 3) { rx = y; ry = -x; }
+      if (rx < minX) minX = rx;
+      if (ry < minY) minY = ry;
+      pts.push([rx, ry]);
+    }
+    let maxX = 0;
+    let maxY = 0;
+    for (let i = 0; i < pts.length; i++) {
+      pts[i][0] -= minX;
+      pts[i][1] -= minY;
+      if (pts[i][0] > maxX) maxX = pts[i][0];
+      if (pts[i][1] > maxY) maxY = pts[i][1];
+    }
+    return { cells: pts, bw: maxX + 1, bh: maxY + 1 };
+  }
+
   function generateProceduralTerrain(seed) {
     const rng = mulberry32(seed);
     const grid = Array.from({ length: N }, () => Array(N).fill(null));
@@ -440,115 +531,137 @@ window.ZS = window.ZS || {};
     const hy = DATA.HQ_POS.y;
     const plateauElev = DATA.PLATEAU_ELEV_Z || 10;
     const rampElev = DATA.RAMP_ELEV_Z || 5;
+    const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
     const rampEntries = new Set();
-    const plateauRects = [];
+    const placedPlateauCells = [];
     const targetPlateaus = rng() < 0.55 ? 3 : 2;
-    const shapes = [[2, 2], [2, 3], [3, 2]];
+    const organicShapes = [
+      [[0, 0], [1, 0], [0, 1]],                 // 3-tile L
+      [[0, 0], [1, 0], [2, 0], [0, 1]],         // 4-tile L
+      [[0, 0], [1, 0], [1, 1], [2, 1]],         // 4-tile stepped Z
+      [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1]]  // 5-tile P / stepped block
+    ];
+    const rectShapes = [
+      [[0, 0], [1, 0], [0, 1], [1, 1]],                 // 2x2
+      [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]]  // 3x2
+    ];
 
     for (let p = 0; p < targetPlateaus; p++) {
       let placed = false;
-      for (let tries = 0; tries < 140; tries++) {
-        const shape = shapes[Math.floor(rng() * shapes.length)];
-        const pw = shape[0];
-        const ph = shape[1];
+      for (let tries = 0; tries < 160; tries++) {
+        // Ensure at least the first plateau is an asymmetric L / stepped silhouette
+        const useOrganic = p === 0 ? true : rng() < 0.65;
+        const pool = useOrganic ? organicShapes : rectShapes;
+        const rawShape = pool[Math.floor(rng() * pool.length)];
+        const shaped = rotatePlateauTemplate(rawShape, Math.floor(rng() * 4), rng() < 0.5);
+        const bw = shaped.bw;
+        const bh = shaped.bh;
         const minC = 3;
-        const maxCx = N - 4 - pw + 1;
-        const maxCy = N - 4 - ph + 1;
+        const maxCx = N - 4 - bw + 1;
+        const maxCy = N - 4 - bh + 1;
+        if (maxCx < minC || maxCy < minC) continue;
         const px = minC + Math.floor(rng() * (maxCx - minC + 1));
         const py = minC + Math.floor(rng() * (maxCy - minC + 1));
 
-        // At least 1 flat tile gap from HQ 5x5 ([11..15]) -> keep clear of [10..16]
-        let hitsHqBuffer = false;
-        for (let yy = py; yy < py + ph && !hitsHqBuffer; yy++) {
-          for (let xx = px; xx < px + pw; xx++) {
-            if (Math.abs(xx - hx) <= 3 && Math.abs(yy - hy) <= 3) {
-              hitsHqBuffer = true;
-              break;
-            }
-          }
-        }
-        if (hitsHqBuffer) continue;
-
-        // Separated by >= 2 flat tiles from other plateaus (axis gap >= 3 covers >= 2 empty tiles between boxes)
-        let tooClose = false;
-        for (let i = 0; i < plateauRects.length; i++) {
-          const r = plateauRects[i];
-          const gapX = Math.max(px - (r.x + r.w), r.x - (px + pw));
-          const gapY = Math.max(py - (r.y + r.h), r.y - (py + ph));
-          if (Math.max(gapX, gapY) < 2) {
-            tooClose = true;
+        const worldCells = [];
+        const shapeSet = new Set();
+        let hitsHqOrOverlap = false;
+        for (let ci = 0; ci < shaped.cells.length; ci++) {
+          const xx = px + shaped.cells[ci][0];
+          const yy = py + shaped.cells[ci][1];
+          // At least 1 flat tile gap from HQ 5x5 ([11..15]) -> keep clear of [10..16]
+          if (Math.abs(xx - hx) <= 3 && Math.abs(yy - hy) <= 3) {
+            hitsHqOrOverlap = true;
             break;
           }
-        }
-        if (tooClose) continue;
-
-        // Ensure no overlap with already placed ramps or ramp entries
-        let hitsExisting = false;
-        for (let yy = py - 1; yy <= py + ph && !hitsExisting; yy++) {
-          for (let xx = px - 1; xx <= px + pw; xx++) {
-            if (grid[yy] && grid[yy][xx]) {
-              hitsExisting = true;
-              break;
-            }
-            if (xx >= px && xx < px + pw && yy >= py && yy < py + ph && rampEntries.has(xx + ',' + yy)) {
-              hitsExisting = true;
+          if (grid[yy][xx] || rampEntries.has(xx + ',' + yy)) {
+            hitsHqOrOverlap = true;
+            break;
+          }
+          for (let oi = 0; oi < placedPlateauCells.length; oi++) {
+            const o = placedPlateauCells[oi];
+            if (Math.max(Math.abs(xx - o[0]), Math.abs(yy - o[1])) <= 2) {
+              hitsHqOrOverlap = true;
               break;
             }
           }
+          if (hitsHqOrOverlap) break;
+          // Ensure no adjacent cell already holds a plateau or ramp
+          for (let k = 0; k < 4; k++) {
+            const nx = xx + card[k][0];
+            const ny = yy + card[k][1];
+            const nt = grid[ny] && grid[ny][nx];
+            if (nt && (nt.kind === 'plateau' || nt.kind === 'ramp')) {
+              hitsHqOrOverlap = true;
+              break;
+            }
+          }
+          if (hitsHqOrOverlap) break;
+          worldCells.push([xx, yy]);
+          shapeSet.add(xx + ',' + yy);
         }
-        if (hitsExisting) continue;
+        if (hitsHqOrOverlap) continue;
 
-        // Collect cardinal ramp attachment slots where ramp + low entry stay in 2..23 outside HQ 5x5
+        // Collect cardinal ramp attachment slots along outer boundary of arbitrary shape
         const candidates = [];
-        for (let xx = px; xx < px + pw; xx++) {
-          candidates.push({ rx: xx, ry: py - 1, dx: 0, dy: 1, ex: xx, ey: py - 2 });
-          candidates.push({ rx: xx, ry: py + ph, dx: 0, dy: -1, ex: xx, ey: py + ph + 1 });
-        }
-        for (let yy = py; yy < py + ph; yy++) {
-          candidates.push({ rx: px - 1, ry: yy, dx: 1, dy: 0, ex: px - 2, ey: yy });
-          candidates.push({ rx: px + pw, ry: yy, dx: -1, dy: 0, ex: px + pw + 1, ey: yy });
+        const candSeen = new Set();
+        for (let ci = 0; ci < worldCells.length; ci++) {
+          const xx = worldCells[ci][0];
+          const yy = worldCells[ci][1];
+          for (let k = 0; k < 4; k++) {
+            const odx = card[k][0];
+            const ody = card[k][1];
+            const rx = xx + odx;
+            const ry = yy + ody;
+            const dx = -odx;
+            const dy = -ody;
+            const key = rx + ',' + ry + ',' + dx + ',' + dy;
+            if (candSeen.has(key) || shapeSet.has(rx + ',' + ry)) continue;
+            candSeen.add(key);
+            candidates.push({ rx, ry, dx, dy, ex: rx - dx, ey: ry - dy });
+          }
         }
 
         const validRamps = candidates.filter((c) => {
           if (!isInsideInnerTerrainBounds(c.rx, c.ry) || isInsideHqSafeZone(c.rx, c.ry)) return false;
           if (!isInsideInnerTerrainBounds(c.ex, c.ey) || isInsideHqSafeZone(c.ex, c.ey)) return false;
           if (grid[c.ry][c.rx] || grid[c.ey][c.ex]) return false;
+          if (shapeSet.has(c.ex + ',' + c.ey)) return false;
           if (rampEntries.has(c.rx + ',' + c.ry) || rampEntries.has(c.ex + ',' + c.ey)) return false;
-          // Ensure ramp doesn't touch another plateau laterally or from behind
-          const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-          for (let k = 0; k < card.length; k++) {
+          // Ensure ramp touches ONLY its target plateau cell (rx + dx, ry + dy), no other plateau/ramp laterally or behind
+          for (let k = 0; k < 4; k++) {
             const nx = c.rx + card[k][0];
             const ny = c.ry + card[k][1];
             if (nx === c.rx + c.dx && ny === c.ry + c.dy) continue;
-            if (grid[ny] && grid[ny][nx] && (grid[ny][nx].kind === 'plateau' || grid[ny][nx].kind === 'ramp')) {
-              return false;
-            }
+            if (shapeSet.has(nx + ',' + ny)) return false;
+            const nt = grid[ny] && grid[ny][nx];
+            if (nt && (nt.kind === 'plateau' || nt.kind === 'ramp')) return false;
           }
-          // Ensure low entry doesn't abut another plateau or ramp
-          for (let k = 0; k < card.length; k++) {
+          // Ensure flat ramp entry doesn't abut another plateau or ramp
+          for (let k = 0; k < 4; k++) {
             const nx = c.ex + card[k][0];
             const ny = c.ey + card[k][1];
             if (nx === c.rx && ny === c.ry) continue;
-            if (grid[ny] && grid[ny][nx] && (grid[ny][nx].kind === 'plateau' || grid[ny][nx].kind === 'ramp')) {
-              return false;
-            }
+            if (shapeSet.has(nx + ',' + ny)) return false;
+            const nt = grid[ny] && grid[ny][nx];
+            if (nt && (nt.kind === 'plateau' || nt.kind === 'ramp')) return false;
           }
           return true;
         });
 
         if (validRamps.length === 0) continue;
 
-        for (let yy = py; yy < py + ph; yy++) {
-          for (let xx = px; xx < px + pw; xx++) {
-            grid[yy][xx] = {
-              kind: 'plateau',
-              elev: plateauElev,
-              variant: (xx * 7 + yy * 13) & 3
-            };
-          }
+        for (let ci = 0; ci < worldCells.length; ci++) {
+          const xx = worldCells[ci][0];
+          const yy = worldCells[ci][1];
+          grid[yy][xx] = {
+            kind: 'plateau',
+            elev: plateauElev,
+            variant: (xx * 7 + yy * 13) & 3
+          };
+          placedPlateauCells.push([xx, yy]);
         }
-        plateauRects.push({ x: px, y: py, w: pw, h: ph });
 
         shuffleWithRng(validRamps, rng);
         const wantRamps = rng() < 0.60 ? 2 : 1;
@@ -585,61 +698,156 @@ window.ZS = window.ZS || {};
       if (!placed && p < 2) return null;
     }
 
-    // 2) Rocks: 5~7 organic 1-4 tile clusters totaling 16~22 tiles inside 2..23
-    const clusterCount = 5 + Math.floor(rng() * 3); // 5..7
-    const maxRockTotal = Math.min(22, clusterCount * 4);
-    const minRockTotal = Math.max(16, clusterCount);
+    // 2) Rocks: 1~2 mountain ridges (3~5 connected tiles, center 1~2 isPeak: true) + 2~3 foothill clusters totaling 16~22 tiles
+    const ridgeCount = rng() < 0.25 ? 1 : 2;
+    const clusterCount = ridgeCount === 1 ? 3 : (rng() < 0.35 ? 2 : 3);
+    const minRockTotal = Math.max(16, ridgeCount * 3 + clusterCount * 2);
+    const maxRockTotal = Math.min(22, ridgeCount * 5 + clusterCount * 4);
     const targetRockTotal = minRockTotal + Math.floor(rng() * (maxRockTotal - minRockTotal + 1));
-    const clusterSizes = new Array(clusterCount).fill(1);
-    let remRocks = targetRockTotal - clusterCount;
-    while (remRocks > 0) {
-      const idx = Math.floor(rng() * clusterCount);
-      if (clusterSizes[idx] < 4) {
-        clusterSizes[idx] += 1;
-        remRocks -= 1;
+
+    const ridgeSizes = new Array(ridgeCount).fill(3);
+    const clusterSizes = new Array(clusterCount).fill(2);
+    let remRocks = targetRockTotal - (ridgeCount * 3 + clusterCount * 2);
+    let guard = 0;
+    while (remRocks > 0 && guard < 80) {
+      guard += 1;
+      const pickRidge = rng() < 0.45;
+      if (pickRidge) {
+        const idx = Math.floor(rng() * ridgeCount);
+        if (ridgeSizes[idx] < 5) {
+          ridgeSizes[idx] += 1;
+          remRocks -= 1;
+        }
+      } else {
+        const idx = Math.floor(rng() * clusterCount);
+        if (clusterSizes[idx] < 4) {
+          clusterSizes[idx] += 1;
+          remRocks -= 1;
+        }
       }
     }
 
     const rockClusterIdGrid = Array.from({ length: N }, () => Array(N).fill(-1));
-    const isValidRockCell = (x, y, clusterIdx) => {
+    const isValidRockCell = (x, y, groupIdx) => {
       if (!isInsideInnerTerrainBounds(x, y) || isInsideHqSafeZone(x, y)) return false;
       if (grid[y][x]) return false;
       if (rampEntries.has(x + ',' + y)) return false;
-      const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (let k = 0; k < card.length; k++) {
+      for (let k = 0; k < 4; k++) {
         const nx = x + card[k][0];
         const ny = y + card[k][1];
         const nt = grid[ny] && grid[ny][nx];
         if (nt && nt.kind === 'ramp') return false;
         const otherCid = rockClusterIdGrid[ny] && rockClusterIdGrid[ny][nx];
-        if (otherCid >= 0 && otherCid !== clusterIdx) return false;
+        if (otherCid >= 0 && otherCid !== groupIdx) return false;
       }
       return true;
     };
 
+    const rockTopLow = DATA.ROCK_TOP_Z || 16;
+    const rockTopPeak = DATA.ROCK_PEAK_TOP_Z || 33;
     let rockTilesPlaced = 0;
-    let rockClustersPlaced = 0;
+    let totalPeaksPlaced = 0;
+    let groupIdSeq = 0;
+
+    // 2a) Place mountain ridges (elongated 3~5-tile chains with central 1~2 isPeak: true tiles)
+    for (let rIdx = 0; rIdx < ridgeCount; rIdx++) {
+      const wantSz = ridgeSizes[rIdx];
+      const gId = groupIdSeq++;
+      let ridgeCells = null;
+      for (let tries = 0; tries < 140; tries++) {
+        const sx = 3 + Math.floor(rng() * (N - 6));
+        const sy = 3 + Math.floor(rng() * (N - 6));
+        if (!isValidRockCell(sx, sy, gId)) continue;
+        const chain = [[sx, sy]];
+        rockClusterIdGrid[sy][sx] = gId;
+        let lastDir = card[Math.floor(rng() * 4)];
+        while (chain.length < wantSz) {
+          const tail = chain[chain.length - 1];
+          const opts = [];
+          for (let k = 0; k < 4; k++) {
+            const nx = tail[0] + card[k][0];
+            const ny = tail[1] + card[k][1];
+            if (!isValidRockCell(nx, ny, gId) || rockClusterIdGrid[ny][nx] === gId) continue;
+            // Prevent folding back into a 2x2 clump: only 1 cardinal link back into current chain
+            let adjInChain = 0;
+            for (let m = 0; m < 4; m++) {
+              const cx = nx + card[m][0];
+              const cy = ny + card[m][1];
+              if (rockClusterIdGrid[cy] && rockClusterIdGrid[cy][cx] === gId) adjInChain += 1;
+            }
+            if (adjInChain !== 1) continue;
+            const dot = card[k][0] * lastDir[0] + card[k][1] * lastDir[1];
+            const w = dot > 0 ? 4 : dot === 0 ? 2 : 0;
+            for (let wi = 0; wi < w; wi++) opts.push({ nx, ny, dir: card[k] });
+          }
+          if (opts.length === 0) break;
+          const pick = opts[Math.floor(rng() * opts.length)];
+          chain.push([pick.nx, pick.ny]);
+          rockClusterIdGrid[pick.ny][pick.nx] = gId;
+          lastDir = pick.dir;
+        }
+        if (chain.length === wantSz) {
+          ridgeCells = chain;
+          break;
+        }
+        for (let ci = 0; ci < chain.length; ci++) {
+          rockClusterIdGrid[chain[ci][1]][chain[ci][0]] = -1;
+        }
+      }
+      if (!ridgeCells) return null;
+
+      const peakIndices = new Set();
+      if (wantSz === 3) {
+        peakIndices.add(1);
+      } else if (wantSz === 4) {
+        peakIndices.add(1);
+        peakIndices.add(2);
+      } else {
+        // Length 5: middle core [2] + adjacent shoulder [1] or [3] (2 contiguous peaks flanked by foothills)
+        peakIndices.add(2);
+        peakIndices.add(rng() < 0.5 ? 1 : 3);
+      }
+
+      for (let ci = 0; ci < ridgeCells.length; ci++) {
+        const rx = ridgeCells[ci][0];
+        const ry = ridgeCells[ci][1];
+        const isPeak = peakIndices.has(ci);
+        grid[ry][rx] = {
+          kind: 'rock',
+          elev: 0,
+          isPeak,
+          topZ: isPeak ? rockTopPeak : rockTopLow,
+          variant: Math.floor(rng() * 8),
+          flip: rng() < 0.5 ? 1 : 0
+        };
+        rockTilesPlaced += 1;
+        if (isPeak) totalPeaksPlaced += 1;
+      }
+    }
+
+    // 2b) Place 2~3 foothill rock clusters (isPeak: false)
+    let foothillClustersPlaced = 0;
     for (let cIdx = 0; cIdx < clusterCount; cIdx++) {
       const wantSz = clusterSizes[cIdx];
+      const gId = groupIdSeq++;
       let clusterCells = null;
-      for (let tries = 0; tries < 100; tries++) {
+      for (let tries = 0; tries < 120; tries++) {
         const sx = 2 + Math.floor(rng() * (N - 4));
         const sy = 2 + Math.floor(rng() * (N - 4));
-        if (!isValidRockCell(sx, sy, cIdx)) continue;
+        if (!isValidRockCell(sx, sy, gId)) continue;
         const cells = [[sx, sy]];
         const seen = new Set([sx + ',' + sy]);
-        rockClusterIdGrid[sy][sx] = cIdx;
+        rockClusterIdGrid[sy][sx] = gId;
         let stuck = false;
         while (cells.length < wantSz && !stuck) {
           const frontier = [];
-          const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
           for (let ci = 0; ci < cells.length; ci++) {
-            for (let k = 0; k < card.length; k++) {
+            for (let k = 0; k < 4; k++) {
               const nx = cells[ci][0] + card[k][0];
               const ny = cells[ci][1] + card[k][1];
               const key = nx + ',' + ny;
               if (seen.has(key)) continue;
-              if (isValidRockCell(nx, ny, cIdx)) {
+              if (isValidRockCell(nx, ny, gId)) {
                 frontier.push([nx, ny]);
                 seen.add(key);
               }
@@ -650,7 +858,7 @@ window.ZS = window.ZS || {};
           } else {
             const pick = frontier[Math.floor(rng() * frontier.length)];
             cells.push(pick);
-            rockClusterIdGrid[pick[1]][pick[0]] = cIdx;
+            rockClusterIdGrid[pick[1]][pick[0]] = gId;
           }
         }
         if (cells.length === wantSz) {
@@ -668,14 +876,23 @@ window.ZS = window.ZS || {};
         grid[ry][rx] = {
           kind: 'rock',
           elev: 0,
-          variant: Math.floor(rng() * 4)
+          isPeak: false,
+          topZ: rockTopLow,
+          variant: Math.floor(rng() * 8),
+          flip: rng() < 0.5 ? 1 : 0
         };
         rockTilesPlaced += 1;
       }
-      rockClustersPlaced += 1;
+      foothillClustersPlaced += 1;
     }
 
-    if (rockTilesPlaced < 16 || rockTilesPlaced > 22 || rockClustersPlaced < 5 || rockClustersPlaced > 7) {
+    if (
+      rockTilesPlaced < 16 ||
+      rockTilesPlaced > 22 ||
+      totalPeaksPlaced < 1 ||
+      foothillClustersPlaced < 2 ||
+      foothillClustersPlaced > 3
+    ) {
       return null;
     }
 
@@ -1334,6 +1551,15 @@ window.ZS = window.ZS || {};
                       windAngle: -0.6
                     }
                   : null;
+            } else if (cell.kind === 'rock') {
+              const isPeak = !!cell.isPeak;
+              nextTerrainGrid[ty][tx] = {
+                ...cell,
+                isPeak,
+                topZ: cell.topZ || (isPeak ? (DATA.ROCK_PEAK_TOP_Z || 33) : (DATA.ROCK_TOP_Z || 16)),
+                variant: Number.isFinite(cell.variant) ? cell.variant : ((tx * 5 + ty * 7) & 7),
+                flip: cell.flip ? 1 : 0
+              };
             } else {
               nextTerrainGrid[ty][tx] = { ...cell };
             }
@@ -1708,6 +1934,8 @@ window.ZS = window.ZS || {};
     createEmptyGrids,
     getTerrainAt,
     getTerrainElevationAt,
+    findFirstPeakOnSegment,
+    hasDirectLineOfSight,
     generateProceduralTerrain,
     verifyTerrainReachability,
     generateVerifiedTerrain,

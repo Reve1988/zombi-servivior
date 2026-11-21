@@ -781,6 +781,83 @@ window.ZS = window.ZS || {};
       for (let i = 0; i < projectiles.length; i++) {
         const p = projectiles[i];
         if (Iso.setElevationOffset) Iso.setElevationOffset(0);
+        if (p.kind === 'rocket') {
+          if (isSil) continue;
+          const sZ = p.startZ != null ? p.startZ : 18;
+          const tZ = p.targetZ != null ? p.targetZ : 0;
+          const lift = Math.max(24, (p.peakZ || 62) - Math.max(sZ, tZ));
+          const arcPt = (u) => {
+            const gx = p.startX + (p.targetX - p.startX) * u;
+            const gy = p.startY + (p.targetY - p.startY) * u;
+            const linZ = sZ + (tZ - sZ) * u;
+            const gz = linZ + 4 * lift * u * (1 - u);
+            return Iso.gridToScreen(gx, gy, gz);
+          };
+          const maxL = p.maxLife || 0.6;
+          const uNow = Math.max(0, Math.min(1, 1 - Math.max(0, p.life) / maxL));
+          const curP = arcPt(uNow);
+          if (curP.x < -pad || curP.x > vp.w + pad || curP.y < -pad || curP.y > vp.h + pad) continue;
+          const prevP = arcPt(Math.max(0, uNow - 0.045));
+          const angScreen = Math.atan2(curP.y - prevP.y, curP.x - prevP.x);
+
+          // Ground shadow directly below rocket height for clear altitude reading
+          const gPos = Iso.gridToScreen(p.x, p.y, getElev(p.x, p.y) + 0.5);
+          ctx.save();
+          ctx.fillStyle = 'rgba(8, 12, 18, 0.30)';
+          ctx.beginPath();
+          ctx.ellipse(gPos.x, gPos.y, 4.5 * zScale, 2.2 * zScale, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Subtle parabolic vapor smoke ribbon behind the rocket
+          ctx.strokeStyle = 'rgba(226, 232, 240, 0.42)';
+          ctx.lineWidth = 2.0 * zScale;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          const uTail = Math.max(0, uNow - 0.20);
+          for (let s = 0; s <= 6; s++) {
+            const su = uTail + ((uNow - uTail) * s) / 6;
+            const sp = arcPt(su);
+            if (s === 0) ctx.moveTo(sp.x, sp.y);
+            else ctx.lineTo(sp.x, sp.y);
+          }
+          ctx.stroke();
+
+          // Oriented rocket projectile (exhaust plume -> tail fins -> steel body -> warhead cone)
+          ctx.translate(curP.x, curP.y);
+          ctx.rotate(angScreen);
+
+          // Flame exhaust cone
+          ctx.fillStyle = '#FF8A3D';
+          ctx.beginPath();
+          ctx.moveTo(-4.0 * zScale, -2.0 * zScale);
+          ctx.lineTo(-10.5 * zScale, 0);
+          ctx.lineTo(-4.0 * zScale, 2.0 * zScale);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#FFFBEB';
+          ctx.beginPath();
+          ctx.arc(-4.5 * zScale, 0, 1.5 * zScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Stabilizer tail fins
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(-4.2 * zScale, -2.6 * zScale, 2.0 * zScale, 5.2 * zScale);
+
+          // Cylindrical fuselage
+          ctx.fillStyle = '#CBD5E1';
+          ctx.fillRect(-3.6 * zScale, -1.4 * zScale, 6.2 * zScale, 2.8 * zScale);
+
+          // Armored warhead nose cone
+          ctx.fillStyle = p.isLv3 ? '#FF5A36' : '#E0603A';
+          ctx.beginPath();
+          ctx.moveTo(2.4 * zScale, -1.5 * zScale);
+          ctx.lineTo(6.0 * zScale, 0);
+          ctx.lineTo(2.4 * zScale, 1.5 * zScale);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
         if (p.kind === 'acid_glob') {
           if (isSil) continue;
           const elevS = getElev(p.startX, p.startY);
