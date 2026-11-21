@@ -237,7 +237,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.6.0',
+  VERSION: 'v0.7.0',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
   PLATEAU_ELEV_Z: 10,
