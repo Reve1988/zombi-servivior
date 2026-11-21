@@ -18,13 +18,28 @@ window.ZS = window.ZS || {};
     wrap.innerHTML = '';
     const st = ZS.Game && ZS.Game.state;
     if (st && st.activeLayer === 'underground') {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'tab-btn active b1-tab-btn';
-      btn.innerHTML = ozIcon('b1-elevator', 20, 'icon-ap');
-      btn.setAttribute('aria-label', '지하 B1 작업');
-      btn.title = '지하 B1 쉘터 — 암반 굴착 · 구역 지정 · 방폭문 설치';
-      wrap.appendChild(btn);
+      const b1Cats = ZS.DATA.B1_CATEGORIES || [];
+      const activeB1 = uiState.activeB1Category || 'b1_ops';
+      b1Cats.forEach((cat) => {
+        const isActive = cat.id === activeB1;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tab-btn b1-tab-btn' + (isActive ? ' active' : '');
+        btn.setAttribute('data-b1-cat', cat.id);
+        btn.innerHTML = ozIcon(cat.iconId || 'b1-ops', 20, isActive ? 'icon-ap' : '');
+        btn.setAttribute('aria-label', cat.label);
+        btn.title = `${cat.label} — ${cat.desc}`;
+        btn.addEventListener('click', () => {
+          uiState.activeB1Category = cat.id;
+          if (uiState.mode !== 'inspect') {
+            setToolMode('inspect');
+          } else {
+            renderCategoryTabs();
+            renderItemCards();
+          }
+        });
+        wrap.appendChild(btn);
+      });
       return;
     }
 
@@ -92,6 +107,24 @@ window.ZS = window.ZS || {};
   }
 
   function getCardTagInfo(def) {
+    if (def.domain === 'underground') {
+      const roleDef = def.requiredRole && ZS.DATA.B1_ROOMS ? ZS.DATA.B1_ROOMS[def.requiredRole] : null;
+      const roleTag = roleDef ? roleDef.name : '지하 공용';
+      const pwrPrefix = def.requiresPower ? `${ozIcon('res-power', 13, 'icon-power')}<span>전등 ·</span>` : '';
+      if (def.popCap) {
+        return { html: `${ozIcon('res-agent', 13)}<span>수용+${def.popCap} ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`, cls: 'tag-manned' };
+      }
+      if ((def.powerCap || 0) > 0 || (def.dayCharge || 0) > 0 || (def.nightGen || 0) > 0) {
+        return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>${escapeHtml(roleTag)} · 전력 지원</span>`, cls: 'tag-power' };
+      }
+      if (def.requiredRole === 'research_lab' || def.requiredRole === 'supply_depot') {
+        return { html: `${pwrPrefix}<span>${escapeHtml(roleTag)} 보너스</span>`, cls: def.requiresPower ? 'tag-power' : 'tag-manned' };
+      }
+      if (def.cozy) {
+        return { html: `${pwrPrefix}${ozIcon('res-cozy', 13, 'icon-coin')}<span>안락함 +${def.cozy}</span>`, cls: 'tag-cozy' };
+      }
+      return { html: `<span>${escapeHtml(roleTag)}</span>`, cls: 'tag-cozy' };
+    }
     const preview = ZS.Game.getPlacementCozyPreview ? ZS.Game.getPlacementCozyPreview(def.id) : null;
     if (def.layer === 'floor') {
       if (preview && preview.isFloorCapped) {
@@ -162,9 +195,9 @@ window.ZS = window.ZS || {};
     if (nextSig === lastDockSig && container.childElementCount > 0) {
       return;
     }
-    const layerChanged = lastDockCategory !== '__b1__';
+    const layerChanged = lastDockCategory !== '__b1_ops__';
     lastDockSig = nextSig;
-    lastDockCategory = '__b1__';
+    lastDockCategory = '__b1_ops__';
 
     container.innerHTML = '';
 
@@ -214,18 +247,151 @@ window.ZS = window.ZS || {};
     if (layerChanged) container.scrollLeft = 0;
   }
 
+  const B1_ROLE_SHORT_LABELS = {
+    quarters: '생활',
+    lounge: '휴게',
+    research_lab: '연구',
+    supply_depot: '보급',
+    power_vault: '축전'
+  };
+
+  function renderB1GadgetCards(container, st) {
+    const activeB1 = uiState.activeB1Category || 'b1_living';
+    const items = Object.values(ZS.DATA.ITEMS).filter(
+      (def) => def.domain === 'underground' && def.b1Category === activeB1
+    );
+    const techSig = Object.keys(st.researchedTechs || {})
+      .sort()
+      .map((k) => `${k}:${st.researchedTechs[k]}`)
+      .join(',');
+    const ugRev = st.underground ? st.underground.rev : 0;
+    const sigParts = [
+      'b1_gadgets',
+      activeB1,
+      st.phase,
+      uiState.mode,
+      uiState.selectedItemId || '',
+      st.bossDefeated ? 1 : 0,
+      ugRev,
+      techSig
+    ];
+    for (let i = 0; i < items.length; i++) {
+      const def = items[i];
+      const vCnt = st.freeVouchers[def.id] || 0;
+      const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
+      const aff = `${st.wood >= (c.wood || 0) ? 1 : 0}${st.scrap >= (c.scrap || 0) ? 1 : 0}${st.coin >= (c.coin || 0) ? 1 : 0}`;
+      const preview = ZS.Game.getPlacementCozyPreview ? ZS.Game.getPlacementCozyPreview(def.id) : null;
+      const dimFlag = preview && preview.isDiminished ? 1 : 0;
+      sigParts.push(`${def.id}:${vCnt}:${aff}:${dimFlag}`);
+    }
+    const nextSig = sigParts.join('|');
+    if (nextSig === lastDockSig && container.childElementCount > 0) {
+      return;
+    }
+    const catKey = `__${activeB1}__`;
+    const categoryChanged = lastDockCategory !== catKey;
+    lastDockSig = nextSig;
+    lastDockCategory = catKey;
+
+    container.innerHTML = '';
+
+    items.forEach((def, idx) => {
+      const { bossLocked, voucherCount, reqTechName, techLockedRaw, voucherBypass, isLocked } = getCardLockState(def, st);
+
+      const card = document.createElement('div');
+      card.className =
+        'item-card b1-gadget-card' +
+        (uiState.mode === 'build' && uiState.selectedItemId === def.id ? ' selected' : '') +
+        (isLocked ? ' locked' : '') +
+        (voucherBypass ? ' voucher-bypass' : '');
+      card.setAttribute('data-item-id', def.id);
+
+      const tag = getCardTagInfo(def);
+      const tagPlain = tag.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      card.title = `${def.name}${tagPlain ? ` (${tagPlain})` : ''} — ${def.desc}`;
+
+      let badgeHtml = '';
+      if (bossLocked) {
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스</span></span>`;
+      } else if (voucherBypass) {
+        badgeHtml = `<span class="card-voucher-badge">${ozIcon('state-voucher', 12, 'icon-coin')}<span>보급 ${voucherCount}</span></span>`;
+      } else if (techLockedRaw) {
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>연구</span></span>`;
+      } else {
+        const rDef = def.requiredRole && ZS.DATA.B1_ROOMS ? ZS.DATA.B1_ROOMS[def.requiredRole] : null;
+        const rShort = (def.requiredRole && B1_ROLE_SHORT_LABELS[def.requiredRole]) || '공용';
+        const rAccent = (rDef && rDef.accent) || '#FFB347';
+        badgeHtml = `<span class="card-role-badge"><span class="b1-role-dot" style="background:${escapeHtml(rAccent)};"></span><span>${escapeHtml(rShort)}</span></span>`;
+      }
+
+      let costHtml = '';
+      let isTriple = false;
+      if (bossLocked) {
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스 처치</span></span>`;
+      } else if (voucherCount > 0) {
+        costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}</span></span>`;
+      } else if (techLockedRaw) {
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>${escapeHtml(reqTechName || '연구 필요')}</span></span>`;
+      } else {
+        const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
+        const costKeys = ['wood', 'scrap', 'coin'].filter((k) => (c[k] || 0) > 0);
+        isTriple = costKeys.length >= 3;
+        const iconSz = isTriple ? 11 : 13;
+        if (c.wood) {
+          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', iconSz, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
+        }
+        if (c.scrap) {
+          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">${ozIcon('res-scrap', iconSz, st.scrap < c.scrap ? 'icon-danger' : 'icon-scrap')}<span>${c.scrap}</span></span>`;
+        }
+        if (c.coin) {
+          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">${ozIcon('res-coin', iconSz, st.coin < c.coin ? 'icon-danger' : 'icon-coin')}<span>${c.coin}</span></span>`;
+        }
+      }
+
+      const hotkeyHtml = idx < 9 ? `<span class="card-hotkey">${idx + 1}</span>` : '';
+      const thumbUrl = ZS.Renderer.renderItemThumbnail ? ZS.Renderer.renderItemThumbnail(def.id, 88) : '';
+      const thumbHtml = thumbUrl
+        ? `<img class="card-thumb" src="${thumbUrl}" width="84" height="84" alt="" />`
+        : `<span class="card-thumb icon-slot">${ozIcon('b1-systems', 28)}</span>`;
+
+      card.innerHTML = `
+        ${hotkeyHtml}
+        ${badgeHtml}
+        <div class="card-visual">
+          ${thumbHtml}
+        </div>
+        <div class="card-meta">
+          <span class="card-title">${escapeHtml(def.name)}</span>
+          <div class="card-costs${isTriple ? ' triple-costs' : ''}">${costHtml}</div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        selectBuildCard(def);
+      });
+
+      container.appendChild(card);
+    });
+
+    if (categoryChanged) container.scrollLeft = 0;
+  }
+
   function renderItemCards() {
     const container = document.getElementById('item-cards');
     const st = ZS.Game.state;
     if (st && st.activeLayer === 'underground') {
-      renderB1DockCards(container, st);
+      if (!uiState.activeB1Category || uiState.activeB1Category === 'b1_ops') {
+        renderB1DockCards(container, st);
+      } else {
+        renderB1GadgetCards(container, st);
+      }
       return;
     }
     if (st.phase === 'night' && container.childElementCount > 0 && lastDockCategory === uiState.activeCategory) {
       return;
     }
 
-    const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
+    const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory && def.domain !== 'underground');
     const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
     const floorCappedAll = (st.cozyFloorRaw || 0) >= floorCap;
     const techSig = Object.keys(st.researchedTechs || {})
@@ -340,7 +506,7 @@ window.ZS = window.ZS || {};
   function setToolMode(mode, itemId, b1Role) {
     const st = ZS.Game && ZS.Game.state;
     const isUg = !!(st && st.activeLayer === 'underground');
-    if (isUg && (mode === 'move' || mode === 'remove' || mode === 'build')) {
+    if (isUg && st && st.phase !== 'day' && (mode === 'move' || mode === 'remove' || mode === 'build' || mode.startsWith('b1_'))) {
       mode = 'inspect';
     }
 
@@ -366,17 +532,25 @@ window.ZS = window.ZS || {};
         } else if (prev && prev.isDiminished) {
           cozyHint = ` [도배 감쇠 적용: 안락함 +${prev.gain} (50%)]`;
         }
-        const catIcon = def.category === 'defense' ? 'cat-defense' : def.category === 'infra' ? 'cat-infra' : 'cat-decor';
-        let mountHint = '';
-        if (def.canMountOnWall) {
-          mountHint =
-            def.id === 'led_floodlight'
-              ? ' [Lv.2+ 성벽 상부 거치 가능: 조명 +0.6 · 오라 +0.4]'
-              : ' [Lv.2+ 성벽 상부 거치 가능: 사거리 +0.5]';
-        } else if (def.id === 'barricade_wall') {
-          mountHint = ' [기존 거치 대상 위에 덮어 자동 하부 승격 가능]';
+        if (def.domain === 'underground') {
+          const rDef = def.requiredRole && ZS.DATA.B1_ROOMS ? ZS.DATA.B1_ROOMS[def.requiredRole] : null;
+          const catIcon = (rDef && rDef.iconId) || (def.b1Category === 'b1_living' ? 'b1-living' : 'b1-systems');
+          const roleHint = rDef ? ` [배치 구역: ${rDef.name} 내부]` : ' [배치 구역: 굴착된 지하 공간 자유 배치]';
+          const pwrHint = def.requiresPower && def.powerIdle ? ` [야간 전력 -${def.powerIdle}/s]` : '';
+          setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + roleHint + pwrHint + cozyHint)}`);
+        } else {
+          const catIcon = def.category === 'defense' ? 'cat-defense' : def.category === 'infra' ? 'cat-infra' : 'cat-decor';
+          let mountHint = '';
+          if (def.canMountOnWall) {
+            mountHint =
+              def.id === 'led_floodlight'
+                ? ' [Lv.2+ 성벽 상부 거치 가능: 조명 +0.6 · 오라 +0.4]'
+                : ' [Lv.2+ 성벽 상부 거치 가능: 사거리 +0.5]';
+          } else if (def.id === 'barricade_wall') {
+            mountHint = ' [기존 거치 대상 위에 덮어 자동 하부 승격 가능]';
+          }
+          setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + cozyHint + mountHint)}`);
         }
-        setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + cozyHint + mountHint)}`);
       }
     } else if (mode === 'b1_dig' || mode === 'b1_door' || mode === 'b1_zone' || mode === 'b1_unzone') {
       uiState.selectedItemId = null;
@@ -393,11 +567,19 @@ window.ZS = window.ZS || {};
       uiState.selectedB1ToolId = null;
       uiState.selectedB1Role = null;
       if (mode === 'move') {
-        setDetailHtml(`${ozIcon('tool-move', 14)} <b>[무료 이동 모드]</b> 옮길 시설을 클릭한 뒤, 이동할 빈 타일을 클릭하세요. (낮 전용)`);
+        setDetailHtml(
+          isUg
+            ? `${ozIcon('tool-move', 14)} <b>[지하 가젯 이동]</b> 옮길 지하 가젯을 클릭한 뒤, 같은 역할의 빈 타일을 클릭하세요. (낮 전용)`
+            : `${ozIcon('tool-move', 14)} <b>[무료 이동 모드]</b> 옮길 시설을 클릭한 뒤, 이동할 빈 타일을 클릭하세요. (낮 전용)`
+        );
       } else if (mode === 'remove') {
-        setDetailHtml(`${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 모드]</b> 철거할 시설 또는 바닥 타일을 클릭하면 건설 자원의 80%를 돌려받습니다.`);
+        setDetailHtml(
+          isUg
+            ? `${ozIcon('tool-remove', 14, 'icon-danger')} <b>[지하 가젯 철거]</b> 철거할 지하 설비를 클릭하면 건설 자원의 80%를 돌려받습니다.`
+            : `${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 모드]</b> 철거할 시설 또는 바닥 타일을 클릭하면 건설 자원의 80%를 돌려받습니다.`
+        );
       } else if (isUg) {
-        setDetailHtml(`${ozIcon('tool-inspect', 14)} 지하 B1 타일·구역·승강기(11, 11)를 클릭해 상태와 연결 여부를 확인하세요.`);
+        setDetailHtml(`${ozIcon('tool-inspect', 14)} 지하 B1 타일·구역·가젯·승강기(11, 11)를 클릭해 상태와 연결 여부를 확인하세요.`);
       } else {
         setDetailHtml(`${ozIcon('tool-inspect', 14)} 기지 내 시설을 클릭하면 현재 적용 중인 안락함·오라 버프와 상세 스탯을 확인할 수 있습니다.`);
       }
@@ -406,13 +588,14 @@ window.ZS = window.ZS || {};
     document.getElementById('tool-inspect').classList.toggle('active', mode === 'inspect');
     const moveBtn = document.getElementById('tool-move');
     const removeBtn = document.getElementById('tool-remove');
+    const disableEdit = isUg && st && st.phase !== 'day';
     if (moveBtn) {
       moveBtn.classList.toggle('active', mode === 'move');
-      moveBtn.disabled = isUg;
+      moveBtn.disabled = disableEdit;
     }
     if (removeBtn) {
       removeBtn.classList.toggle('active', mode === 'remove');
-      removeBtn.disabled = isUg;
+      removeBtn.disabled = disableEdit;
     }
     syncDetailBarVisibility();
     renderItemCards();
@@ -545,7 +728,8 @@ window.ZS = window.ZS || {};
       const dragKey = uiState.b1DragStart && uiState.b1DragCurrent
         ? `${uiState.b1DragStart.tx},${uiState.b1DragStart.ty}:${uiState.b1DragCurrent.tx},${uiState.b1DragCurrent.ty}`
         : '';
-      const ugKey = `b1|${uiState.mode}|${uiState.selectedB1Role || ''}|${tx},${ty}|${Math.floor(st.digAp || 0)}|${ug ? ug.rev : 0}|${doorKey}|${dragKey}`;
+      const srcKey = uiState.movingSource ? `${uiState.movingSource.tx},${uiState.movingSource.ty}` : '';
+      const ugKey = `b1|${uiState.mode}|${uiState.selectedB1Role || ''}|${uiState.selectedItemId || ''}|${srcKey}|${tx},${ty}|${Math.floor(st.digAp || 0)}|${ug ? ug.rev : 0}|${doorKey}|${dragKey}`;
       if (ugKey !== lastTipStateKey) {
         lastTipStateKey = ugKey;
         let tipText = null;
@@ -620,8 +804,79 @@ window.ZS = window.ZS || {};
             tipIcon = 'b1-door';
             tipIconCls = 'icon-muted';
           }
+        } else if (uiState.mode === 'build' && uiState.selectedItemId) {
+          const def = ZS.DATA.ITEMS[uiState.selectedItemId];
+          const check = ZS.Game.canPlaceB1Item ? ZS.Game.canPlaceB1Item(uiState.selectedItemId, tx, ty) : null;
+          if (check && check.ok) {
+            tipText = `[${def ? def.name : '설비'}] 설치 가능 (${tx}, ${ty})`;
+            tipKind = 'ok';
+            tipIcon = 'b1-systems';
+            tipIconCls = 'icon-heal';
+          } else if (check && check.reason) {
+            tipText = check.reason;
+            tipKind = 'err';
+            tipIcon = 'state-lock';
+            tipIconCls = 'icon-danger';
+          }
+        } else if (uiState.mode === 'move') {
+          const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+          if (!uiState.movingSource) {
+            if (g && ZS.DATA.ITEMS[g.id]) {
+              tipText = `클릭하여 [${ZS.DATA.ITEMS[g.id].name}] 이동 시작`;
+              tipKind = 'ok';
+              tipIcon = 'tool-move';
+              tipIconCls = 'icon-ap';
+            } else {
+              tipText = '이동할 지하 가젯이 있는 타일을 클릭하세요.';
+              tipKind = 'info';
+              tipIcon = 'tool-move';
+              tipIconCls = 'icon-muted';
+            }
+          } else {
+            const src = uiState.movingSource;
+            const check = ZS.Game.canMoveB1Item ? ZS.Game.canMoveB1Item(src.tx, src.ty, tx, ty) : null;
+            if (check && check.ok) {
+              tipText = `클릭하여 (${tx}, ${ty}) 위치로 무료 이동`;
+              tipKind = 'ok';
+              tipIcon = 'tool-move';
+              tipIconCls = 'icon-heal';
+            } else if (check && check.reason) {
+              tipText = check.reason;
+              tipKind = check.sameTile ? 'info' : 'err';
+              tipIcon = 'state-lock';
+              tipIconCls = check.sameTile ? 'icon-muted' : 'icon-danger';
+            }
+          }
+        } else if (uiState.mode === 'remove') {
+          const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+          if (g && ZS.DATA.ITEMS[g.id]) {
+            tipText = `클릭하여 [${ZS.DATA.ITEMS[g.id].name}] 철거 (80% 자원 환급)`;
+            tipKind = 'err';
+            tipIcon = 'tool-remove';
+            tipIconCls = 'icon-danger';
+          } else {
+            tipText = '철거할 지하 가젯이 없는 타일입니다.';
+            tipKind = 'info';
+            tipIcon = 'tool-remove';
+            tipIconCls = 'icon-muted';
+          }
         } else if (uiState.mode === 'inspect' && cell) {
-          if (cell.elevator) {
+          const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+          if (g && ZS.DATA.ITEMS[g.id]) {
+            const def = ZS.DATA.ITEMS[g.id];
+            const gStatus = ZS.Game.getB1GadgetStatus ? ZS.Game.getB1GadgetStatus(tx, ty) : null;
+            const stText = !gStatus || !gStatus.connected
+              ? '출입문 미연결(휴면)'
+              : gStatus.blackoutPaused
+              ? '야간 정전(중단)'
+              : gStatus.diminished
+              ? '활성(도배 50%)'
+              : '활성 작동 중';
+            tipText = `${def.name} (${stText}) — 클릭해 정보·이동·철거`;
+            tipKind = !gStatus || !gStatus.active ? 'err' : 'ok';
+            tipIcon = 'b1-systems';
+            tipIconCls = !gStatus || !gStatus.active ? 'icon-danger' : 'icon-heal';
+          } else if (cell.elevator) {
             tipText = '지하 본부 화물 승강기 (11, 11) — 클릭해 지상 복귀';
             tipKind = 'info';
             tipIcon = 'b1-elevator';
@@ -938,10 +1193,11 @@ window.ZS = window.ZS || {};
     }
 
     const refreshBtn = document.getElementById('btn-refresh-trader');
-    const refreshCost = st.traderRefreshCost || 15;
+    const refreshCost = ZS.Game.getEffectiveTraderRefreshCost ? ZS.Game.getEffectiveTraderRefreshCost() : (st.traderRefreshCost || 15);
+    const discPct = Math.round((st.b1TraderDisc || 0) * 100);
     if (refreshBtn) {
       refreshBtn.disabled = !isDay || st.coin < refreshCost;
-      refreshBtn.innerHTML = `${ozIcon('sys-reset', 15)}<span>무전 보급 목록 갱신 (${refreshCost} 코인)</span>`;
+      refreshBtn.innerHTML = `${ozIcon('sys-reset', 15)}<span>무전 보급 목록 갱신 (${refreshCost} 코인${discPct > 0 ? ` · -${discPct}%` : ''})</span>`;
     }
 
     const grid = document.getElementById('trader-grid');
@@ -1038,7 +1294,8 @@ window.ZS = window.ZS || {};
     st.traderOffers.forEach((offer, idx) => {
       const card = document.createElement('div');
       card.className = 'offer-card';
-      const canBuy = !offer.sold && st.coin >= offer.coinCost && isDay;
+      const effCost = ZS.Game.getEffectiveTraderOfferCost ? ZS.Game.getEffectiveTraderOfferCost(offer) : offer.coinCost;
+      const canBuy = !offer.sold && st.coin >= effCost && isDay;
 
       let iconVisualHtml = '';
       if (offer.type === 'free_item' && offer.itemId && ZS.Renderer.renderItemThumbnail) {
@@ -1077,7 +1334,7 @@ window.ZS = window.ZS || {};
           <p class="offer-desc" style="margin-top:8px;">${escapeHtml(offer.desc)}</p>
         </div>
         <button class="buy-offer-btn" ${canBuy ? '' : 'disabled'}>
-          ${offer.sold ? '<span>보급 완료</span>' : `${ozIcon('res-coin', 15, 'icon-coin')}<span>${offer.coinCost} 코인으로 구매</span>`}
+          ${offer.sold ? '<span>보급 완료</span>' : `${ozIcon('res-coin', 15, 'icon-coin')}<span>${effCost} 코인으로 구매${effCost < offer.coinCost ? ` (-${Math.round((st.b1TraderDisc || 0) * 100)}%)` : ''}</span>`}
         </button>
       `;
       card.querySelector('button').addEventListener('click', () => {
@@ -1104,6 +1361,46 @@ window.ZS = window.ZS || {};
       );
       document.getElementById('btn-exit-b1')?.addEventListener('click', () => {
         if (ZS.Game.exitUnderground) ZS.Game.exitUnderground();
+      });
+      return;
+    }
+
+    const gadget = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+    if (gadget && ZS.DATA.ITEMS[gadget.id]) {
+      const def = ZS.DATA.ITEMS[gadget.id];
+      const status = ZS.Game.getB1GadgetStatus ? ZS.Game.getB1GadgetStatus(tx, ty) : null;
+      const room = cell.roomId != null && ug.rooms[cell.roomId] ? ug.rooms[cell.roomId] : null;
+      const rDef = room && ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(room.role) : null;
+      const roleTitle = rDef ? `${rDef.name} #${room.id}` : '지하 공용 공간';
+      let statusHtml = `<span class="cost-chip free">활성 작동 중</span>`;
+      if (status && !status.connected) {
+        statusHtml = `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>승강기 미연결 — 휴면</span></span>`;
+      } else if (status && status.blackoutPaused) {
+        statusHtml = `<span class="cost-chip short">${ozIcon('res-power', 13, 'icon-danger')}<span>야간 정전 — 가동 중단</span></span>`;
+      } else if (status && status.diminished) {
+        statusHtml = `<span class="cost-chip b1-ap-cost"><span>활성 · 도배 감쇠 50%</span></span>`;
+      }
+      const actionBtns =
+        st.phase === 'day'
+          ? `${statusHtml}<button id="btn-b1-inspect-move" class="detail-upgrade-btn b1-action-btn">${ozIcon('tool-move', 14)}<span>이동 (M)</span></button><button id="btn-b1-inspect-remove" class="detail-upgrade-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>철거 80% (X)</span></button>`
+          : statusHtml;
+      setDetailHtml(
+        `${ozIcon((rDef && rDef.iconId) || 'b1-systems', 14)} <b>[${escapeHtml(def.name)}]</b> (${escapeHtml(roleTitle)} · ${tx}, ${ty}) — ${escapeHtml(def.desc)}`,
+        actionBtns
+      );
+      document.getElementById('btn-b1-inspect-move')?.addEventListener('click', () => {
+        setToolMode('move');
+        uiState.movingSource = { tx, ty };
+        setDetailHtml(
+          `${ozIcon('tool-move', 14)} <b>[${escapeHtml(def.name)} 이동 중]</b> (${tx}, ${ty})에서 이동할 같은 역할의 빈 타일을 클릭하세요.`
+        );
+        updateCursorTooltip();
+      });
+      document.getElementById('btn-b1-inspect-remove')?.addEventListener('click', () => {
+        if (ZS.Game.removeB1ItemAt && ZS.Game.removeB1ItemAt(tx, ty)) {
+          uiState.inspectedTile = null;
+          setToolMode('inspect');
+        }
       });
       return;
     }

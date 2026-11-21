@@ -252,7 +252,7 @@ ZS.DATA = (function () {
       accent: '#E8A848',
       floorTint: '#656E78',
       iconId: 'b1-quarters',
-      desc: '작전 요원 주거·휴식 구역 (Stage 3 숙소 설비 배치 가능)'
+      desc: '작전 요원 주거·휴식 구역 (전술 침대·관물대·샤워 부스·공기청정기 배치)'
     },
     research_lab: {
       id: 'research_lab',
@@ -260,7 +260,7 @@ ZS.DATA = (function () {
       accent: '#C084FC',
       floorTint: '#666E7C',
       iconId: 'b1-lab',
-      desc: '연구 데이터 분석 및 RP 증폭 구역 (Stage 3 연구 설비 배치 가능)'
+      desc: '연구 데이터 분석 및 RP 증폭 구역 (연구 데스크·서버 랙·표본 분석대·홀로 테이블 배치)'
     },
     supply_depot: {
       id: 'supply_depot',
@@ -268,7 +268,7 @@ ZS.DATA = (function () {
       accent: '#D49A5A',
       floorTint: '#686F76',
       iconId: 'b1-supply',
-      desc: '자재·고철 비축 및 공병 제작 구역 (Stage 3 보급 설비 배치 가능)'
+      desc: '자재·고철 비축 및 물류 관제 구역 (파렛트 랙·물류 단말기 배치)'
     },
     lounge: {
       id: 'lounge',
@@ -276,7 +276,7 @@ ZS.DATA = (function () {
       accent: '#4ADE80',
       floorTint: '#626F75',
       iconId: 'b1-lounge',
-      desc: '생존자 사기 회복 및 안락함 지원 구역 (Stage 3 휴게 가구 배치 가능)'
+      desc: '생존자 사기 회복 및 안락함 지원 구역 (자판기·라운지·커피 바·아케이드·미디어 스크린 배치)'
     },
     power_vault: {
       id: 'power_vault',
@@ -284,10 +284,15 @@ ZS.DATA = (function () {
       accent: '#E07A38',
       floorTint: '#616B77',
       iconId: 'b1-vault',
-      desc: '방호 격벽 내 비상 축전·배전 구역 (Stage 3 지하 전력 설비 배치 가능)'
+      desc: '피격 면역 비상 축전·배전 구역 (ESS 배터리 랙·배전 제어반·비상 보조 발전기 배치)'
     }
   },
   B1_ROOM_ORDER: ['quarters', 'research_lab', 'supply_depot', 'lounge', 'power_vault'],
+  B1_CATEGORIES: [
+    { id: 'b1_ops',     iconId: 'b1-ops',     label: '굴착·구역·방폭문',   desc: '암반 굴착, 5대 방 역할 구역 지정·해제 및 3D 방폭문 연결' },
+    { id: 'b1_living',  iconId: 'b1-living',  label: '생활관·휴게실',       desc: '생활관(4종) & 휴게실(5종) 지하 설비 배치' },
+    { id: 'b1_systems', iconId: 'b1-systems', label: '연구·보급·축전·공용', desc: '연구실(4종)·보급 창고(2종)·지하 축전실(3종)·공용 조명(1종)' }
+  ],
   B1_TOOLS: [
     {
       id: 'b1_dig',
@@ -1188,48 +1193,59 @@ ZS.DATA = (function () {
     vending_machine: {
       id: 'vending_machine',
       name: '스마트 음료 자판기',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'lounge',
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
       reqHqLevel: 1,
       cost: { scrap: 14, coin: 18 },
       maxHp: 165,
-      cozy: 13,
+      cozy: 14,
       cozyGroup: 'decor_vending',
+      mannedFireRateAdd: 0.05,
+      mannedFireRateCap: 0.15,
       lightRadius: 2.3,
       lightColor: 'rgba(255, 208, 148, 0.36)',
-      aura: { radius: 2.7, fireRate: 0.15 },
-      desc: '[내장 배터리 발광] 시원한 에너지 드링크 보급! 반경 2.7칸 내 연사속도를 +15% 높입니다.'
+      desc: '[지하 휴게실 전용 · 무전력] 안락함 +14 · 지상 유인 초소 전역 연사속도 +5% (상한 +15%).'
     },
     lounge_set: {
       id: 'lounge_set',
-      name: '택티컬 파라솔 라운지',
+      name: '택티컬 라운지 세트',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'lounge',
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
       reqHqLevel: 1,
       cost: { wood: 18, coin: 14 },
       maxHp: 135,
-      cozy: 15,
+      cozy: 16,
       cozyGroup: 'decor_lounge',
-      desc: '모던 테라스 파라솔과 라운지 테이블 세트. 요원들의 휴식 만족도(안락함 +15)가 크게 오릅니다.'
+      desc: '[지하 휴게실 전용] 아늑한 전술 소파와 라운지 테이블 세트. 안락함을 +16 높입니다.'
     },
     arcade_neon: {
       id: 'arcade_neon',
       name: '네온 아케이드 스테이션',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'lounge',
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
       reqHqLevel: 1,
+      reqTech: 'b1_gadgets_adv',
       cost: { scrap: 12, coin: 26 },
       requiresPower: true,
       powerIdle: 0.25,
       maxHp: 145,
-      cozy: 20,
+      cozy: 22,
       cozyGroup: 'decor_arcade',
       lightRadius: 3.0,
       lightColor: 'rgba(235, 105, 255, 0.46)',
-      desc: '[미세 전력 소모] 감성적인 사이버 네온 보드와 아케이드 게임기. 안락함을 무려 +20 높여줍니다.'
+      desc: '[지하 휴게실 전용 · 0.25/s 전력] 감성적인 사이버 네온 아케이드 게임기. 안락함을 무려 +22 높여줍니다.'
     },
     boss_trophy: {
       id: 'boss_trophy',
@@ -1247,6 +1263,273 @@ ZS.DATA = (function () {
       lightColor: 'rgba(255, 201, 74, 0.48)',
       aura: { radius: 3.6, mannedDmg: 0.12, fireRate: 0.10 },
       desc: '[보스 격파 해금] 황금빛 전술 홀로그램 트로피. 안락함 +30 및 광역 전투 버프를 부여합니다.'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: QUARTERS (4) =================
+    b1_bunk_bed: {
+      id: 'b1_bunk_bed',
+      name: '2층 전술 침대',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'quarters',
+      category: 'b1_living',
+      layer: 'struct',
+      subType: 'housing',
+      cost: { wood: 22, scrap: 12 },
+      popCap: 2,
+      cozy: 6,
+      cozyGroup: 'b1_bunk_bed',
+      desc: '[생활관 전용] 2층 강철 침대. 요원 수용 +2명 · 안락함 +6 (4개째부터 50% 감쇠).'
+    },
+    b1_locker: {
+      id: 'b1_locker',
+      name: '개인 관물대',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'quarters',
+      category: 'b1_living',
+      layer: 'struct',
+      subType: 'decor',
+      cost: { wood: 12, scrap: 10 },
+      cozy: 5,
+      cozyGroup: 'b1_locker',
+      adjacentBedSynergy: 3,
+      desc: '[생활관 전용] 전술 개인 관물대. 안락함 +5 · 2층 전술 침대와 상하좌우 인접 시 관물대당 +3 시너지.'
+    },
+    b1_shower_booth: {
+      id: 'b1_shower_booth',
+      name: '샤워/세면 부스',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'quarters',
+      category: 'b1_living',
+      layer: 'struct',
+      subType: 'decor',
+      reqTech: 'b1_gadgets_adv',
+      cost: { scrap: 20, coin: 14 },
+      cozy: 9,
+      cozyGroup: 'b1_shower_booth',
+      desc: '[생활관 전용 · 연구 해금] 온수 순환 샤워 부스. 요원 위생 개선으로 안락함 +9.'
+    },
+    b1_air_purifier: {
+      id: 'b1_air_purifier',
+      name: '공기청정기',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'quarters',
+      category: 'b1_living',
+      layer: 'struct',
+      subType: 'decor',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.25,
+      cost: { scrap: 18, coin: 16 },
+      cozy: 5,
+      cozyGroup: 'b1_air_purifier',
+      roomCozyBonusPct: 0.20,
+      roomCozyBonusCap: 0.40,
+      desc: '[생활관 전용 · 0.25/s 전력] 안락함 +5 · 같은 생활관 내 생활관 가젯 안락함 총합 +20% (방당 상한 +40%).'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: LOUNGE EXTRA (2 + 3 MIGRATED) =================
+    b1_coffee_bar: {
+      id: 'b1_coffee_bar',
+      name: '에스프레소 커피 바',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'lounge',
+      category: 'b1_living',
+      layer: 'struct',
+      subType: 'decor',
+      cost: { wood: 14, scrap: 12, coin: 16 },
+      cozy: 14,
+      cozyGroup: 'b1_coffee_bar',
+      digApBonusPct: 0.10,
+      digApBonusCap: 0.30,
+      desc: '[휴게실 전용] 안락함 +14 · 매일 아침 지하 굴착력(Dig AP) 충전 +10% (상한 +30%).'
+    },
+    b1_media_screen: {
+      id: 'b1_media_screen',
+      name: '전술 미디어 스크린',
+      domain: 'underground',
+      b1Category: 'b1_living',
+      requiredRole: 'lounge',
+      category: 'b1_living',
+      layer: 'struct',
+      subType: 'decor',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.35,
+      cost: { scrap: 22, coin: 28 },
+      cozy: 20,
+      cozyGroup: 'b1_media_screen',
+      mannedXpAdd: 0.12,
+      desc: '[휴게실 전용 · 0.35/s 전력] 안락함 +20 · 지상 유인 초소 전투 숙련 XP 획득량 +12%.'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: RESEARCH LAB (4) =================
+    b1_research_desk: {
+      id: 'b1_research_desk',
+      name: '전술 연구 데스크',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'research_lab',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_lab',
+      cost: { wood: 18, scrap: 16, coin: 10 },
+      scientistRpAdd: 2,
+      waveRpAdd: 1,
+      desc: '[연구실 전용] 연구요원 1명당 기본 +2 RP (데스크 수 상한) + 매일 아침 고정 +1 RP.'
+    },
+    b1_server_rack: {
+      id: 'b1_server_rack',
+      name: '데이터 서버 랙',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'research_lab',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_lab',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.45,
+      cost: { scrap: 28, coin: 22 },
+      rpMultAdd: 0.18,
+      desc: '[연구실 전용 · 0.45/s 전력] 전술 연산 클러스터. 기지 전역 RP 획득률 +18% (4개째부터 50% 감쇠).'
+    },
+    b1_specimen_bench: {
+      id: 'b1_specimen_bench',
+      name: '표본 분석대',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'research_lab',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_lab',
+      reqTech: 'b1_gadgets_adv',
+      cost: { scrap: 22, coin: 20 },
+      bossRpMultAdd: 0.25,
+      waveRpAdd: 1,
+      desc: '[연구실 전용 · 연구 해금] 보스 변이체 처치 보너스 RP +25% + 매일 아침 고정 +1 RP.'
+    },
+    b1_holo_table: {
+      id: 'b1_holo_table',
+      name: '홀로 전술 테이블',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'research_lab',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_lab',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.55,
+      cost: { scrap: 34, coin: 32 },
+      rpMultAdd: 0.15,
+      combatCritAdd: 0.04,
+      desc: '[연구실 전용 · 0.55/s 전력] 기지 전역 RP 획득률 +15% · 지상 유인 초소 & 자동 포탑 전역 치명타율 +4%p.'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: SUPPLY DEPOT (2) =================
+    b1_pallet_rack: {
+      id: 'b1_pallet_rack',
+      name: '자재 파렛트 랙',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'supply_depot',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_supply',
+      cost: { wood: 20, scrap: 14 },
+      dawnWood: 4,
+      dawnScrap: 3,
+      prodWood: 3,
+      prodScrap: 3,
+      desc: '[보급 창고 전용] 매일 아침 고정 +4 목재 · +3 고철 + 활성 생산요원당 +3 목재 · +3 고철.'
+    },
+    b1_logistics_term: {
+      id: 'b1_logistics_term',
+      name: '물류 단말기',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'supply_depot',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_supply',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.30,
+      cost: { scrap: 24, coin: 24 },
+      dawnCoin: 6,
+      traderDiscAdd: 0.08,
+      traderDiscCap: 0.24,
+      desc: '[보급 창고 전용 · 0.30/s 전력] 매일 아침 +6 코인 · 외부 교역소 구매·갱신 비용 -8% (상한 -24%).'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: POWER VAULT (3) =================
+    b1_ess_rack: {
+      id: 'b1_ess_rack',
+      name: '지하 ESS 배터리 랙',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'power_vault',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_power',
+      cost: { wood: 8, scrap: 28, coin: 12 },
+      powerCap: 90,
+      dayCharge: 6,
+      desc: '[지하 축전실 전용] 피격 면역 지하 ESS. 전력 용량 +90 · 주간 충전 +6.'
+    },
+    b1_power_panel: {
+      id: 'b1_power_panel',
+      name: '배전 제어반',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'power_vault',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_power',
+      reqTech: 'b1_gadgets_adv',
+      cost: { scrap: 26, coin: 22 },
+      b1DrainSaveAdd: 0.15,
+      b1DrainSaveCap: 0.35,
+      dayCharge: 12,
+      desc: '[지하 축전실 전용 · 연구 해금] 지하 유전력 가젯 대기전력 -15% (상한 -35%) + 주간 충전 +12.'
+    },
+    b1_backup_gen: {
+      id: 'b1_backup_gen',
+      name: '비상 보조 발전기',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: 'power_vault',
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_power',
+      reqTech: 'b1_gadgets_adv',
+      cost: { scrap: 36, coin: 30 },
+      dayCharge: 18,
+      nightGen: 1.10,
+      desc: '[지하 축전실 전용 · 연구 해금] 방호 격벽 내부 보조 발전기. 주간 충전 +18 · 야간 상시 발전 +1.10/s.'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: COMMON WORKLIGHT (1) =================
+    b1_ceiling_led: {
+      id: 'b1_ceiling_led',
+      name: '지하 전술 스탠드 조명',
+      domain: 'underground',
+      b1Category: 'b1_systems',
+      requiredRole: null,
+      category: 'b1_systems',
+      layer: 'struct',
+      subType: 'b1_light',
+      cost: { scrap: 8, coin: 4 },
+      cozy: 3,
+      cozyGroup: 'b1_ceiling_led',
+      lightRadius: 3.2,
+      lightColor: 'rgba(255, 179, 71, 0.42)',
+      desc: '[지하 공용 · 무전력] 굴착된 모든 B1 타일 배치 가능. 따뜻한 앰버 작업광(반경 3.2) · 안락함 +3.'
     }
   },
 
@@ -1422,7 +1705,7 @@ ZS.DATA = (function () {
     {
       id: 'crate_vending',
       name: '보급품: 스마트 음료 자판기',
-      desc: '고철 소비 없이 코인만으로 무료 설치권 1개를 확보합니다 (연사속도 오라!).',
+      desc: '고철·코인 소비 없이 지하 B1 휴게실에 스마트 음료 자판기(연사 +5% · 안락함 +14) 무료 배치권 1개를 확보합니다.',
       coinCost: 24,
       type: 'free_item',
       itemId: 'vending_machine'
@@ -1430,7 +1713,7 @@ ZS.DATA = (function () {
     {
       id: 'crate_arcade',
       name: '보급품: 네온 아케이드 스테이션',
-      desc: '안락함 +20 최고급 네온 아케이드 무료 설치권 1개를 확보합니다.',
+      desc: '안락함 +22 네온 아케이드 무료 배치권 1개를 확보합니다. 연구 미완료 상태여도 지하 B1 휴게실에 즉시 배치 가능!',
       coinCost: 28,
       type: 'free_item',
       itemId: 'arcade_neon'

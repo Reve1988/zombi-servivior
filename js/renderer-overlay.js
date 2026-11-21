@@ -1380,6 +1380,9 @@ window.ZS = window.ZS || {};
     const DATA = ZS.DATA;
     const def = resolvedId === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[resolvedId];
     if (!def) return '';
+    if (def.domain === 'underground' && R.renderB1GadgetThumbnail) {
+      return R.renderB1GadgetThumbnail(resolvedId, sz);
+    }
 
     const dpr = 2;
     const cv = document.createElement('canvas');
@@ -1489,6 +1492,8 @@ window.ZS = window.ZS || {};
   ZS.Renderer = {
     render: R.render,
     renderItemThumbnail: R.renderItemThumbnail,
+    renderB1ToolThumbnail: R.renderB1ToolThumbnail,
+    renderB1GadgetThumbnail: R.renderB1GadgetThumbnail,
     getStructVisualTopZ: R.getStructVisualTopZ,
     getWallConnectMask: R.getWallConnectMask,
     drawStructure: R.drawStructure,

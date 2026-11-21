@@ -91,7 +91,10 @@ window.ZS = window.ZS || {};
       case 'vulcan_turret': return 'tur_vulcan';
       case 'missile_pod': return 'tur_missile';
       case 'emp_coil': return 'tur_emp';
-      default: return null;
+      default: {
+        const def = DATA.ITEMS && DATA.ITEMS[id];
+        return (def && def.reqTech) || null;
+      }
     }
   }
 
@@ -532,7 +535,7 @@ window.ZS = window.ZS || {};
       nightGen = +(nightGen * windMult).toFixed(3);
     }
     const div = G.getDivisionDef ? G.getDivisionDef() : null;
-    if (div && div.solarBatteryMult && (defId === 'solar_array' || defId === 'battery_bank')) {
+    if (div && div.solarBatteryMult && (defId === 'solar_array' || defId === 'battery_bank' || defId === 'b1_ess_rack')) {
       powerCap = Math.round(powerCap * div.solarBatteryMult);
       dayCharge = +(dayCharge * div.solarBatteryMult).toFixed(2);
     }
@@ -634,6 +637,26 @@ window.ZS = window.ZS || {};
       }
     }
 
+    // Aggregate active Underground B1 gadgets (connectivity, 4th-copy diminishing, blackout pause)
+    const ugEff = G.recomputeUndergroundEffects ? G.recomputeUndergroundEffects() : null;
+    if (ugEff) {
+      powerCap += ugEff.powerCap || 0;
+      dayCharge += ugEff.dayCharge || 0;
+      nightGen += ugEff.nightGen || 0;
+      nightIdleDrain += ugEff.nightIdleDrain || 0;
+      popCap += ugEff.popCap || 0;
+      synergyScore += ugEff.cozySynergy || 0;
+      const entries = ugEff.cozyEntries || [];
+      for (let i = 0; i < entries.length; i++) {
+        const ce = entries[i];
+        const grp = normalizeCozyGroup(ce.grp);
+        if (!structGroups[grp]) structGroups[grp] = [];
+        structGroups[grp].push(ce.score);
+        groupCounts[grp] = (groupCounts[grp] || 0) + 1;
+        if (grp) uniqueGroups.add(grp);
+      }
+    }
+
     const floorCap = DATA.COZY_FLOOR_CAP || 60;
     const floorScore = Math.min(floorCap, floorRaw);
 
@@ -723,7 +746,24 @@ window.ZS = window.ZS || {};
     const existingCount = (state.cozyGroupCounts && state.cozyGroupCounts[grp]) || 0;
     const isDiminished = existingCount >= 3;
     let gain = isDiminished ? Math.round(cozyVal * 0.5) : cozyVal;
-    if (tx !== undefined && ty !== undefined && tx >= 0 && ty >= 0 && tx < N && ty < N) {
+    if (def.domain === 'underground') {
+      if (resolvedId === 'b1_locker' && def.adjacentBedSynergy && tx !== undefined && ty !== undefined && state.underground) {
+        const ug = state.underground;
+        const b1N = DATA.B1_SIZE || 23;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (let k = 0; k < dirs.length; k++) {
+          const nx = tx + dirs[k][0];
+          const ny = ty + dirs[k][1];
+          if (nx < 1 || ny < 1 || nx >= b1N - 1 || ny >= b1N - 1) continue;
+          const ng = ug.b1StructGrid && ug.b1StructGrid[ny] && ug.b1StructGrid[ny][nx];
+          const nc = ug.grid && ug.grid[ny] && ug.grid[ny][nx];
+          if (ng && ng.id === 'b1_bunk_bed' && nc && nc.roomId != null && ug.rooms[nc.roomId] && ug.rooms[nc.roomId].connected) {
+            gain += Math.round(def.adjacentBedSynergy * (isDiminished ? 0.5 : 1.0));
+            break;
+          }
+        }
+      }
+    } else if (tx !== undefined && ty !== undefined && tx >= 0 && ty >= 0 && tx < N && ty < N) {
       const fid = state.floorGrid[ty] && state.floorGrid[ty][tx];
       const fDef = fid ? DATA.ITEMS[fid] : null;
       if (fDef && fDef.cozyTileBonus && def.category === 'decor') {
@@ -758,6 +798,7 @@ window.ZS = window.ZS || {};
 
     if (def.subType === 'manned') {
       dmgMult += state.cozyTier.agentDmg;
+      rateMult += (state.b1MannedFireRateMult || 0);
     }
 
     if (state.phase === 'night' && state.nightConsumables && state.nightConsumables.overpressureAmmo) {
@@ -834,6 +875,9 @@ window.ZS = window.ZS || {};
     }
 
     const isCombatUnit = def.subType === 'manned' || def.subType === 'turret';
+    if (isCombatUnit && state.b1HoloCritAdd) {
+      critChance += state.b1HoloCritAdd;
+    }
     if (onPlateau && isCombatUnit) {
       critChance += pBonus.critAdd != null ? pBonus.critAdd : 0.08;
     }
@@ -1117,6 +1161,9 @@ window.ZS = window.ZS || {};
     const itemId = rawItemId === 'shelter_pod' ? 'field_tent' : rawItemId;
     const def = DATA.ITEMS[itemId];
     if (!def) return { ok: false, reason: '잘못된 시설입니다.' };
+    if (def.domain === 'underground') {
+      return { ok: false, reason: '이 설비는 지하 B1 쉘터 전용 설비입니다.' };
+    }
 
     if (tx < 0 || ty < 0 || tx >= N || ty >= N) {
       return { ok: false, reason: '맵 범위를 벗어났습니다.' };
@@ -1951,13 +1998,26 @@ window.ZS = window.ZS || {};
   }
 
   // ================= TRADER CONVOY SYSTEM =================
+  function getEffectiveTraderOfferCost(offer) {
+    if (!offer || !offer.coinCost) return 0;
+    const disc = Math.max(0, Math.min(0.24, state.b1TraderDisc || 0));
+    return Math.max(1, Math.round(offer.coinCost * (1 - disc)));
+  }
+
+  function getEffectiveTraderRefreshCost() {
+    const baseCost = state.traderRefreshCost || 15;
+    const disc = Math.max(0, Math.min(0.24, state.b1TraderDisc || 0));
+    return Math.max(1, Math.round(baseCost * (1 - disc)));
+  }
+
   function refreshTraderOffers(paid) {
     if (paid) {
       if (state.phase !== 'day') {
         ZS.Audio.playError();
         return false;
       }
-      const curCost = state.traderRefreshCost || 15;
+      const baseCurCost = state.traderRefreshCost || 15;
+      const curCost = getEffectiveTraderRefreshCost();
       if (state.coin < curCost) {
         ZS.Audio.playError();
         G.banner('코인 부족', `보급 목록 갱신에 ${curCost} 코인이 필요합니다.`, 'warn');
@@ -1965,7 +2025,7 @@ window.ZS = window.ZS || {};
       }
       state.coin -= curCost;
       state.traderRefreshCount = (state.traderRefreshCount || 0) + 1;
-      state.traderRefreshCost = curCost + 10 + (state.traderRefreshCount - 1) * 5;
+      state.traderRefreshCost = baseCurCost + 10 + (state.traderRefreshCount - 1) * 5;
       ZS.Audio.playTrade();
     }
 
@@ -2079,7 +2139,8 @@ window.ZS = window.ZS || {};
     }
     const offer = state.traderOffers[index];
     if (!offer || offer.sold) return false;
-    if (state.coin < offer.coinCost) {
+    const effCost = getEffectiveTraderOfferCost(offer);
+    if (state.coin < effCost) {
       ZS.Audio.playError();
       return false;
     }
@@ -2090,7 +2151,7 @@ window.ZS = window.ZS || {};
         G.banner('숙소 수용량 부족!', '먼저 [전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
         return false;
       }
-      state.coin -= offer.coinCost;
+      state.coin -= effCost;
       if (G.grantAgents) G.grantAgents(offer.amount);
       else state.agents += offer.amount;
       offer.sold = true;
@@ -2101,7 +2162,7 @@ window.ZS = window.ZS || {};
       return true;
     }
 
-    state.coin -= offer.coinCost;
+    state.coin -= effCost;
     if (offer.type === 'resource') {
       if (offer.give.wood) state.wood += offer.give.wood;
       if (offer.give.scrap) state.scrap += offer.give.scrap;
@@ -2164,6 +2225,8 @@ window.ZS = window.ZS || {};
     refundCost,
     getRepairAllInfo,
     repairAllStructures,
+    getEffectiveTraderOfferCost,
+    getEffectiveTraderRefreshCost,
     refreshTraderOffers,
     exchangeResource,
     getNightConsumableCost,

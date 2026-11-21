@@ -192,7 +192,25 @@ window.ZS = window.ZS || {};
           };
         }
         if (srcStructRow && srcStructRow[x] && !defCell.bedrock && !defCell.elevator) {
-          base.b1StructGrid[y][x] = { ...srcStructRow[x] };
+          const rawG = srcStructRow[x];
+          const gDef = rawG && rawG.id ? (DATA.ITEMS && DATA.ITEMS[rawG.id]) : null;
+          if (gDef && gDef.domain === 'underground') {
+            const gUid = Number(rawG.uid) || (G.nextStructUid = (G.nextStructUid || 1) + 1);
+            if (gUid >= (G.nextStructUid || 1)) G.nextStructUid = gUid + 1;
+            base.b1StructGrid[y][x] = {
+              id: rawG.id,
+              uid: gUid,
+              usedVoucher: !!rawG.usedVoucher,
+              invested: rawG.invested && typeof rawG.invested === 'object'
+                ? {
+                    wood: Number(rawG.invested.wood) || 0,
+                    scrap: Number(rawG.invested.scrap) || 0,
+                    coin: Number(rawG.invested.coin) || 0
+                  }
+                : { wood: 0, scrap: 0, coin: 0 },
+              buildAnimTimer: 0
+            };
+          }
         }
       }
     }
@@ -876,6 +894,8 @@ window.ZS = window.ZS || {};
     reconcileB1Rooms();
     pruneInvalidB1Doors();
     recomputeUndergroundConnectivity();
+    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
+    else recomputeUndergroundEffects();
     ug.rev += 1;
 
     if (ZS.Audio && ZS.Audio.playBuild) ZS.Audio.playBuild();
@@ -944,6 +964,8 @@ window.ZS = window.ZS || {};
     reconcileB1Rooms();
     pruneInvalidB1Doors();
     recomputeUndergroundConnectivity();
+    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
+    else recomputeUndergroundEffects();
     ug.rev += 1;
 
     if (ZS.Audio && ZS.Audio.playRemove) ZS.Audio.playRemove();
@@ -1037,6 +1059,8 @@ window.ZS = window.ZS || {};
       ug.doors[check.key] = { a: check.a, b: check.b };
     }
     recomputeUndergroundConnectivity();
+    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
+    else recomputeUndergroundEffects();
     ug.rev += 1;
 
     if (ZS.Audio && ZS.Audio.playDoor) ZS.Audio.playDoor();
@@ -1045,6 +1069,497 @@ window.ZS = window.ZS || {};
     G.saveGame();
     G.notifyUi();
     return true;
+  }
+
+  // ================= B1 GADGET PLACEMENT, MOVE, DEMOLISH & EFFECTS =================
+  function canPlaceB1Item(rawItemId, tx, ty) {
+    if (!state.undergroundUnlocked) {
+      return { ok: false, reason: '지하 B1이 아직 개방되지 않았습니다.' };
+    }
+    if (state.phase !== 'day') {
+      return { ok: false, reason: '정비 페이즈(낮)에만 지하 설비를 배치할 수 있습니다.' };
+    }
+    if (state.activeLayer !== 'underground') {
+      return { ok: false, reason: '지하 B1 레이어에서만 배치할 수 있습니다.' };
+    }
+    const itemId = rawItemId;
+    const def = DATA.ITEMS && DATA.ITEMS[itemId];
+    if (!def || def.domain !== 'underground') {
+      return { ok: false, reason: '지하 B1 전용 설비가 아닙니다.' };
+    }
+    const ug = ensureUndergroundState();
+    if (tx < 1 || ty < 1 || tx > B1_SIZE - 2 || ty > B1_SIZE - 2) {
+      return { ok: false, reason: '기반암(외곽 테두리)에는 설치할 수 없습니다.' };
+    }
+    const cell = ug.grid[ty] && ug.grid[ty][tx];
+    if (!cell || cell.bedrock || !cell.excavated) {
+      return { ok: false, reason: '먼저 암반을 굴착한 공간 위에만 설치할 수 있습니다.' };
+    }
+    if (cell.elevator) {
+      return { ok: false, reason: '중앙 승강기(11, 11) 위에는 설비를 설치할 수 없습니다.' };
+    }
+    if (ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx]) {
+      return { ok: false, reason: '이미 다른 지하 설비가 설치된 타일입니다.' };
+    }
+
+    let room = null;
+    if (def.requiredRole) {
+      room = cell.roomId != null ? ug.rooms[cell.roomId] : null;
+      if (cell.permanentCorridor || !room || room.role !== def.requiredRole) {
+        const rDef = getB1RoomDef(def.requiredRole);
+        const rName = (rDef && rDef.name) || def.requiredRole;
+        return {
+          ok: false,
+          roleMismatch: true,
+          requiredRole: def.requiredRole,
+          reason: `이 설비는 [${rName}] 구역 내부에만 설치할 수 있습니다.`
+        };
+      }
+    }
+
+    const hasVoucher = !!(state.freeVouchers && (state.freeVouchers[itemId] || 0) > 0);
+    const reqTechId = G.getItemRequiredTech ? G.getItemRequiredTech(itemId) : (def.reqTech || null);
+    if (!hasVoucher && reqTechId && (!G.getTechLevel || G.getTechLevel(reqTechId) <= 0)) {
+      const tDef = DATA.TECH_TREE && DATA.TECH_TREE[reqTechId];
+      const tName = tDef ? tDef.name : reqTechId;
+      return {
+        ok: false,
+        techLocked: true,
+        reqTechId,
+        reqTechName: tName,
+        reason: `[${tName}] 연구 완료 후 설치할 수 있습니다. (단축키 T)`
+      };
+    }
+
+    const cost = G.getEffectiveBuildCost ? G.getEffectiveBuildCost(itemId) : (def.cost || {});
+    if (!hasVoucher && G.canAffordCost && !G.canAffordCost(cost)) {
+      return { ok: false, shortCost: true, cost, reason: '건설 자원이 부족합니다.' };
+    }
+
+    return {
+      ok: true,
+      hasVoucher,
+      cost,
+      disconnected: !!(def.requiredRole && room && !room.connected)
+    };
+  }
+
+  function placeB1Item(rawItemId, tx, ty) {
+    const check = canPlaceB1Item(rawItemId, tx, ty);
+    if (!check.ok) {
+      if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
+      G.banner('지하 설비 배치 불가', check.reason, 'warn');
+      return false;
+    }
+
+    const ug = ensureUndergroundState();
+    const itemId = rawItemId;
+    let usedVoucher = false;
+    if (check.hasVoucher) {
+      state.freeVouchers[itemId] = Math.max(0, (state.freeVouchers[itemId] || 0) - 1);
+      usedVoucher = true;
+    } else if (G.payCost) {
+      G.payCost(check.cost);
+    }
+
+    ug.b1StructGrid[ty][tx] = {
+      id: itemId,
+      uid: (G.nextStructUid = (G.nextStructUid || 1) + 1),
+      usedVoucher,
+      invested: usedVoucher
+        ? { wood: 0, scrap: 0, coin: 0 }
+        : {
+            wood: (check.cost && check.cost.wood) || 0,
+            scrap: (check.cost && check.cost.scrap) || 0,
+            coin: (check.cost && check.cost.coin) || 0
+          },
+      buildAnimTimer: 0.24
+    };
+    ug.rev += 1;
+
+    if (G.recalculateBaseStats) G.recalculateBaseStats();
+    else recomputeUndergroundEffects();
+
+    if (ZS.Audio && ZS.Audio.playBuild) ZS.Audio.playBuild();
+    if (G.spawnBuildDustPuffs) G.spawnBuildDustPuffs(tx + 0.5, ty + 0.5, 8);
+    if (check.disconnected) {
+      const def = DATA.ITEMS[itemId];
+      G.banner(
+        `[${def ? def.name : itemId}] 배치 완료 (미연결 대기)`,
+        '방폭문으로 승강기 홀과 연결하면 설비 효과가 즉시 가동됩니다.',
+        'info'
+      );
+    }
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function canMoveB1Item(fromX, fromY, toX, toY) {
+    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+      return { ok: false, reason: '주간 지하 B1 레이어에서만 이동할 수 있습니다.' };
+    }
+    if (fromX === toX && fromY === toY) {
+      return { ok: false, sameTile: true, reason: '같은 위치입니다.' };
+    }
+    const ug = ensureUndergroundState();
+    if (fromX < 1 || fromY < 1 || fromX > B1_SIZE - 2 || fromY > B1_SIZE - 2) {
+      return { ok: false, reason: '잘못된 원본 타일입니다.' };
+    }
+    if (toX < 1 || toY < 1 || toX > B1_SIZE - 2 || toY > B1_SIZE - 2) {
+      return { ok: false, reason: '기반암(외곽 테두리)으로는 이동할 수 없습니다.' };
+    }
+    const src = ug.b1StructGrid[fromY] && ug.b1StructGrid[fromY][fromX];
+    if (!src) return { ok: false, reason: '이동할 지하 설비가 없습니다.' };
+    const def = DATA.ITEMS && DATA.ITEMS[src.id];
+    if (!def) return { ok: false, reason: '잘못된 설비입니다.' };
+
+    const destCell = ug.grid[toY] && ug.grid[toY][toX];
+    if (!destCell || destCell.bedrock || !destCell.excavated) {
+      return { ok: false, reason: '굴착된 공간으로만 이동할 수 있습니다.' };
+    }
+    if (destCell.elevator) {
+      return { ok: false, reason: '승강기(11, 11) 위로는 이동할 수 없습니다.' };
+    }
+    if (ug.b1StructGrid[toY] && ug.b1StructGrid[toY][toX]) {
+      return { ok: false, reason: '이미 다른 지하 설비가 있는 타일입니다.' };
+    }
+    let destRoom = null;
+    if (def.requiredRole) {
+      destRoom = destCell.roomId != null ? ug.rooms[destCell.roomId] : null;
+      if (destCell.permanentCorridor || !destRoom || destRoom.role !== def.requiredRole) {
+        const rDef = getB1RoomDef(def.requiredRole);
+        const rName = (rDef && rDef.name) || def.requiredRole;
+        return {
+          ok: false,
+          roleMismatch: true,
+          reason: `이 설비는 [${rName}] 구역 내부로만 이동할 수 있습니다.`
+        };
+      }
+    }
+    return {
+      ok: true,
+      disconnected: !!(def.requiredRole && destRoom && !destRoom.connected)
+    };
+  }
+
+  function moveB1Item(fromX, fromY, toX, toY) {
+    const check = canMoveB1Item(fromX, fromY, toX, toY);
+    if (!check.ok) {
+      if (!check.sameTile) {
+        if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
+        G.banner('이동 불가', check.reason, 'warn');
+      }
+      return false;
+    }
+    const ug = ensureUndergroundState();
+    const src = ug.b1StructGrid[fromY][fromX];
+    ug.b1StructGrid[fromY][fromX] = null;
+    src.buildAnimTimer = 0.24;
+    ug.b1StructGrid[toY][toX] = src;
+    ug.rev += 1;
+
+    if (G.recalculateBaseStats) G.recalculateBaseStats();
+    else recomputeUndergroundEffects();
+
+    if (ZS.Audio && ZS.Audio.playBuild) ZS.Audio.playBuild();
+    if (G.spawnBuildDustPuffs) G.spawnBuildDustPuffs(toX + 0.5, toY + 0.5, 8);
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function removeB1ItemAt(tx, ty) {
+    if (state.phase !== 'day' || !state.undergroundUnlocked || state.activeLayer !== 'underground') {
+      return false;
+    }
+    const ug = ensureUndergroundState();
+    if (tx < 1 || ty < 1 || tx > B1_SIZE - 2 || ty > B1_SIZE - 2) return false;
+    const item = ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+    if (!item) return false;
+
+    const def = DATA.ITEMS && DATA.ITEMS[item.id];
+    const refundTotal = item.invested
+      ? {
+          wood: item.invested.wood || 0,
+          scrap: item.invested.scrap || 0,
+          coin: item.invested.coin || 0
+        }
+      : !item.usedVoucher && def && def.cost
+      ? { ...(G.getEffectiveBuildCost ? G.getEffectiveBuildCost(def.id) : def.cost) }
+      : { wood: 0, scrap: 0, coin: 0 };
+
+    ug.b1StructGrid[ty][tx] = null;
+    ug.rev += 1;
+
+    if (G.spawnStructureDebris) G.spawnStructureDebris(tx + 0.5, ty + 0.5, item.id, 8, 1);
+    if (G.refundCost) G.refundCost(refundTotal, tx, ty);
+
+    if (G.recalculateBaseStats) G.recalculateBaseStats();
+    else recomputeUndergroundEffects();
+    state.power = Math.min(state.power, Math.max(state.powerCap, state.power));
+
+    if (ZS.Audio && ZS.Audio.playRemove) ZS.Audio.playRemove();
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function recomputeUndergroundEffects() {
+    const ug = ensureUndergroundState();
+    recomputeUndergroundConnectivity();
+    const statusMap = {};
+    ug._gadgetStatusMap = statusMap;
+
+    const activeCounts = {};
+    const cozyEntries = [];
+    let cozySynergy = 0;
+    let b1PopCap = 0;
+
+    const deskBonusList = [];
+    let b1LabFlatPerWaveRp = 0;
+    let b1LabMult = 0;
+    let b1BossRpMult = 0;
+    let b1HoloCritAdd = 0;
+
+    let b1SupplyWood = 0;
+    let b1SupplyScrap = 0;
+    const palletProdList = [];
+    let b1SupplyCoin = 0;
+    let rawTraderDisc = 0;
+
+    let rawMannedFireRate = 0;
+    let b1MannedXpMult = 0;
+    let rawDigApBonus = 0;
+
+    let b1PowerCap = 0;
+    let b1DayCharge = 0;
+    let b1NightGen = 0;
+    let rawDrainSave = 0;
+    let rawB1IdleDrain = 0;
+
+    const roomGadgetCozy = {};
+    const roomPurifierPct = {};
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const sbMult = (div && div.solarBatteryMult) ? div.solarBatteryMult : 1.0;
+    const isBlackout = !!(state.isNight && state.blackoutActive);
+
+    const isActiveB1BedAt = (bx, by) => {
+      if (bx < 1 || by < 1 || bx > B1_SIZE - 2 || by > B1_SIZE - 2) return false;
+      const nc = ug.grid[by] && ug.grid[by][bx];
+      const ng = ug.b1StructGrid[by] && ug.b1StructGrid[by][bx];
+      if (!nc || !ng || ng.id !== 'b1_bunk_bed' || nc.roomId == null) return false;
+      const nr = ug.rooms[nc.roomId];
+      return !!(nr && nr.role === 'quarters' && nr.connected);
+    };
+
+    for (let y = 1; y < B1_SIZE - 1; y++) {
+      for (let x = 1; x < B1_SIZE - 1; x++) {
+        const g = ug.b1StructGrid[y] && ug.b1StructGrid[y][x];
+        if (!g) continue;
+        const def = DATA.ITEMS && DATA.ITEMS[g.id];
+        if (!def || def.domain !== 'underground') continue;
+
+        const cell = ug.grid[y] && ug.grid[y][x];
+        const room = cell && cell.roomId != null ? ug.rooms[cell.roomId] : null;
+        const roleMatch = def.requiredRole
+          ? !!(cell && cell.excavated && !cell.permanentCorridor && room && room.role === def.requiredRole)
+          : !!(cell && cell.excavated && !cell.bedrock && !cell.elevator);
+        const connected = def.requiredRole ? !!(roleMatch && room && room.connected) : roleMatch;
+        const blackoutPaused = !!(connected && def.requiresPower && isBlackout);
+
+        if (!connected) {
+          statusMap[`${x},${y}`] = {
+            active: false,
+            connected: false,
+            roleMatch,
+            diminished: false,
+            blackoutPaused: false,
+            copyIndex: 0,
+            mult: 0,
+            adjacentBed: false,
+            statusLabel: roleMatch ? '출입문 미연결 — 대기' : '구역 불일치 — 대기'
+          };
+          continue;
+        }
+
+        const copyIndex = (activeCounts[g.id] || 0) + 1;
+        activeCounts[g.id] = copyIndex;
+        const mult = copyIndex <= 3 ? 1.0 : 0.5;
+        const diminished = copyIndex >= 4;
+
+        let adjacentBed = false;
+        if (def.cozy) {
+          const effCozy = Math.round(def.cozy * mult);
+          cozyEntries.push({
+            grp: def.cozyGroup || def.id,
+            score: def.cozy
+          });
+          if (def.requiredRole === 'quarters' && room) {
+            roomGadgetCozy[room.id] = (roomGadgetCozy[room.id] || 0) + effCozy;
+          }
+          if (g.id === 'b1_locker' && def.adjacentBedSynergy) {
+            for (let k = 0; k < 4; k++) {
+              if (isActiveB1BedAt(x + CARDINALS[k][0], y + CARDINALS[k][1])) {
+                adjacentBed = true;
+                break;
+              }
+            }
+            if (adjacentBed) {
+              cozySynergy += Math.round(def.adjacentBedSynergy * mult);
+            }
+          }
+        }
+
+        if (g.id === 'b1_air_purifier' && room && def.roomCozyBonusPct) {
+          roomPurifierPct[room.id] = Math.min(
+            0.40,
+            +((roomPurifierPct[room.id] || 0) + def.roomCozyBonusPct * mult).toFixed(4)
+          );
+        }
+
+        if (def.popCap) {
+          b1PopCap += Math.round(def.popCap * mult);
+        }
+
+        if (g.id === 'b1_ess_rack') {
+          b1PowerCap += Math.round((def.powerCap || 0) * sbMult * mult);
+          b1DayCharge += +((def.dayCharge || 0) * sbMult * mult).toFixed(2);
+        } else if (g.id === 'b1_power_panel') {
+          b1DayCharge += +((def.dayCharge || 0) * mult).toFixed(2);
+          rawDrainSave += (def.b1DrainSaveAdd || 0) * mult;
+        } else if (g.id === 'b1_backup_gen') {
+          b1DayCharge += +((def.dayCharge || 0) * mult).toFixed(2);
+          b1NightGen += +((def.nightGen || 0) * mult).toFixed(3);
+        }
+
+        if (def.requiresPower && def.powerIdle) {
+          rawB1IdleDrain += def.powerIdle;
+        }
+
+        if (!blackoutPaused) {
+          if (g.id === 'b1_research_desk') {
+            deskBonusList.push(Math.round((def.scientistRpAdd || 2) * mult));
+            b1LabFlatPerWaveRp += (def.waveRpAdd || 1) * mult;
+          } else if (g.id === 'b1_server_rack') {
+            b1LabMult += (def.rpMultAdd || 0) * mult;
+          } else if (g.id === 'b1_specimen_bench') {
+            b1BossRpMult += (def.bossRpMultAdd || 0) * mult;
+            b1LabFlatPerWaveRp += (def.waveRpAdd || 1) * mult;
+          } else if (g.id === 'b1_holo_table') {
+            b1LabMult += (def.rpMultAdd || 0) * mult;
+            b1HoloCritAdd += (def.combatCritAdd || 0) * mult;
+          } else if (g.id === 'b1_pallet_rack') {
+            b1SupplyWood += (def.dawnWood || 0) * mult;
+            b1SupplyScrap += (def.dawnScrap || 0) * mult;
+            palletProdList.push({
+              w: (def.prodWood || 0) * mult,
+              s: (def.prodScrap || 0) * mult
+            });
+          } else if (g.id === 'b1_logistics_term') {
+            b1SupplyCoin += (def.dawnCoin || 0) * mult;
+            rawTraderDisc += (def.traderDiscAdd || 0) * mult;
+          } else if (g.id === 'vending_machine') {
+            rawMannedFireRate += (def.mannedFireRateAdd || 0) * mult;
+          } else if (g.id === 'b1_coffee_bar') {
+            rawDigApBonus += (def.digApBonusPct || 0) * mult;
+          } else if (g.id === 'b1_media_screen') {
+            b1MannedXpMult += (def.mannedXpAdd || 0) * mult;
+          }
+        }
+
+        statusMap[`${x},${y}`] = {
+          active: !blackoutPaused,
+          connected: true,
+          roleMatch: true,
+          diminished,
+          blackoutPaused,
+          copyIndex,
+          mult,
+          adjacentBed,
+          statusLabel: blackoutPaused
+            ? '정전 중지 (OFF)'
+            : diminished
+            ? '가동 중 (50% 감쇠)'
+            : '가동 중'
+        };
+      }
+    }
+
+    // Quarters Air Purifier per-room cozy percentage boost (cap +40% per room)
+    const qRoomIds = Object.keys(roomPurifierPct);
+    for (let i = 0; i < qRoomIds.length; i++) {
+      const rid = qRoomIds[i];
+      const pct = Math.min(0.40, roomPurifierPct[rid] || 0);
+      const baseSum = roomGadgetCozy[rid] || 0;
+      if (pct > 0 && baseSum > 0) {
+        cozySynergy += Math.round(baseSum * pct);
+      }
+    }
+
+    const jobs = state.jobs || { combat: state.agents || 0, research: 0, prod: 0 };
+    const researchWorkers = Math.max(0, Math.floor(jobs.research || 0));
+    let b1LabFlatRp = 0;
+    for (let i = 0; i < researchWorkers && i < deskBonusList.length; i++) {
+      b1LabFlatRp += deskBonusList[i];
+    }
+
+    const prodWorkers = Math.max(0, Math.floor(jobs.prod || 0));
+    let b1SupplyProdWood = 0;
+    let b1SupplyProdScrap = 0;
+    for (let i = 0; i < prodWorkers && i < palletProdList.length; i++) {
+      b1SupplyProdWood += palletProdList[i].w;
+      b1SupplyProdScrap += palletProdList[i].s;
+    }
+
+    const b1PowerDrainSave = +Math.min(0.35, rawDrainSave).toFixed(4);
+    const b1NightIdleDrain = +(rawB1IdleDrain * (1 - b1PowerDrainSave)).toFixed(3);
+    const b1TraderDisc = +Math.min(0.24, rawTraderDisc).toFixed(4);
+    const b1MannedFireRateMult = +Math.min(0.15, rawMannedFireRate).toFixed(4);
+    const b1DigApBonusMult = +Math.min(0.30, rawDigApBonus).toFixed(4);
+
+    state.b1PopCap = b1PopCap;
+    state.b1LabFlatRp = +b1LabFlatRp.toFixed(2);
+    state.b1LabFlatPerWaveRp = +b1LabFlatPerWaveRp.toFixed(2);
+    state.b1LabMult = +b1LabMult.toFixed(4);
+    state.b1BossRpMult = +b1BossRpMult.toFixed(4);
+    state.b1HoloCritAdd = +b1HoloCritAdd.toFixed(4);
+    state.b1SupplyWood = +b1SupplyWood.toFixed(2);
+    state.b1SupplyScrap = +b1SupplyScrap.toFixed(2);
+    state.b1SupplyProdWood = +b1SupplyProdWood.toFixed(2);
+    state.b1SupplyProdScrap = +b1SupplyProdScrap.toFixed(2);
+    state.b1SupplyCoin = +b1SupplyCoin.toFixed(2);
+    state.b1TraderDisc = b1TraderDisc;
+    state.b1MannedFireRateMult = b1MannedFireRateMult;
+    state.b1MannedXpMult = +b1MannedXpMult.toFixed(4);
+    state.b1DigApBonusMult = b1DigApBonusMult;
+    state.b1DigMult = b1DigApBonusMult;
+    state.b1PowerCap = b1PowerCap;
+    state.b1DayCharge = +b1DayCharge.toFixed(2);
+    state.b1NightGen = +b1NightGen.toFixed(3);
+    state.b1PowerDrainSave = b1PowerDrainSave;
+    state.b1NightIdleDrain = b1NightIdleDrain;
+    state.b1CozySynergy = cozySynergy;
+
+    return {
+      popCap: b1PopCap,
+      powerCap: b1PowerCap,
+      dayCharge: +b1DayCharge.toFixed(2),
+      nightGen: +b1NightGen.toFixed(3),
+      nightIdleDrain: b1NightIdleDrain,
+      cozyEntries,
+      cozySynergy,
+      roomPurifierPct,
+      statusMap
+    };
+  }
+
+  function getB1GadgetStatus(tx, ty) {
+    const ug = ensureUndergroundState();
+    if (!ug._gadgetStatusMap) {
+      recomputeUndergroundEffects();
+    }
+    return (ug._gadgetStatusMap && ug._gadgetStatusMap[`${tx},${ty}`]) || null;
   }
 
   function getB1Summary() {
@@ -1079,6 +1594,18 @@ window.ZS = window.ZS || {};
       ug.lockedHighlightTimer = Math.max(0, ug.lockedHighlightTimer - rawDt);
       if (ug.lockedHighlightTimer <= 0) {
         ug.lockedHighlightRoomId = null;
+      }
+    }
+    if (Array.isArray(ug.b1StructGrid)) {
+      for (let y = 1; y < B1_SIZE - 1; y++) {
+        const row = ug.b1StructGrid[y];
+        if (!row) continue;
+        for (let x = 1; x < B1_SIZE - 1; x++) {
+          const g = row[x];
+          if (g && g.buildAnimTimer > 0) {
+            g.buildAnimTimer = Math.max(0, g.buildAnimTimer - rawDt);
+          }
+        }
       }
     }
   }
@@ -1131,6 +1658,13 @@ window.ZS = window.ZS || {};
     unzoneB1Tile,
     findNearestB1DoorEdge,
     toggleB1Door,
+    canPlaceB1Item,
+    placeB1Item,
+    canMoveB1Item,
+    moveB1Item,
+    removeB1ItemAt,
+    recomputeUndergroundEffects,
+    getB1GadgetStatus,
     getB1Summary,
     updateUnderground,
     debugAddDigAp
@@ -1165,6 +1699,13 @@ window.ZS = window.ZS || {};
       unzoneB1Tile,
       findNearestB1DoorEdge,
       toggleB1Door,
+      canPlaceB1Item,
+      placeB1Item,
+      canMoveB1Item,
+      moveB1Item,
+      removeB1ItemAt,
+      recomputeUndergroundEffects,
+      getB1GadgetStatus,
       getB1Summary,
       debugAddDigAp
     });
