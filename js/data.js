@@ -339,7 +339,7 @@ ZS.DATA = (function () {
 
   CATEGORIES: [
     { id: 'defense', iconId: 'cat-defense', label: '방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
-    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 태양광·야간 풍력 발전기, 배터리, 요원 숙소' },
+    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소·정비', desc: '주간 태양광·야간 풍력 발전기, 배터리, 요원 숙소, 현장 수리 정비' },
     { id: 'decor',   iconId: 'cat-decor',   label: '모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
 
@@ -656,6 +656,20 @@ ZS.DATA = (function () {
       lightColor: 'rgba(255, 206, 112, 0.34)',
       desc: '[요원 숙소 · 4단 진화] 요원 수용량을 확장하고 매일 아침 신규 요원이 합류합니다. 모듈러 숙소·강화 작전 생활관(+6명)으로 진화합니다.'
     },
+    repair_bay: {
+      id: 'repair_bay',
+      name: '현장 수리 거치대',
+      category: 'infra',
+      layer: 'struct',
+      subType: 'decor',
+      reqHqLevel: 1,
+      cost: { wood: 10, scrap: 14 },
+      maxHp: 165,
+      cozy: 5,
+      cozyGroup: 'repair_t1',
+      aura: { radius: 2.2, regenPerSec: 2.5 },
+      desc: '[3단 진화 자동 수리] 수리 거치대(1단·2.2칸 +2.5/s) → 로봇 정비 베이(2단·2.6칸 +5/s) → 나노 드론 정비소(3단·3.2칸 +9.5/s·야간 조명).'
+    },
 
     // ================= MODERN DECOR & TACTICAL SUPPORT =================
     gas_heater: {
@@ -724,20 +738,6 @@ ZS.DATA = (function () {
       lightColor: 'rgba(255, 208, 148, 0.36)',
       aura: { radius: 2.7, fireRate: 0.15 },
       desc: '[내장 배터리 발광] 시원한 에너지 드링크 보급! 반경 2.7칸 내 연사속도를 +15% 높입니다.'
-    },
-    repair_bay: {
-      id: 'repair_bay',
-      name: '현장 수리 거치대',
-      category: 'decor',
-      layer: 'struct',
-      subType: 'decor',
-      reqHqLevel: 1,
-      cost: { wood: 10, scrap: 14 },
-      maxHp: 165,
-      cozy: 5,
-      cozyGroup: 'repair_t1',
-      aura: { radius: 2.2, regenPerSec: 2.5 },
-      desc: '[3단 진화 자동 수리] 수리 거치대(1단·2.2칸 +2.5/s) → 로봇 정비 베이(2단·2.6칸 +5/s) → 나노 드론 정비소(3단·3.2칸 +9.5/s·야간 조명).'
     },
     lounge_set: {
       id: 'lounge_set',

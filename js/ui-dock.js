@@ -99,13 +99,13 @@ window.ZS = window.ZS || {};
         cls: 'tag-manned'
       };
     }
+    if (def.id === 'repair_bay' && def.aura && def.aura.regenPerSec) {
+      return {
+        html: `${ozIcon('act-repair', 13, 'icon-heal')}<span>수리 +${def.aura.regenPerSec}/s ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`,
+        cls: 'tag-manned'
+      };
+    }
     if (def.category === 'decor') {
-      if (def.id === 'repair_bay' && def.aura && def.aura.regenPerSec) {
-        return {
-          html: `${ozIcon('act-repair', 13, 'icon-heal')}<span>수리 +${def.aura.regenPerSec}/s ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`,
-          cls: 'tag-manned'
-        };
-      }
       const pwrPrefix = def.requiresPower ? `${ozIcon('res-power', 13, 'icon-power')}<span>전등 ·</span>` : '';
       if (preview && preview.isDiminished) {
         return { html: `${pwrPrefix}<span>+${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
