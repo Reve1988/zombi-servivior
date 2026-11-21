@@ -698,14 +698,12 @@ window.ZS = window.ZS || {};
       if (!placed && p < 2) return null;
     }
 
-    // 2) Rocks: 3~4 abundant mountain ridges (4~7 connected tiles, interior isPeak: true crags) + 2~3 foothill clusters
-    const ridgeCount = rng() < 0.45 ? 3 : 4;
+    // 2) Rocks: 5~6 abundant mountain ridges (4~7 connected tiles, interior isPeak: true crags) + 2~3 foothill clusters
+    const ridgeCount = rng() < 0.55 ? 5 : 6;
     const ridgeSizes = [];
     for (let i = 0; i < ridgeCount; i++) {
-      ridgeSizes.push(4 + Math.floor(rng() * 3));
-    }
-    if (ridgeCount === 3 && rng() < 0.45) {
-      ridgeSizes[0] = Math.min(7, ridgeSizes[0] + 1);
+      const maxAdd = i < 2 ? 4 : 3;
+      ridgeSizes.push(4 + Math.floor(rng() * maxAdd));
     }
     const clusterCount = rng() < 0.5 ? 2 : 3;
     const clusterSizes = [];
@@ -737,7 +735,7 @@ window.ZS = window.ZS || {};
       if (qIdx === 2) return x < hx && y >= hy;
       return x >= hx && y >= hy;
     };
-    const quadOrder = shuffleWithRng([0, 1, 2, 3], rng);
+    const quadOrder = shuffleWithRng([0, 1, 2, 3], rng).concat(shuffleWithRng([0, 1, 2, 3], rng));
 
     const rockTopLow = DATA.ROCK_TOP_Z || 16;
     const rockTopPeak = DATA.ROCK_PEAK_TOP_Z || 33;
@@ -746,16 +744,16 @@ window.ZS = window.ZS || {};
     let groupIdSeq = 0;
     const placedRidges = [];
 
-    // 2a) Place 3~4 mountain ridges (elongated 4~7-tile chains with dense interior isPeak: true crags)
+    // 2a) Place 5~6 mountain ridges (elongated 4~7-tile chains with dense interior isPeak: true crags)
     for (let rIdx = 0; rIdx < ridgeCount; rIdx++) {
       const wantSz = ridgeSizes[rIdx];
       const gId = groupIdSeq++;
-      const targetQuad = quadOrder[rIdx % 4];
+      const targetQuad = quadOrder[rIdx];
       let ridgeCells = null;
-      for (let tries = 0; tries < 180; tries++) {
+      for (let tries = 0; tries < 220; tries++) {
         const sx = 2 + Math.floor(rng() * (N - 4));
         const sy = 2 + Math.floor(rng() * (N - 4));
-        if (tries < 110 && !isInQuadrant(sx, sy, targetQuad)) continue;
+        if (tries < 120 && !isInQuadrant(sx, sy, targetQuad)) continue;
         if (!isValidRidgeCell(sx, sy, gId)) continue;
         const chain = [[sx, sy]];
         rockClusterIdGrid[sy][sx] = gId;
@@ -887,10 +885,10 @@ window.ZS = window.ZS || {};
     }
 
     if (
-      placedRidges.length < 3 ||
-      totalPeaksPlaced < 8 ||
-      rockTilesPlaced < 18 ||
-      rockTilesPlaced > 34 ||
+      placedRidges.length < 5 ||
+      totalPeaksPlaced < 13 ||
+      rockTilesPlaced < 26 ||
+      rockTilesPlaced > 45 ||
       foothillClustersPlaced < 2 ||
       foothillClustersPlaced > 3
     ) {
