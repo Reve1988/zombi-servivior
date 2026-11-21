@@ -173,7 +173,7 @@ ZS.DATA = (function () {
     rampFlagstone: '#7E786E'
   };
 
-  // Structures & upgrades unlock via the 5-branch RP Tech Tree (NOT reqHqLevel)
+  // Structures & upgrades unlock via the 5-branch RP Tech Tree gated by HQ Lv.1~5
   const WALL_TIERS = {
     1: { level: 1, name: '철조망 바리케이드', reqTech: null, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
     2: { level: 2, name: '헤스코 전술 방벽', reqTech: 'def_t1', upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
@@ -593,7 +593,7 @@ ZS.DATA = (function () {
     }
   ],
 
-  // 5-Branch RP Tech Tree (replaces legacy reqHqLevel build & upgrade locks)
+  // 5-Branch RP Tech Tree gated by HQ Lv.1~5 (Wave 1/20/40/60/80)
   TECH_BRANCHES: [
     { id: 'defense_eng', name: '방어선 공학', desc: '성벽·게이트·트랩 진화 및 복합 장갑 연구', accent: '#4ADE80' },
     { id: 'infantry_weap', name: '보병 화기 개량', desc: '저격탑 해금 및 무전력 요원 초소 2·3단계 개량', accent: '#FACC15' },
@@ -618,6 +618,7 @@ ZS.DATA = (function () {
       name: '중장갑 방어선 1단계',
       costRp: 4,
       maxLv: 1,
+      reqHqLevel: 1,
       req: [],
       desc: '성벽(헤스코 방벽·상부 거치 & 하부 보강), 전술 게이트, 피스톤 트랩 Lv.2 해금'
     },
@@ -627,6 +628,7 @@ ZS.DATA = (function () {
       name: '고압·반사 방어선 2단계',
       costRp: 10,
       maxLv: 1,
+      reqHqLevel: 2,
       req: ['def_t1'],
       desc: '합금 장갑 성벽, 전자식 쇼크 게이트, 고전압 피에조 트랩 Lv.3 해금'
     },
@@ -637,6 +639,7 @@ ZS.DATA = (function () {
       costRp: 14,
       costStep: 8,
       maxLv: 5,
+      reqHqLevel: 5,
       req: ['def_t2'],
       desc: '레벨당 성벽·게이트·트랩 HP +15% & 근접 반사·트랩 피해 +12%'
     },
@@ -646,6 +649,7 @@ ZS.DATA = (function () {
       name: '대물 저격 체계',
       costRp: 4,
       maxLv: 1,
+      reqHqLevel: 1,
       req: [],
       desc: '대물 저격 감시탑(무전력 장거리 초소) 건설 해금'
     },
@@ -655,6 +659,7 @@ ZS.DATA = (function () {
       name: '전술 화기 개량 Lv.2',
       costRp: 7,
       maxLv: 1,
+      reqHqLevel: 1,
       req: ['inf_sniper'],
       desc: '모든 요원 초소(소총·샷건·저격탑) Lv.2 강화 해금'
     },
@@ -664,6 +669,7 @@ ZS.DATA = (function () {
       name: '특수 작전 화기 Lv.3',
       costRp: 15,
       maxLv: 1,
+      reqHqLevel: 2,
       req: ['inf_lv2'],
       desc: '모든 요원 초소 Lv.3 특수 개조(2점사·중산탄·관통탄) 해금'
     },
@@ -674,6 +680,7 @@ ZS.DATA = (function () {
       costRp: 16,
       costStep: 9,
       maxLv: 5,
+      reqHqLevel: 5,
       req: ['inf_lv3'],
       desc: '레벨당 모든 요원 초소 공격력 +12% & 치명타율 +3%p'
     },
@@ -683,6 +690,7 @@ ZS.DATA = (function () {
       name: '무인 발칸 오토터렛',
       costRp: 5,
       maxLv: 1,
+      reqHqLevel: 2,
       req: [],
       desc: 'CIWS 발칸 오토터렛 건설 해금'
     },
@@ -692,6 +700,7 @@ ZS.DATA = (function () {
       name: '자동 포탑 화력 강화 Lv.2',
       costRp: 9,
       maxLv: 1,
+      reqHqLevel: 3,
       req: ['tur_vulcan'],
       desc: '모든 자동 포탑(발칸·로켓·EMP) Lv.2 강화 해금'
     },
@@ -701,6 +710,7 @@ ZS.DATA = (function () {
       name: '고각 다연장 로켓 체계',
       costRp: 12,
       maxLv: 1,
+      reqHqLevel: 3,
       req: ['tur_vulcan'],
       desc: '다연장 로켓 포대(산맥 너머 광역 곡사 포격) 건설 해금'
     },
@@ -710,6 +720,7 @@ ZS.DATA = (function () {
       name: '고압 테슬라 EMP 방전',
       costRp: 16,
       maxLv: 1,
+      reqHqLevel: 4,
       req: ['tur_missile'],
       desc: '테슬라 EMP 파일런(연쇄 전격·둔화) 건설 해금'
     },
@@ -719,6 +730,7 @@ ZS.DATA = (function () {
       name: '초전도 오토터렛 특전 Lv.3',
       costRp: 20,
       maxLv: 1,
+      reqHqLevel: 4,
       req: ['tur_lv2', 'tur_missile'],
       desc: '모든 자동 포탑 Lv.3 특수 개조(초전도 급탄·6연장·5연쇄) 해금'
     },
@@ -729,6 +741,7 @@ ZS.DATA = (function () {
       costRp: 18,
       costStep: 10,
       maxLv: 5,
+      reqHqLevel: 5,
       req: ['tur_lv3'],
       desc: '레벨당 모든 자동 포탑 공격력 +12% & 사격 전력 소모 -6%'
     },
@@ -738,6 +751,7 @@ ZS.DATA = (function () {
       name: '기지 인프라 2단계 진화',
       costRp: 5,
       maxLv: 1,
+      reqHqLevel: 1,
       req: [],
       desc: '태양광·풍력·배터리·야전 막사·정비 베이 Lv.2 업그레이드 해금'
     },
@@ -747,6 +761,7 @@ ZS.DATA = (function () {
       name: '기지 인프라 3단계 진화',
       costRp: 12,
       maxLv: 1,
+      reqHqLevel: 2,
       req: ['inf_tier2'],
       desc: '태양광·풍력·리튬 ESS·모듈러 숙소·나노 정비소 Lv.3 해금'
     },
@@ -756,6 +771,7 @@ ZS.DATA = (function () {
       name: '초전도 인프라 4단계',
       costRp: 22,
       maxLv: 1,
+      reqHqLevel: 3,
       req: ['inf_tier3'],
       desc: '태양광 발전소·대형 풍력·초전도 코어·작전 생활관 Lv.4 해금'
     },
@@ -766,6 +782,7 @@ ZS.DATA = (function () {
       costRp: 16,
       costStep: 9,
       maxLv: 5,
+      reqHqLevel: 5,
       req: ['inf_tier4'],
       desc: '레벨당 본부·태양광·풍력·배터리 주간 충전량 및 전력 용량 +10%'
     },
@@ -775,6 +792,7 @@ ZS.DATA = (function () {
       name: '심부 굴착 공법',
       costRp: 8,
       maxLv: 1,
+      reqHqLevel: 2,
       req: [],
       desc: '생산요원 굴착력 3→4 AP/명 · 이월 상한 +8 · 매몰 전리품 +25%'
     },
@@ -784,6 +802,7 @@ ZS.DATA = (function () {
       name: '고급 쉘터 설비 인가',
       costRp: 14,
       maxLv: 1,
+      reqHqLevel: 3,
       req: ['b1_drill_1'],
       desc: '지하 쉘터(Stage 3) 고급 가젯 및 심층 지원 설비 인가'
     },
@@ -793,6 +812,7 @@ ZS.DATA = (function () {
       name: '레이저 암반 파쇄기',
       costRp: 20,
       maxLv: 1,
+      reqHqLevel: 4,
       req: ['b1_gadgets_adv'],
       desc: '심부 현무암 굴착 AP 3→2 소모 · 기지 전역 RP 획득량 +15%'
     }
@@ -854,7 +874,7 @@ ZS.DATA = (function () {
     bossGlobalBonus: 4.0
   },
 
-  // Note: Base items & upgrades unlock via the 5-branch RP Tech Tree (NOT reqHqLevel)
+  // Note: Base items & upgrades unlock via the 5-branch RP Tech Tree gated by HQ Lv.1~5
   ITEMS: {
     // ================= FLOORS (layer: 'floor') =================
     asphalt: {
