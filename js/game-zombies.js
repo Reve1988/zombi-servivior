@@ -144,17 +144,31 @@ window.ZS = window.ZS || {};
   }
 
   function findBossChargeTarget(z, tx, ty) {
+    const startT = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+    if (startT && (startT.kind === 'rock' || startT.kind === 'ramp')) return null;
+    const startElev = startT && startT.kind === 'plateau' ? 10 : 0;
+
     let cx = tx;
     let cy = ty;
     const visited = new Set([`${cx},${cy}`]);
     for (let stepIdx = 0; stepIdx < 6; stepIdx++) {
       const nextStep = state.flow && state.flow.next[cy] && state.flow.next[cy][cx];
       if (!nextStep) break;
+      const prevX = cx;
+      const prevY = cy;
       cx += nextStep.dx;
       cy += nextStep.dy;
       const key = `${cx},${cy}`;
       if (visited.has(key) || cx < 0 || cy < 0 || cx >= N || cy >= N) break;
       visited.add(key);
+
+      if (ZS.Pathfinding && ZS.Pathfinding.canTraverseTerrainStep && !ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, prevX, prevY, cx, cy)) {
+        break;
+      }
+      const cT = G.getTerrainAt ? G.getTerrainAt(cx, cy) : null;
+      if (cT && (cT.kind === 'rock' || cT.kind === 'ramp')) break;
+      const cElev = cT && cT.kind === 'plateau' ? 10 : 0;
+      if (cElev !== startElev) break;
 
       const st = state.structGrid[cy] && state.structGrid[cy][cx];
       if (!st) continue;
@@ -165,7 +179,22 @@ window.ZS = window.ZS || {};
       if (def && (def.subType === 'wall' || def.subType === 'gate')) {
         const dist = Math.hypot(cx + 0.5 - z.x, cy + 0.5 - z.y);
         if (dist >= 1.2 && dist <= 3.4) {
-          return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          // Verify straight-line samples have clear non-rock, identical-elevation terrain
+          let lineClear = true;
+          for (let s = 1; s <= 6; s++) {
+            const u = s / 7;
+            const sx = Math.floor(z.x + (cx + 0.5 - z.x) * u);
+            const sy = Math.floor(z.y + (cy + 0.5 - z.y) * u);
+            const sT = G.getTerrainAt ? G.getTerrainAt(sx, sy) : null;
+            const sElev = sT && sT.kind === 'plateau' ? 10 : 0;
+            if ((sT && (sT.kind === 'rock' || sT.kind === 'ramp')) || sElev !== startElev) {
+              lineClear = false;
+              break;
+            }
+          }
+          if (lineClear) {
+            return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          }
         }
       }
       break;
@@ -272,8 +301,18 @@ window.ZS = window.ZS || {};
             z.atkCooldown = 1 / z.attackRate;
             continue;
           } else {
-            z.x += (dx / dist) * dashStep;
-            z.y += (dy / dist) * dashStep;
+            const curTx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
+            const curTy = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
+            const nx = z.x + (dx / dist) * dashStep;
+            const ny = z.y + (dy / dist) * dashStep;
+            const ntx = Math.max(0, Math.min(N - 1, Math.floor(nx)));
+            const nty = Math.max(0, Math.min(N - 1, Math.floor(ny)));
+            if ((ntx === curTx && nty === curTy) || !ZS.Pathfinding || !ZS.Pathfinding.canTraverseTerrainStep || ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, curTx, curTy, ntx, nty)) {
+              z.x = nx;
+              z.y = ny;
+            } else {
+              z.chargeState = null;
+            }
             continue;
           }
         }
@@ -473,7 +512,7 @@ window.ZS = window.ZS || {};
         }
       }
 
-      // Leaper single-wall leap (1x per spawn, 1.1-tile check, landing tile must be empty or passable)
+      // Leaper single-wall leap (1x per spawn, 1.1-tile check, landing tile must be empty or passable, blocked across rock/ramp/cliff)
       if (z.type === 'leaper' && !z.hasLeaped && step) {
         const ntx = tx + step.dx;
         const nty = ty + step.dy;
@@ -488,24 +527,39 @@ window.ZS = window.ZS || {};
           const ltx = ntx + step.dx;
           const lty = nty + step.dy;
           if (ltx >= 0 && lty >= 0 && ltx < N && lty < N) {
-            const landSt = state.structGrid[lty] && state.structGrid[lty][ltx];
-            const landDef = landSt ? (landSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[landSt.id]) : null;
-            if (!landSt || (landDef && landDef.passable)) {
-              z.hasLeaped = true;
-              z.facingAngle = Math.atan2(lty + 0.5 - z.y, ltx + 0.5 - z.x);
-              z.leapState = {
-                phase: 'crouch',
-                timer: 0,
-                crouchDur: 0.12,
-                airDur: 0.42,
-                startX: z.x,
-                startY: z.y,
-                targetX: ltx + 0.5,
-                targetY: lty + 0.5,
-                landTx: ltx,
-                landTy: lty
-              };
-              continue;
+            const curT = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+            const midT = G.getTerrainAt ? G.getTerrainAt(ntx, nty) : null;
+            const landT = G.getTerrainAt ? G.getTerrainAt(ltx, lty) : null;
+            const curK = curT ? curT.kind : null;
+            const midK = midT ? midT.kind : null;
+            const landK = landT ? landT.kind : null;
+            const terrainForbidden =
+              curK === 'rock' || curK === 'ramp' ||
+              midK === 'rock' || midK === 'ramp' ||
+              landK === 'rock' || landK === 'ramp';
+            const curElev = curK === 'plateau' ? 10 : 0;
+            const midElev = midK === 'plateau' ? 10 : 0;
+            const landElev = landK === 'plateau' ? 10 : 0;
+            if (!terrainForbidden && curElev === midElev && midElev === landElev) {
+              const landSt = state.structGrid[lty] && state.structGrid[lty][ltx];
+              const landDef = landSt ? (landSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[landSt.id]) : null;
+              if (!landSt || (landDef && landDef.passable)) {
+                z.hasLeaped = true;
+                z.facingAngle = Math.atan2(lty + 0.5 - z.y, ltx + 0.5 - z.x);
+                z.leapState = {
+                  phase: 'crouch',
+                  timer: 0,
+                  crouchDur: 0.12,
+                  airDur: 0.42,
+                  startX: z.x,
+                  startY: z.y,
+                  targetX: ltx + 0.5,
+                  targetY: lty + 0.5,
+                  landTx: ltx,
+                  landTy: lty
+                };
+                continue;
+              }
             }
           }
         }
@@ -595,9 +649,47 @@ window.ZS = window.ZS || {};
           }
         }
       } else if (distGoal > 0.01) {
-        const moveSpd = z.speed * slowMult * frenzyMult * dt;
-        z.x += ((goalX - z.x) / distGoal) * moveSpd;
-        z.y += ((goalY - z.y) / distGoal) * moveSpd;
+        let rampMult = 1.0;
+        const curT = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+        const stepDx = (goalX - z.x) / distGoal;
+        const stepDy = (goalY - z.y) / distGoal;
+        if (curT && curT.kind === 'ramp' && curT.rampDir) {
+          const dot = stepDx * curT.rampDir.dx + stepDy * curT.rampDir.dy;
+          const rampSpd = DATA.RAMP_SPEED || { uphill: 0.70, downhill: 1.25 };
+          if (dot > 0.25) rampMult = rampSpd.uphill;
+          else if (dot < -0.25) rampMult = rampSpd.downhill;
+        }
+        const moveSpd = z.speed * slowMult * frenzyMult * rampMult * dt;
+        const candX = Math.max(0.02, Math.min(N - 0.02, z.x + stepDx * moveSpd));
+        const candY = Math.max(0.02, Math.min(N - 0.02, z.y + stepDy * moveSpd));
+        const ntx = Math.floor(candX);
+        const nty = Math.floor(candY);
+        const canStep =
+          (ntx === tx && nty === ty) ||
+          !ZS.Pathfinding ||
+          !ZS.Pathfinding.canTraverseTerrainStep ||
+          ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, tx, ty, ntx, nty);
+        if (canStep) {
+          z.x = candX;
+          z.y = candY;
+        } else {
+          const canSlideX =
+            ntx !== tx &&
+            ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, tx, ty, ntx, ty);
+          const canSlideY =
+            nty !== ty &&
+            ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, tx, ty, tx, nty);
+          if (canSlideX) {
+            z.x = candX;
+            z.y = Math.max(ty + 0.02, Math.min(ty + 0.98, candY));
+          } else if (canSlideY) {
+            z.x = Math.max(tx + 0.02, Math.min(tx + 0.98, candX));
+            z.y = candY;
+          } else {
+            z.x = Math.max(tx + 0.02, Math.min(tx + 0.98, candX));
+            z.y = Math.max(ty + 0.02, Math.min(ty + 0.98, candY));
+          }
+        }
       }
     }
 
@@ -1019,6 +1111,10 @@ window.ZS = window.ZS || {};
     toggleScreenShake: G.toggleScreenShake,
     setCallbacks: G.setCallbacks,
     initNewGame: G.initNewGame,
+    regenerateMapSeed: G.regenerateMapSeed,
+    getTerrainAt: G.getTerrainAt,
+    getTerrainElevationAt: G.getTerrainElevationAt,
+    getTerrainPowerStats: G.getTerrainPowerStats,
     loadGame: G.loadGame,
     clearSaveAndReset: G.clearSaveAndReset,
     getHqLevelInfo: G.getHqLevelInfo,

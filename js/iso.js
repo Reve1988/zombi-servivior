@@ -23,31 +23,40 @@ ZS.Iso = (function () {
     tintStrength: 0
   };
 
-  const initHqX = (ZS.DATA && ZS.DATA.HQ_POS ? ZS.DATA.HQ_POS.x : 10) + 0.5;
-  const initHqY = (ZS.DATA && ZS.DATA.HQ_POS ? ZS.DATA.HQ_POS.y : 10) + 0.5;
+  const initHqX = (ZS.DATA && ZS.DATA.HQ_POS ? ZS.DATA.HQ_POS.x : 13) + 0.5;
+  const initHqY = (ZS.DATA && ZS.DATA.HQ_POS ? ZS.DATA.HQ_POS.y : 13) + 0.5;
   const cam = {
     x: (initHqX - initHqY) * (TILE_W * 0.5),
     y: (initHqX + initHqY) * (TILE_H * 0.5) + 24,
     zoom: 1.0,
-    minZoom: 0.68,
+    minZoom: 0.54,
     maxZoom: 2.50
   };
 
   let viewW = 1280;
   let viewH = 720;
+  let elevOffsetZ = 0;
+
+  function setElevationOffset(zPx) {
+    elevOffsetZ = zPx || 0;
+  }
+
+  function getElevationOffset() {
+    return elevOffsetZ;
+  }
 
   function getViewport() {
     return { w: viewW, h: viewH };
   }
 
   function computeMinZoom(w, h) {
-    const N = (ZS.DATA && ZS.DATA.GRID_SIZE) ? ZS.DATA.GRID_SIZE : 22;
-    const islandW = N * TILE_W;          // 22 * 68 = 1496px
-    const islandH = N * TILE_H + 36;     // 22 * 34 + 36 = 784px
+    const N = (ZS.DATA && ZS.DATA.GRID_SIZE) ? ZS.DATA.GRID_SIZE : 26;
+    const islandW = N * TILE_W;          // 26 * 68 = 1768px
+    const islandH = N * TILE_H + 36;     // 26 * 34 + 36 = 920px
     const availW = Math.max(480, w - 80);
     const availH = Math.max(300, h - 250);
     const fitZoom = Math.min(availW / islandW, availH / islandH) * 0.90;
-    return Number(Math.max(0.64, Math.min(0.76, fitZoom)).toFixed(3));
+    return Number(Math.max(0.54, Math.min(0.76, fitZoom)).toFixed(3));
   }
 
   function setViewport(w, h) {
@@ -99,7 +108,7 @@ ZS.Iso = (function () {
 
   function projectTo(gx, gy, zPx, out) {
     const wx = (gx - gy) * (TILE_W * 0.5);
-    const wy = (gx + gy) * (TILE_H * 0.5) - (zPx || 0);
+    const wy = (gx + gy) * (TILE_H * 0.5) - ((zPx || 0) + elevOffsetZ);
     out.x = (wx - cam.x) * cam.zoom + viewW * 0.5;
     out.y = (wy - cam.y) * cam.zoom + viewH * 0.5;
     return out;
@@ -107,7 +116,7 @@ ZS.Iso = (function () {
 
   function gridToScreen(gx, gy, zPx) {
     const wx = (gx - gy) * (TILE_W * 0.5);
-    const wy = (gx + gy) * (TILE_H * 0.5) - (zPx || 0);
+    const wy = (gx + gy) * (TILE_H * 0.5) - ((zPx || 0) + elevOffsetZ);
     return {
       x: (wx - cam.x) * cam.zoom + viewW * 0.5,
       y: (wy - cam.y) * cam.zoom + viewH * 0.5
@@ -121,18 +130,39 @@ ZS.Iso = (function () {
     };
   }
 
-  function screenToGrid(sx, sy) {
+  function screenToGridAtZ(sx, sy, zPx) {
     const { wx, wy } = screenToWorld(sx, sy);
     const halfW = TILE_W * 0.5;
     const halfH = TILE_H * 0.5;
-    const gx = (wx / halfW + wy / halfH) * 0.5;
-    const gy = (wy / halfH - wx / halfW) * 0.5;
+    const wyAdj = wy + (zPx || 0);
+    const gx = (wx / halfW + wyAdj / halfH) * 0.5;
+    const gy = (wyAdj / halfH - wx / halfW) * 0.5;
     return {
       gx,
       gy,
       tx: Math.floor(gx),
       ty: Math.floor(gy)
     };
+  }
+
+  function screenToGridFlat(sx, sy) {
+    return screenToGridAtZ(sx, sy, 0);
+  }
+
+  function screenToGrid(sx, sy) {
+    const tGrid = ZS.Game && ZS.Game.state && ZS.Game.state.terrainGrid;
+    if (tGrid) {
+      const plateauZ = (ZS.DATA && ZS.DATA.PLATEAU_ELEV_Z) || 10;
+      const c10 = screenToGridAtZ(sx, sy, plateauZ);
+      const t10 = tGrid[c10.ty] && tGrid[c10.ty][c10.tx];
+      if (t10 && t10.kind === 'plateau') return c10;
+
+      const rampZ = (ZS.DATA && ZS.DATA.RAMP_ELEV_Z) || 5;
+      const c5 = screenToGridAtZ(sx, sy, rampZ);
+      const t5 = tGrid[c5.ty] && tGrid[c5.ty][c5.tx];
+      if (t5 && t5.kind === 'ramp') return c5;
+    }
+    return screenToGridAtZ(sx, sy, 0);
   }
 
   function parseHexRgb(hex) {
@@ -371,8 +401,11 @@ ZS.Iso = (function () {
     panByScreen,
     zoomAtScreen,
     gridToWorld,
+    setElevationOffset,
+    getElevationOffset,
     projectTo,
     gridToScreen,
+    screenToGridFlat,
     screenToGrid,
     shadeHex,
     mixHex,

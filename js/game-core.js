@@ -68,6 +68,8 @@ window.ZS = window.ZS || {};
 
     floorGrid: [],
     structGrid: [],
+    terrainSeed: 0,
+    terrainGrid: [],
     flow: null,
     nextWaveIntel: null,
     previewPaths: [],
@@ -242,11 +244,391 @@ window.ZS = window.ZS || {};
   function createEmptyGrids() {
     state.floorGrid = Array.from({ length: N }, () => Array(N).fill(null));
     state.structGrid = Array.from({ length: N }, () => Array(N).fill(null));
+    state.terrainGrid = Array.from({ length: N }, () => Array(N).fill(null));
   }
 
-  function initNewGame() {
+  function getTerrainAt(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) return null;
+    const g = state.terrainGrid;
+    return (g && g[ty] && g[ty][tx]) || null;
+  }
+
+  function getTerrainElevationAt(gx, gy) {
+    const tx = Math.floor(gx);
+    const ty = Math.floor(gy);
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) return 0;
+    const t = state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx];
+    if (!t) return 0;
+    const plateauZ = DATA.PLATEAU_ELEV_Z || 10;
+    if (t.kind === 'plateau') return t.elev != null ? t.elev : plateauZ;
+    if (t.kind === 'ramp' && t.rampDir) {
+      const fx = Math.max(0, Math.min(1, gx - tx));
+      const fy = Math.max(0, Math.min(1, gy - ty));
+      const dx = t.rampDir.dx;
+      const dy = t.rampDir.dy;
+      let u = 0.5;
+      if (dx === 1) u = fx;
+      else if (dx === -1) u = 1 - fx;
+      else if (dy === 1) u = fy;
+      else if (dy === -1) u = 1 - fy;
+      return u * plateauZ;
+    }
+    return 0;
+  }
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function shuffleWithRng(arr, rng) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function isInsideHqSafeZone(x, y) {
+    return Math.abs(x - DATA.HQ_POS.x) <= 2 && Math.abs(y - DATA.HQ_POS.y) <= 2;
+  }
+
+  function isInsideInnerTerrainBounds(x, y) {
+    return x >= 2 && x <= N - 3 && y >= 2 && y <= N - 3;
+  }
+
+  function generateProceduralTerrain(seed) {
+    const rng = mulberry32(seed);
+    const grid = Array.from({ length: N }, () => Array(N).fill(null));
+    const hx = DATA.HQ_POS.x;
+    const hy = DATA.HQ_POS.y;
+    const plateauElev = DATA.PLATEAU_ELEV_Z || 10;
+    const rampElev = DATA.RAMP_ELEV_Z || 5;
+
+    const rampEntries = new Set();
+    const plateauRects = [];
+    const targetPlateaus = rng() < 0.55 ? 3 : 2;
+    const shapes = [[2, 2], [2, 3], [3, 2]];
+
+    for (let p = 0; p < targetPlateaus; p++) {
+      let placed = false;
+      for (let tries = 0; tries < 140; tries++) {
+        const shape = shapes[Math.floor(rng() * shapes.length)];
+        const pw = shape[0];
+        const ph = shape[1];
+        const minC = 3;
+        const maxCx = N - 4 - pw + 1;
+        const maxCy = N - 4 - ph + 1;
+        const px = minC + Math.floor(rng() * (maxCx - minC + 1));
+        const py = minC + Math.floor(rng() * (maxCy - minC + 1));
+
+        // At least 1 flat tile gap from HQ 5x5 ([11..15]) -> keep clear of [10..16]
+        let hitsHqBuffer = false;
+        for (let yy = py; yy < py + ph && !hitsHqBuffer; yy++) {
+          for (let xx = px; xx < px + pw; xx++) {
+            if (Math.abs(xx - hx) <= 3 && Math.abs(yy - hy) <= 3) {
+              hitsHqBuffer = true;
+              break;
+            }
+          }
+        }
+        if (hitsHqBuffer) continue;
+
+        // Separated by >= 2 flat tiles from other plateaus (axis gap >= 3 covers >= 2 empty tiles between boxes)
+        let tooClose = false;
+        for (let i = 0; i < plateauRects.length; i++) {
+          const r = plateauRects[i];
+          const gapX = Math.max(px - (r.x + r.w), r.x - (px + pw));
+          const gapY = Math.max(py - (r.y + r.h), r.y - (py + ph));
+          if (Math.max(gapX, gapY) < 2) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (tooClose) continue;
+
+        // Ensure no overlap with already placed ramps or ramp entries
+        let hitsExisting = false;
+        for (let yy = py - 1; yy <= py + ph && !hitsExisting; yy++) {
+          for (let xx = px - 1; xx <= px + pw; xx++) {
+            if (grid[yy] && grid[yy][xx]) {
+              hitsExisting = true;
+              break;
+            }
+            if (xx >= px && xx < px + pw && yy >= py && yy < py + ph && rampEntries.has(xx + ',' + yy)) {
+              hitsExisting = true;
+              break;
+            }
+          }
+        }
+        if (hitsExisting) continue;
+
+        // Collect cardinal ramp attachment slots where ramp + low entry stay in 2..23 outside HQ 5x5
+        const candidates = [];
+        for (let xx = px; xx < px + pw; xx++) {
+          candidates.push({ rx: xx, ry: py - 1, dx: 0, dy: 1, ex: xx, ey: py - 2 });
+          candidates.push({ rx: xx, ry: py + ph, dx: 0, dy: -1, ex: xx, ey: py + ph + 1 });
+        }
+        for (let yy = py; yy < py + ph; yy++) {
+          candidates.push({ rx: px - 1, ry: yy, dx: 1, dy: 0, ex: px - 2, ey: yy });
+          candidates.push({ rx: px + pw, ry: yy, dx: -1, dy: 0, ex: px + pw + 1, ey: yy });
+        }
+
+        const validRamps = candidates.filter((c) => {
+          if (!isInsideInnerTerrainBounds(c.rx, c.ry) || isInsideHqSafeZone(c.rx, c.ry)) return false;
+          if (!isInsideInnerTerrainBounds(c.ex, c.ey) || isInsideHqSafeZone(c.ex, c.ey)) return false;
+          if (grid[c.ry][c.rx] || grid[c.ey][c.ex]) return false;
+          if (rampEntries.has(c.rx + ',' + c.ry) || rampEntries.has(c.ex + ',' + c.ey)) return false;
+          // Ensure ramp doesn't touch another plateau laterally or from behind
+          const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          for (let k = 0; k < card.length; k++) {
+            const nx = c.rx + card[k][0];
+            const ny = c.ry + card[k][1];
+            if (nx === c.rx + c.dx && ny === c.ry + c.dy) continue;
+            if (grid[ny] && grid[ny][nx] && (grid[ny][nx].kind === 'plateau' || grid[ny][nx].kind === 'ramp')) {
+              return false;
+            }
+          }
+          // Ensure low entry doesn't abut another plateau or ramp
+          for (let k = 0; k < card.length; k++) {
+            const nx = c.ex + card[k][0];
+            const ny = c.ey + card[k][1];
+            if (nx === c.rx && ny === c.ry) continue;
+            if (grid[ny] && grid[ny][nx] && (grid[ny][nx].kind === 'plateau' || grid[ny][nx].kind === 'ramp')) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        if (validRamps.length === 0) continue;
+
+        for (let yy = py; yy < py + ph; yy++) {
+          for (let xx = px; xx < px + pw; xx++) {
+            grid[yy][xx] = {
+              kind: 'plateau',
+              elev: plateauElev,
+              variant: (xx * 7 + yy * 13) & 3
+            };
+          }
+        }
+        plateauRects.push({ x: px, y: py, w: pw, h: ph });
+
+        shuffleWithRng(validRamps, rng);
+        const wantRamps = rng() < 0.60 ? 2 : 1;
+        const chosen = [];
+        for (let k = 0; k < validRamps.length && chosen.length < wantRamps; k++) {
+          const c = validRamps[k];
+          let conflicts = false;
+          for (let m = 0; m < chosen.length; m++) {
+            const prev = chosen[m];
+            if (Math.abs(c.rx - prev.rx) + Math.abs(c.ry - prev.ry) <= 1) {
+              conflicts = true;
+              break;
+            }
+            if ((c.rx === prev.ex && c.ry === prev.ey) || (c.ex === prev.rx && c.ey === prev.ry) || (c.ex === prev.ex && c.ey === prev.ey)) {
+              conflicts = true;
+              break;
+            }
+          }
+          if (!conflicts) chosen.push(c);
+        }
+        for (let k = 0; k < chosen.length; k++) {
+          const c = chosen[k];
+          grid[c.ry][c.rx] = {
+            kind: 'ramp',
+            elev: rampElev,
+            rampDir: { dx: c.dx, dy: c.dy },
+            variant: (c.rx * 5 + c.ry * 11) & 3
+          };
+          rampEntries.add(c.ex + ',' + c.ey);
+        }
+        placed = true;
+        break;
+      }
+      if (!placed && p < 2) return null;
+    }
+
+    // 2) Rocks: 5~7 organic 1-4 tile clusters totaling 16~22 tiles inside 2..23
+    const clusterCount = 5 + Math.floor(rng() * 3); // 5..7
+    const maxRockTotal = Math.min(22, clusterCount * 4);
+    const minRockTotal = Math.max(16, clusterCount);
+    const targetRockTotal = minRockTotal + Math.floor(rng() * (maxRockTotal - minRockTotal + 1));
+    const clusterSizes = new Array(clusterCount).fill(1);
+    let remRocks = targetRockTotal - clusterCount;
+    while (remRocks > 0) {
+      const idx = Math.floor(rng() * clusterCount);
+      if (clusterSizes[idx] < 4) {
+        clusterSizes[idx] += 1;
+        remRocks -= 1;
+      }
+    }
+
+    const rockClusterIdGrid = Array.from({ length: N }, () => Array(N).fill(-1));
+    const isValidRockCell = (x, y, clusterIdx) => {
+      if (!isInsideInnerTerrainBounds(x, y) || isInsideHqSafeZone(x, y)) return false;
+      if (grid[y][x]) return false;
+      if (rampEntries.has(x + ',' + y)) return false;
+      const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (let k = 0; k < card.length; k++) {
+        const nx = x + card[k][0];
+        const ny = y + card[k][1];
+        const nt = grid[ny] && grid[ny][nx];
+        if (nt && nt.kind === 'ramp') return false;
+        const otherCid = rockClusterIdGrid[ny] && rockClusterIdGrid[ny][nx];
+        if (otherCid >= 0 && otherCid !== clusterIdx) return false;
+      }
+      return true;
+    };
+
+    let rockTilesPlaced = 0;
+    let rockClustersPlaced = 0;
+    for (let cIdx = 0; cIdx < clusterCount; cIdx++) {
+      const wantSz = clusterSizes[cIdx];
+      let clusterCells = null;
+      for (let tries = 0; tries < 100; tries++) {
+        const sx = 2 + Math.floor(rng() * (N - 4));
+        const sy = 2 + Math.floor(rng() * (N - 4));
+        if (!isValidRockCell(sx, sy, cIdx)) continue;
+        const cells = [[sx, sy]];
+        const seen = new Set([sx + ',' + sy]);
+        rockClusterIdGrid[sy][sx] = cIdx;
+        let stuck = false;
+        while (cells.length < wantSz && !stuck) {
+          const frontier = [];
+          const card = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          for (let ci = 0; ci < cells.length; ci++) {
+            for (let k = 0; k < card.length; k++) {
+              const nx = cells[ci][0] + card[k][0];
+              const ny = cells[ci][1] + card[k][1];
+              const key = nx + ',' + ny;
+              if (seen.has(key)) continue;
+              if (isValidRockCell(nx, ny, cIdx)) {
+                frontier.push([nx, ny]);
+                seen.add(key);
+              }
+            }
+          }
+          if (frontier.length === 0) {
+            stuck = true;
+          } else {
+            const pick = frontier[Math.floor(rng() * frontier.length)];
+            cells.push(pick);
+            rockClusterIdGrid[pick[1]][pick[0]] = cIdx;
+          }
+        }
+        if (cells.length === wantSz) {
+          clusterCells = cells;
+          break;
+        }
+        for (let ci = 0; ci < cells.length; ci++) {
+          rockClusterIdGrid[cells[ci][1]][cells[ci][0]] = -1;
+        }
+      }
+      if (!clusterCells) return null;
+      for (let ci = 0; ci < clusterCells.length; ci++) {
+        const rx = clusterCells[ci][0];
+        const ry = clusterCells[ci][1];
+        grid[ry][rx] = {
+          kind: 'rock',
+          elev: 0,
+          variant: Math.floor(rng() * 4)
+        };
+        rockTilesPlaced += 1;
+      }
+      rockClustersPlaced += 1;
+    }
+
+    if (rockTilesPlaced < 16 || rockTilesPlaced > 22 || rockClustersPlaced < 5 || rockClustersPlaced > 7) {
+      return null;
+    }
+
+    // 3) Energy Spots: 3~4 tiles in mid-outer ring (hypot 6..10 from HQ), >= 4 tiles apart, alternating wind/geothermal
+    const energyCandidates = [];
+    for (let y = 2; y <= N - 3; y++) {
+      for (let x = 2; x <= N - 3; x++) {
+        if (isInsideHqSafeZone(x, y) || grid[y][x] || rampEntries.has(x + ',' + y)) continue;
+        const dist = Math.hypot(x - hx, y - hy);
+        if (dist >= 6 && dist <= 10) {
+          energyCandidates.push({ x, y });
+        }
+      }
+    }
+    shuffleWithRng(energyCandidates, rng);
+    const targetEnergy = rng() < 0.55 ? 4 : 3;
+    const chosenEnergy = [];
+    for (let i = 0; i < energyCandidates.length && chosenEnergy.length < targetEnergy; i++) {
+      const cand = energyCandidates[i];
+      let farEnough = true;
+      for (let j = 0; j < chosenEnergy.length; j++) {
+        if (Math.hypot(cand.x - chosenEnergy[j].x, cand.y - chosenEnergy[j].y) < 4) {
+          farEnough = false;
+          break;
+        }
+      }
+      if (farEnough) chosenEnergy.push(cand);
+    }
+    if (chosenEnergy.length < 3) return null;
+    for (let i = 0; i < chosenEnergy.length; i++) {
+      const e = chosenEnergy[i];
+      grid[e.y][e.x] = {
+        kind: 'energy',
+        elev: 0,
+        subKind: i % 2 === 0 ? 'wind' : 'geothermal',
+        variant: i & 3
+      };
+    }
+
+    return grid;
+  }
+
+  function verifyTerrainReachability(terrainGrid) {
+    if (!terrainGrid || !ZS.Pathfinding || !ZS.Pathfinding.computeFlowField) return false;
+    const emptyStruct = Array.from({ length: N }, () => Array(N).fill(null));
+    const flow = ZS.Pathfinding.computeFlowField(N, DATA.HQ_POS, emptyStruct, terrainGrid);
+    if (!flow || !flow.cost) return false;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const isEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
+        const t = terrainGrid[y][x];
+        if (isEdge || (t && (t.kind === 'plateau' || t.kind === 'ramp'))) {
+          if (!(flow.cost[y][x] < 1e8)) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function generateVerifiedTerrain(seedOverride) {
+    const baseSeed =
+      seedOverride !== undefined && seedOverride !== null
+        ? (Number(seedOverride) >>> 0)
+        : (((Math.floor(Math.random() * 0xFFFFFFFF)) >>> 0) || 1);
+    for (let attempt = 0; attempt < 32; attempt++) {
+      const candSeed = ((baseSeed + attempt * 2654435761) >>> 0) || (attempt + 1);
+      const grid = generateProceduralTerrain(candSeed);
+      if (grid && verifyTerrainReachability(grid)) {
+        return { seed: candSeed, terrainGrid: grid };
+      }
+    }
+    // Deterministic fallback seed known to generate cleanly
+    const fallbackGrid = generateProceduralTerrain(670001) || Array.from({ length: N }, () => Array(N).fill(null));
+    return { seed: 670001, terrainGrid: fallbackGrid };
+  }
+
+  function initNewGame(seedOverride) {
     createEmptyGrids();
     G.pendingVeteranDemolish = null;
+    const gen = generateVerifiedTerrain(seedOverride);
+    state.terrainSeed = gen.seed;
+    state.terrainGrid = gen.terrainGrid;
 
     state.wave = 1;
     state.hqLevel = 1;
@@ -292,7 +674,7 @@ window.ZS = window.ZS || {};
     state.reconNightFadeTimer = 0;
     state.reconFlashTimer = 0;
 
-    // Starter modern tactical plaza around HQ (10,10)
+    // Starter modern tactical plaza around HQ (13,13)
     const hx = DATA.HQ_POS.x;
     const hy = DATA.HQ_POS.y;
     for (let dy = -1; dy <= 1; dy++) {
@@ -394,7 +776,7 @@ window.ZS = window.ZS || {};
       return;
     }
 
-    const ENTRY_IDX = [5, 11, 16];
+    const ENTRY_IDX = [Math.floor(N * 0.25), Math.floor(N * 0.5), N - 1 - Math.floor(N * 0.25)];
     const paths = [];
     const breachMap = Object.create(null);
 
@@ -410,14 +792,14 @@ window.ZS = window.ZS || {};
         const pts = [{ x, y }];
         let breach = null;
 
-        for (let stepIdx = 0; stepIdx < 80; stepIdx++) {
+        for (let stepIdx = 0; stepIdx < N * 4; stepIdx++) {
           const step = flow.next[y] && flow.next[y][x];
           if (!step) break;
           x += step.dx;
           y += step.dy;
           if (x < 0 || y < 0 || x >= N || y >= N) break;
           pts.push({ x, y });
-          if (!breach && ZS.Pathfinding.isBlocking(state.structGrid, x, y)) {
+          if (!breach && ZS.Pathfinding.isBlocking(state.structGrid, x, y, state.terrainGrid)) {
             breach = { tx: x, ty: y };
             const bKey = x + ',' + y;
             breachMap[bKey] = (breachMap[bKey] || 0) + 1;
@@ -447,7 +829,7 @@ window.ZS = window.ZS || {};
   }
 
   function recomputeFlow(isManualEdit) {
-    state.flow = ZS.Pathfinding.computeFlowField(N, DATA.HQ_POS, state.structGrid);
+    state.flow = ZS.Pathfinding.computeFlowField(N, DATA.HQ_POS, state.structGrid, state.terrainGrid);
     if (state.nextWaveIntel) {
       recomputePreviewPaths(!!isManualEdit);
     }
@@ -629,6 +1011,8 @@ window.ZS = window.ZS || {};
         traderRefreshCount: state.traderRefreshCount || 0,
         nightConsumables: state.nightConsumables || { overpressureAmmo: false, reactiveArmor: false },
         agentRecruitProgress: state.agentRecruitProgress || 0,
+        terrainSeed: state.terrainSeed || 0,
+        terrainGrid: state.terrainGrid,
         floorGrid: state.floorGrid,
         structGrid: state.structGrid
       };
@@ -643,10 +1027,11 @@ window.ZS = window.ZS || {};
       const raw = localStorage.getItem(getSaveKey());
       if (!raw) return false;
       const d = JSON.parse(raw);
-      const LEGACY_GRID_SIZE = 18;
+      const LEGACY_GRID_18 = 18;
+      const LEGACY_GRID_22 = 22;
       if (!d || !Array.isArray(d.structGrid)) return false;
       const savedN = d.structGrid.length;
-      if (savedN !== N && savedN !== LEGACY_GRID_SIZE) return false;
+      if (savedN !== N && savedN !== LEGACY_GRID_22 && savedN !== LEGACY_GRID_18) return false;
       if (!Array.isArray(d.floorGrid) || d.floorGrid.length !== savedN) return false;
       for (let ry = 0; ry < savedN; ry++) {
         if (!Array.isArray(d.structGrid[ry]) || d.structGrid[ry].length !== savedN) return false;
@@ -655,7 +1040,10 @@ window.ZS = window.ZS || {};
 
       const nextFloorGrid = Array.from({ length: N }, () => Array(N).fill(null));
       const nextStructGrid = Array.from({ length: N }, () => Array(N).fill(null));
-      const offset = savedN === LEGACY_GRID_SIZE && N === 22 ? (N - LEGACY_GRID_SIZE) / 2 : 0;
+      let offset = 0;
+      if (savedN === LEGACY_GRID_22 && N === 26) offset = 3;
+      else if (savedN === LEGACY_GRID_18 && N === 26) offset = 5;
+      else if (savedN === LEGACY_GRID_18 && N === 22) offset = 2;
 
       for (let oy = 0; oy < savedN; oy++) {
         for (let ox = 0; ox < savedN; ox++) {
@@ -666,6 +1054,29 @@ window.ZS = window.ZS || {};
 
       const hqLoaded = nextStructGrid[DATA.HQ_POS.y] && nextStructGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
       if (!hqLoaded || hqLoaded.id !== 'command_hq') return false;
+
+      const nextTerrainGrid = Array.from({ length: N }, () => Array(N).fill(null));
+      let hasValidTerrainGrid = savedN === N && Array.isArray(d.terrainGrid) && d.terrainGrid.length === N;
+      if (hasValidTerrainGrid) {
+        for (let ty = 0; ty < N; ty++) {
+          if (!Array.isArray(d.terrainGrid[ty]) || d.terrainGrid[ty].length !== N) {
+            hasValidTerrainGrid = false;
+            break;
+          }
+        }
+      }
+      if (hasValidTerrainGrid) {
+        for (let ty = 0; ty < N; ty++) {
+          for (let tx = 0; tx < N; tx++) {
+            const cell = d.terrainGrid[ty][tx];
+            nextTerrainGrid[ty][tx] = cell ? { ...cell } : null;
+          }
+        }
+        state.terrainSeed = Number(d.terrainSeed) || 0;
+      } else {
+        state.terrainSeed = 0;
+      }
+      state.terrainGrid = nextTerrainGrid;
 
       state.wave = d.wave || 1;
       state.hqLevel = Math.max(1, Math.min(4, d.hqLevel || 1));
@@ -788,7 +1199,7 @@ window.ZS = window.ZS || {};
       state.showReconPaths = d.showReconPaths !== undefined ? !!d.showReconPaths : true;
       state.reconNightFadeTimer = 0;
       state.reconFlashTimer = 0;
-      if (d.nextWaveIntel && d.nextWaveIntel.wave === state.wave && Array.isArray(d.nextWaveIntel.plannedQueue)) {
+      if (savedN === N && d.nextWaveIntel && d.nextWaveIntel.wave === state.wave && Array.isArray(d.nextWaveIntel.plannedQueue)) {
         state.nextWaveIntel = d.nextWaveIntel;
       } else {
         G.generateWaveIntel(state.wave);
@@ -816,7 +1227,7 @@ window.ZS = window.ZS || {};
       } else {
         G.refreshTraderOffers(false);
       }
-      if (offset > 0 || migratedWalls || isLegacyV1 || needsDefenseMigration || migratedV2) saveGame();
+      if (offset > 0 || savedN !== N || migratedWalls || isLegacyV1 || needsDefenseMigration || migratedV2) saveGame();
       notifyUi();
       return true;
     } catch (e) {
@@ -824,11 +1235,40 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function clearSaveAndReset() {
+  function regenerateMapSeed(seed) {
+    const res = generateVerifiedTerrain(seed);
+    state.terrainSeed = res.seed;
+    state.terrainGrid = res.terrainGrid;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const t = state.terrainGrid[y][x];
+        if (!t) continue;
+        if (t.kind === 'rock') {
+          if (state.structGrid[y][x] && state.structGrid[y][x].id !== 'command_hq') {
+            state.structGrid[y][x] = null;
+          }
+          state.floorGrid[y][x] = null;
+        } else if (t.kind === 'ramp') {
+          if (state.structGrid[y][x] && state.structGrid[y][x].id !== 'command_hq' && state.structGrid[y][x].id !== 'razor_pad') {
+            state.structGrid[y][x] = null;
+          }
+          state.floorGrid[y][x] = null;
+        }
+      }
+    }
+    invalidateStatsCache();
+    G.recalculateBaseStats(true);
+    recomputeFlow(false);
+    saveGame();
+    notifyUi();
+    return state.terrainSeed;
+  }
+
+  function clearSaveAndReset(seedOverride) {
     try {
       localStorage.removeItem(getSaveKey());
     } catch (e) {}
-    initNewGame();
+    initNewGame(seedOverride);
     banner('새 전초기지 작전 개시', '방어선과 발전 설비를 구축하고 모던 쉘터를 꾸며보세요!', 'info');
   }
 
@@ -961,6 +1401,12 @@ window.ZS = window.ZS || {};
     banner,
     getHqLevelInfo,
     createEmptyGrids,
+    getTerrainAt,
+    getTerrainElevationAt,
+    generateProceduralTerrain,
+    verifyTerrainReachability,
+    generateVerifiedTerrain,
+    regenerateMapSeed,
     initNewGame,
     getSideEntryTile,
     computeWaveSideProfile,

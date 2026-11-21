@@ -503,13 +503,16 @@ window.ZS = window.ZS || {};
   }
 
   function updateRepairBays(dt) {
+    const auraAdd = (DATA.PLATEAU_BONUS && DATA.PLATEAU_BONUS.auraAdd) || 0.5;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (!st || st.id !== 'repair_bay') continue;
         const def = DATA.ITEMS.repair_bay;
         const prof = G.getStructLevelProfile(def, st.level || 1);
-        const rad = prof.auraRadius || def.aura.radius;
+        const t = G.getTerrainAt ? G.getTerrainAt(x, y) : null;
+        const onPlateau = !!(t && t.kind === 'plateau');
+        const rad = (prof.auraRadius || def.aura.radius) + (onPlateau ? auraAdd : 0);
         const regen = (prof.regenPerSec || def.aura.regenPerSec) * dt;
 
         for (let ny = Math.max(0, Math.floor(y - rad)); ny <= Math.min(N - 1, Math.ceil(y + rad)); ny++) {
@@ -679,11 +682,12 @@ window.ZS = window.ZS || {};
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (!st || st.id === 'command_hq') continue;
-        updateOneDefender(st, x, y, 0, false);
+        const terrainElev = G.getTerrainElevationAt ? G.getTerrainElevationAt(x + 0.5, y + 0.5) : 0;
+        updateOneDefender(st, x, y, terrainElev, false);
         if (st.mounted) {
           const wallDef = DATA.ITEMS[st.id];
           const wallProf = wallDef ? G.getStructLevelProfile(wallDef, st.level || 2) : null;
-          const mBaseZ = (wallProf && wallProf.mountBaseZ) || 15.2;
+          const mBaseZ = terrainElev + ((wallProf && wallProf.mountBaseZ) || 15.2);
           updateOneDefender(st.mounted, x, y, mBaseZ, true);
         }
       }
@@ -1141,14 +1145,21 @@ window.ZS = window.ZS || {};
             const zDef = DATA.ZOMBIES[hitZ.type];
             if (!(zDef && zDef.isBoss)) {
               const vLen = Math.hypot(p.vx, p.vy) || 1;
+              const otx = Math.max(0, Math.min(N - 1, Math.floor(hitZ.x)));
+              const oty = Math.max(0, Math.min(N - 1, Math.floor(hitZ.y)));
               const nx = hitZ.x + (p.vx / vLen) * p.knockback;
               const ny = hitZ.y + (p.vy / vLen) * p.knockback;
               const ntx = Math.floor(nx);
               const nty = Math.floor(ny);
               if (ntx >= 0 && nty >= 0 && ntx < N && nty < N) {
+                const terrainOk =
+                  (ntx === otx && nty === oty) ||
+                  !ZS.Pathfinding ||
+                  !ZS.Pathfinding.canTraverseTerrainStep ||
+                  ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, otx, oty, ntx, nty);
                 const blk = state.structGrid[nty] && state.structGrid[nty][ntx];
                 const bDef = blk ? (blk.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[blk.id]) : null;
-                if (!blk || (bDef && bDef.passable)) {
+                if (terrainOk && (!blk || (bDef && bDef.passable))) {
                   hitZ.x = nx;
                   hitZ.y = ny;
                   G.spawnBurstParticles(nx, ny, 2, '#C8BFA8', 4);

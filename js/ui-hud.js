@@ -359,10 +359,10 @@ window.ZS = window.ZS || {};
       3: [12, 42, 60, 10, 36, 26, 0.832, 0.555]
     };
 
-    // 4x4 internal isometric radar grid lines
-    const gridLines = [1, 2, 3]
+    // 6x6 internal isometric radar grid lines matching 26x26 scale
+    const gridLines = [1, 2, 3, 4, 5]
       .map((step) => {
-        const u = step / 4;
+        const u = step / 6;
         const ax = 60 - 48 * u;
         const ay = 10 + 32 * u;
         const bx = 108 - 48 * u;

@@ -75,13 +75,15 @@ window.ZS = window.ZS || {};
       color: DATA.PALETTE.warmGlow
     });
 
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
+
     const illuminateNode = (node, gx, gy, lz, isMounted) => {
       const def = DATA.ITEMS[node.id];
       if (!def) return;
       if (def.requiresPower && (!powered || (node.empStunTimer || 0) > 0)) return;
       const prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, node.level || 1) : null;
-      const eff = isMounted && ZS.Game.getStructureEffectiveStats
-        ? ZS.Game.getStructureEffectiveStats(node, gx, gy, undefined, true)
+      const eff = ZS.Game.getStructureEffectiveStats
+        ? ZS.Game.getStructureEffectiveStats(node, gx, gy, undefined, !!isMounted)
         : null;
       const lightR = (eff && eff.lightRadius != null)
         ? eff.lightRadius
@@ -127,10 +129,11 @@ window.ZS = window.ZS || {};
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (!st || st.id === 'command_hq') continue;
-        illuminateNode(st, x, y, 12, false);
+        const elev = getElev(x + 0.5, y + 0.5);
+        illuminateNode(st, x, y, 12 + elev, false);
         if (st.mounted) {
           const mBaseZ = (st.level || 2) >= 3 ? 25.4 : 15.2;
-          illuminateNode(st.mounted, x, y, mBaseZ + 12, true);
+          illuminateNode(st.mounted, x, y, mBaseZ + 12 + elev, true);
         }
       }
     }
@@ -138,11 +141,12 @@ window.ZS = window.ZS || {};
     // Active flares & explosions illuminate the battlefield
     for (let i = 0; i < state.flares.length; i++) {
       const fl = state.flares[i];
-      punchHole(fl.x, fl.y, 8, fl.radius, 0.96);
+      const flElev = getElev(fl.x, fl.y);
+      punchHole(fl.x, fl.y, 8 + flElev, fl.radius, 0.96);
       colorGlows.push({
         gx: fl.x,
         gy: fl.y,
-        z: 8,
+        z: 8 + flElev,
         r: fl.radius * 0.9,
         color: 'rgba(255, 195, 120, 0.25)'
       });
@@ -274,11 +278,14 @@ window.ZS = window.ZS || {};
       2: [0, -1],
       3: [1, 0]
     };
-    const ENTRY_IDX = [5, 11, 16];
+    const eMid = Math.floor(N * 0.5);
+    const eOff = Math.floor(N * 0.25);
+    const ENTRY_IDX = [eOff, eMid, N - 1 - eOff];
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
 
     ctx.save();
 
-    // 1. Dijkstra flow preview path lines (z = 1.5, segment deduplicated, flowing toward HQ)
+    // 1. Dijkstra flow preview path lines (z = 1.5 + terrainElev, segment deduplicated, flowing toward HQ)
     if (state.showReconPaths && state.previewPaths && state.previewPaths.length > 0) {
       const seen = Object.create(null);
       const screenSegs = [];
@@ -292,8 +299,8 @@ window.ZS = window.ZS || {};
           if (seen[key]) continue;
           seen[key] = true;
           screenSegs.push([
-            Iso.gridToScreen(a.x + 0.5, a.y + 0.5, 1.5),
-            Iso.gridToScreen(b.x + 0.5, b.y + 0.5, 1.5)
+            Iso.gridToScreen(a.x + 0.5, a.y + 0.5, 1.5 + getElev(a.x + 0.5, a.y + 0.5)),
+            Iso.gridToScreen(b.x + 0.5, b.y + 0.5, 1.5 + getElev(b.x + 0.5, b.y + 0.5))
           ]);
         }
       }
@@ -332,56 +339,63 @@ window.ZS = window.ZS || {};
 
       // 2. Siege breach crosshairs (first blocking structure on predicted paths)
       const breaches = state.breachMarkers || [];
-      for (let bi = 0; bi < breaches.length; bi++) {
-        const bm = breaches[bi];
-        const bSt = state.structGrid[bm.ty] && state.structGrid[bm.ty][bm.tx];
-        if (!bSt) continue;
-        let topZ = R.getStructVisualTopZ(bSt.id, bSt.level || 1);
-        if (bSt.id === 'barricade_wall' && (bSt.level || 1) >= 2 && bSt.mounted) {
-          topZ = ((bSt.level || 2) >= 3 ? 25.4 : 15.2) + R.getMountedVisualTopZ(bSt.mounted.id);
+      const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+      try {
+        for (let bi = 0; bi < breaches.length; bi++) {
+          const bm = breaches[bi];
+          const bSt = state.structGrid[bm.ty] && state.structGrid[bm.ty][bm.tx];
+          if (!bSt) continue;
+          const bmElev = getElev(bm.tx + 0.5, bm.ty + 0.5);
+          if (Iso.setElevationOffset) Iso.setElevationOffset(bmElev);
+          let topZ = R.getStructVisualTopZ(bSt.id, bSt.level || 1);
+          if (bSt.id === 'barricade_wall' && (bSt.level || 1) >= 2 && bSt.mounted) {
+            topZ = ((bSt.level || 2) >= 3 ? 25.4 : 15.2) + R.getMountedVisualTopZ(bSt.mounted.id);
+          }
+          const pulse = 1 + 0.12 * Math.sin(timeSec * 5.23);
+          R.drawIsoCircle(
+            ctx,
+            bm.tx + 0.5,
+            bm.ty + 0.5,
+            0.42 * pulse,
+            `rgba(255, 77, 109, ${(0.9 * fade).toFixed(3)})`,
+            `rgba(255, 77, 109, ${(0.12 * fade).toFixed(3)})`,
+            [],
+            1.6 * Math.max(0.9, zScale)
+          );
+
+          const cp = Iso.gridToScreen(bm.tx + 0.5, bm.ty + 0.5, topZ + 6);
+          const r = 7 * pulse * Math.max(0.9, zScale);
+          ctx.strokeStyle = `rgba(255, 77, 109, ${fade.toFixed(3)})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cp.x, cp.y, r, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(cp.x - r - 4, cp.y);
+          ctx.lineTo(cp.x - r + 3, cp.y);
+          ctx.moveTo(cp.x + r - 3, cp.y);
+          ctx.lineTo(cp.x + r + 4, cp.y);
+          ctx.moveTo(cp.x, cp.y - r - 4);
+          ctx.lineTo(cp.x, cp.y - r + 3);
+          ctx.moveTo(cp.x, cp.y + r - 3);
+          ctx.lineTo(cp.x, cp.y + r + 4);
+          ctx.stroke();
+
+          if (bm.count > 1) {
+            const fontPx = Math.max(12, Math.round(12 * Math.max(1, zScale)));
+            ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+            ctx.textAlign = 'left';
+            ctx.lineWidth = 3;
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = `rgba(8, 12, 18, ${(0.85 * fade).toFixed(3)})`;
+            ctx.strokeText(`×${bm.count}`, cp.x + r + 5, cp.y - 6);
+            ctx.fillStyle = `rgba(255, 255, 255, ${fade.toFixed(3)})`;
+            ctx.fillText(`×${bm.count}`, cp.x + r + 5, cp.y - 6);
+          }
         }
-        const pulse = 1 + 0.12 * Math.sin(timeSec * 5.23);
-        R.drawIsoCircle(
-          ctx,
-          bm.tx + 0.5,
-          bm.ty + 0.5,
-          0.42 * pulse,
-          `rgba(255, 77, 109, ${(0.9 * fade).toFixed(3)})`,
-          `rgba(255, 77, 109, ${(0.12 * fade).toFixed(3)})`,
-          [],
-          1.6 * Math.max(0.9, zScale)
-        );
-
-        const cp = Iso.gridToScreen(bm.tx + 0.5, bm.ty + 0.5, topZ + 6);
-        const r = 7 * pulse * Math.max(0.9, zScale);
-        ctx.strokeStyle = `rgba(255, 77, 109, ${fade.toFixed(3)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cp.x, cp.y, r, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(cp.x - r - 4, cp.y);
-        ctx.lineTo(cp.x - r + 3, cp.y);
-        ctx.moveTo(cp.x + r - 3, cp.y);
-        ctx.lineTo(cp.x + r + 4, cp.y);
-        ctx.moveTo(cp.x, cp.y - r - 4);
-        ctx.lineTo(cp.x, cp.y - r + 3);
-        ctx.moveTo(cp.x, cp.y + r - 3);
-        ctx.lineTo(cp.x, cp.y + r + 4);
-        ctx.stroke();
-
-        if (bm.count > 1) {
-          const fontPx = Math.max(12, Math.round(12 * Math.max(1, zScale)));
-          ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
-          ctx.textAlign = 'left';
-          ctx.lineWidth = 3;
-          ctx.lineJoin = 'round';
-          ctx.strokeStyle = `rgba(8, 12, 18, ${(0.85 * fade).toFixed(3)})`;
-          ctx.strokeText(`×${bm.count}`, cp.x + r + 5, cp.y - 6);
-          ctx.fillStyle = `rgba(255, 255, 255, ${fade.toFixed(3)})`;
-          ctx.fillText(`×${bm.count}`, cp.x + r + 5, cp.y - 6);
-        }
+      } finally {
+        if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
       }
     }
 
@@ -434,9 +448,9 @@ window.ZS = window.ZS || {};
       }
     }
 
-    // 4. Boss spawn direction icon (z = 22 at midpoint idx = 11)
+    // 4. Boss spawn direction icon (z = 22 at midpoint idx = Math.floor(N / 2))
     if (intel.bossSide != null) {
-      const bPos = SIDE_POS[intel.bossSide](11);
+      const bPos = SIDE_POS[intel.bossSide](Math.floor(N / 2));
       const bp = Iso.gridToScreen(bPos[0] + 0.5, bPos[1] + 0.5, 22);
       const iconScale = Math.max(0.9, zScale);
       ctx.save();
@@ -568,6 +582,9 @@ window.ZS = window.ZS || {};
 
     drawReconOverlay(ctx, state, timeSec, zScale);
 
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+
     ctx.save();
 
     // 1. Selected / Inspected Tile Border (crisp above night darkness without cutting through 3D structures)
@@ -577,7 +594,7 @@ window.ZS = window.ZS || {};
       if (htx >= 0 && hty >= 0 && htx < N && hty < N) {
         const cPrev = ZS.Game.getPlacementCozyPreview(uiState.selectedItemId, htx, hty);
         if (cPrev && (cPrev.isDiminished || cPrev.isFloorCapped || cPrev.gain > 0)) {
-          const p = Iso.gridToScreen(htx + 0.5, hty + 0.5, 26);
+          const p = Iso.gridToScreen(htx + 0.5, hty + 0.5, 26 + getElev(htx + 0.5, hty + 0.5));
           const isNormalCozy = !cPrev.isFloorCapped && !cPrev.isDiminished;
           const label = cPrev.isFloorCapped
             ? '상한 도달'
@@ -605,24 +622,29 @@ window.ZS = window.ZS || {};
     if (uiState.inspectedTile) {
       const { tx, ty } = uiState.inspectedTile;
       if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
-        const selSt = state.structGrid[ty] && state.structGrid[ty][tx];
-        const selDef = selSt ? (selSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[selSt.id]) : null;
-        const hasSolidStruct = selSt && !(selDef && selDef.passable);
-        if (hasSolidStruct) {
-          const l = Iso.gridToScreen(tx, ty + 1, 2.2);
-          const f = Iso.gridToScreen(tx + 1, ty + 1, 2.2);
-          const r = Iso.gridToScreen(tx + 1, ty, 2.2);
-          ctx.strokeStyle = P.selectStroke;
-          ctx.lineWidth = 1.8;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.beginPath();
-          ctx.moveTo(l.x, l.y);
-          ctx.lineTo(f.x, f.y);
-          ctx.lineTo(r.x, r.y);
-          ctx.stroke();
-        } else {
-          Iso.drawTilePoly(ctx, tx, ty, 2.2, null, P.selectStroke, 1.8);
+        if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(tx + 0.5, ty + 0.5));
+        try {
+          const selSt = state.structGrid[ty] && state.structGrid[ty][tx];
+          const selDef = selSt ? (selSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[selSt.id]) : null;
+          const hasSolidStruct = selSt && !(selDef && selDef.passable);
+          if (hasSolidStruct) {
+            const l = Iso.gridToScreen(tx, ty + 1, 2.2);
+            const f = Iso.gridToScreen(tx + 1, ty + 1, 2.2);
+            const r = Iso.gridToScreen(tx + 1, ty, 2.2);
+            ctx.strokeStyle = P.selectStroke;
+            ctx.lineWidth = 1.8;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(l.x, l.y);
+            ctx.lineTo(f.x, f.y);
+            ctx.lineTo(r.x, r.y);
+            ctx.stroke();
+          } else {
+            Iso.drawTilePoly(ctx, tx, ty, 2.2, null, P.selectStroke, 1.8);
+          }
+        } finally {
+          if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
         }
       }
     }
@@ -645,254 +667,272 @@ window.ZS = window.ZS || {};
             const srcUnit = srcCell && (srcCell.mounted || srcCell);
             const srcDef = srcUnit ? DATA.ITEMS[srcUnit.id] : null;
             const dest = state.structGrid[ty] && state.structGrid[ty][tx];
+            const destTerrain = ZS.Game.getTerrainAt ? ZS.Game.getTerrainAt(tx, ty) : (state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx]);
             const inBounds = tx > 0 && ty > 0 && tx < N - 1 && ty < N - 1;
-            const canMountDest = !!(dest && srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && !dest.mounted);
-            const canDrop = inBounds && (!dest || canMountDest);
+            let terrainOk = true;
+            if (destTerrain) {
+              if (destTerrain.kind === 'rock') terrainOk = false;
+              else if (destTerrain.kind === 'ramp' && (!srcDef || srcDef.id !== 'razor_pad')) terrainOk = false;
+            }
+            const canMountDest = !!(terrainOk && dest && srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && !dest.mounted);
+            const canDrop = inBounds && terrainOk && (!dest || canMountDest);
             rimStroke = canDrop ? P.health : P.danger;
             rimFill = canDrop ? P.healthFill : P.dangerFill;
           }
         }
+        if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(tx + 0.5, ty + 0.5));
         ctx.save();
-        ctx.setLineDash([4 * zScale, 3 * zScale]);
-        Iso.drawTilePoly(ctx, tx, ty, 2, rimFill, rimStroke, 1.6 * zScale);
-        ctx.restore();
+        try {
+          ctx.setLineDash([4 * zScale, 3 * zScale]);
+          Iso.drawTilePoly(ctx, tx, ty, 2, rimFill, rimStroke, 1.6 * zScale);
+        } finally {
+          ctx.restore();
+          if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
+        }
       }
     }
 
     // 2. Depth-sorted Structure HP Bars, Power-OFF Warnings, and Zombie HP Bars
     const nightEyes = [];
-    for (let i = 0; i < renderList.length; i++) {
-      const item = renderList[i];
-      if (item.kind === 'struct') {
-        const structOccAlpha = item.occAlpha != null ? item.occAlpha : 1.0;
-        if (structOccAlpha < 0.995) {
-          ctx.save();
-          ctx.globalAlpha *= structOccAlpha;
-        }
-        const st = item.st;
-        const tx = item.tx;
-        const ty = item.ty;
-        const id = st.id;
-        const def = id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[id];
-        const lv = st.level || 1;
-        const isWall = id === 'barricade_wall' || (def && def.subType === 'wall');
-        const wallMask = isWall ? R.getWallConnectMask(state.structGrid, tx, ty) : 0;
-        const isWallInspOrHov =
-          (uiState.inspectedTile && uiState.inspectedTile.tx === tx && uiState.inspectedTile.ty === ty) ||
-          (uiState.hoverTile && uiState.hoverTile.tx === tx && uiState.hoverTile.ty === ty);
-
-        if (id === 'barricade_wall' && lv >= 2 && st.mounted) {
-          const m = st.mounted;
-          const mDef = DATA.ITEMS[m.id];
-          const mLv = m.level || 1;
-          const mBaseZ = lv >= 3 ? 25.4 : 15.2;
-          const topZ = mBaseZ + R.getMountedVisualTopZ(m.id);
-          const hasPips = mLv >= 2;
-          const hasRank = (m.rank || 0) >= 1;
-          const isAnyDamaged = (st.hp < st.maxHp && st.hp > 0) || (m.hp < m.maxHp && m.hp > 0);
-          const showDualHp = isAnyDamaged || isWallInspOrHov;
-          const dualHpZ = topZ + 16 + (hasPips || hasRank ? 8 : 0);
-
-          if (showDualHp) {
-            const barPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, dualHpZ);
-            const bw = 26 * zScale;
-            const drawSubBar = (yPx, hPx, ratio) => {
-              ctx.fillStyle = P.outlineDark || '#1B2430';
-              ctx.fillRect(barPos.x - bw * 0.5 - 1.2, yPx - 1.2, bw + 2.4, hPx + 2.4);
-              ctx.fillStyle = ratio > 0.5 ? P.heal : ratio > 0.25 ? P.caution : P.danger;
-              ctx.fillRect(barPos.x - bw * 0.5, yPx, bw * Math.max(0, Math.min(1, ratio)), hPx);
-            };
-            const topH = 3.6 * zScale;
-            const wallH = 2.4 * zScale;
-            const mRatio = m.maxHp > 0 ? m.hp / m.maxHp : 1;
-            const wRatio = st.maxHp > 0 ? st.hp / st.maxHp : 1;
-            drawSubBar(barPos.y, topH, mRatio);
-            const wallY = barPos.y + topH + 2.5;
-            drawSubBar(wallY, wallH, wRatio);
-            ctx.fillStyle = P.steelBand || '#8C96A3';
-            ctx.fillRect(barPos.x - bw * 0.5 - 3.5, wallY - 1, 2, wallH + 2);
+    try {
+      for (let i = 0; i < renderList.length; i++) {
+        const item = renderList[i];
+        if (item.kind === 'struct') {
+          if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(item.tx + 0.5, item.ty + 0.5));
+          const structOccAlpha = item.occAlpha != null ? item.occAlpha : 1.0;
+          if (structOccAlpha < 0.995) {
+            ctx.save();
+            ctx.globalAlpha *= structOccAlpha;
           }
+          const st = item.st;
+          const tx = item.tx;
+          const ty = item.ty;
+          const id = st.id;
+          const def = id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[id];
+          const lv = st.level || 1;
+          const isWall = id === 'barricade_wall' || (def && def.subType === 'wall');
+          const wallMask = isWall ? R.getWallConnectMask(state.structGrid, tx, ty, state.terrainGrid) : 0;
+          const isWallInspOrHov =
+            (uiState.inspectedTile && uiState.inspectedTile.tx === tx && uiState.inspectedTile.ty === ty) ||
+            (uiState.hoverTile && uiState.hoverTile.tx === tx && uiState.hoverTile.ty === ty);
 
-          if (hasPips) {
-            drawUpgradePips(ctx, tx + 0.5, ty + 0.5, topZ + 9, mLv, hasRank, state.isNight, m.upgradeAnimTimer || 0, zScale);
-          }
-          if (hasRank) {
-            drawRankBadge(ctx, tx + 0.5, ty + 0.5, topZ + 9, m.rank || 0, hasPips, m.promoAnimTimer || 0, zScale);
-          }
+          if (id === 'barricade_wall' && lv >= 2 && st.mounted) {
+            const m = st.mounted;
+            const mDef = DATA.ITEMS[m.id];
+            const mLv = m.level || 1;
+            const mBaseZ = lv >= 3 ? 25.4 : 15.2;
+            const topZ = mBaseZ + R.getMountedVisualTopZ(m.id);
+            const hasPips = mLv >= 2;
+            const hasRank = (m.rank || 0) >= 1;
+            const isAnyDamaged = (st.hp < st.maxHp && st.hp > 0) || (m.hp < m.maxHp && m.hp > 0);
+            const showDualHp = isAnyDamaged || isWallInspOrHov;
+            const dualHpZ = topZ + 16 + (hasPips || hasRank ? 8 : 0);
 
-          const badgeScaleCap = Math.max(1.0, Math.min(1.65, zScale));
-          const isMountUnpowered = state.isNight && mDef && mDef.requiresPower && !powered;
-          const isMountEmpStunned = !isMountUnpowered && mDef && mDef.requiresPower && (m.empStunTimer || 0) > 0;
-          if (isMountUnpowered) {
-            const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
-            drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
-          } else if (isMountEmpStunned) {
-            const empZ = showDualHp ? dualHpZ + 8 : topZ + (hasPips || hasRank ? 14 : 6);
-            drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, m.empStunTimer || 0, timeSec, badgeScaleCap, zScale, P);
-          }
-        } else {
-          const isDamaged = st.hp < st.maxHp && st.hp > 0;
-          const isUnpowered = state.isNight && def && def.requiresPower && !powered;
-          const isTierEvo = !!(ZS.Game && ZS.Game.isTierEvolutionDef && ZS.Game.isTierEvolutionDef(def));
-          const isWallHub = isWall && wallMask !== 0 && ((wallMask & 5) !== 0 && (wallMask & 10) !== 0);
-          const showWallPips = isWall && lv >= 2 && (wallMask === 0 || isWallHub || isWallInspOrHov);
-          const hasPips = id !== 'command_hq' && !isTierEvo && (isWall ? showWallPips : lv >= 2);
-          const hasRank = (st.rank || 0) >= 1;
-          const topZ = id === 'command_hq'
-            ? ((ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null)?.maxZ || 36)
-            : R.getStructVisualTopZ(id, lv);
-
-          if (isDamaged) {
-            let hpZ = topZ + 8 + (hasPips || hasRank ? 6 : 0);
-            let hpW = 26;
-            if (id === 'command_hq') {
-              const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null;
-              hpZ = (hqInfo ? hqInfo.maxZ : 36) + 8;
-              hpW = hqInfo ? hqInfo.hpBarWidth : 38;
+            if (showDualHp) {
+              const barPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, dualHpZ);
+              const bw = 26 * zScale;
+              const drawSubBar = (yPx, hPx, ratio) => {
+                ctx.fillStyle = P.outlineDark || '#1B2430';
+                ctx.fillRect(barPos.x - bw * 0.5 - 1.2, yPx - 1.2, bw + 2.4, hPx + 2.4);
+                ctx.fillStyle = ratio > 0.5 ? P.heal : ratio > 0.25 ? P.caution : P.danger;
+                ctx.fillRect(barPos.x - bw * 0.5, yPx, bw * Math.max(0, Math.min(1, ratio)), hPx);
+              };
+              const topH = 3.6 * zScale;
+              const wallH = 2.4 * zScale;
+              const mRatio = m.maxHp > 0 ? m.hp / m.maxHp : 1;
+              const wRatio = st.maxHp > 0 ? st.hp / st.maxHp : 1;
+              drawSubBar(barPos.y, topH, mRatio);
+              const wallY = barPos.y + topH + 2.5;
+              drawSubBar(wallY, wallH, wRatio);
+              ctx.fillStyle = P.steelBand || '#8C96A3';
+              ctx.fillRect(barPos.x - bw * 0.5 - 3.5, wallY - 1, 2, wallH + 2);
             }
-            const barPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, hpZ);
-            const bw = hpW * zScale;
-            const bh = 4 * zScale;
-            const ratio = Math.max(0, st.hp / st.maxHp);
+
+            if (hasPips) {
+              drawUpgradePips(ctx, tx + 0.5, ty + 0.5, topZ + 9, mLv, hasRank, state.isNight, m.upgradeAnimTimer || 0, zScale);
+            }
+            if (hasRank) {
+              drawRankBadge(ctx, tx + 0.5, ty + 0.5, topZ + 9, m.rank || 0, hasPips, m.promoAnimTimer || 0, zScale);
+            }
+
+            const badgeScaleCap = Math.max(1.0, Math.min(1.65, zScale));
+            const isMountUnpowered = state.isNight && mDef && mDef.requiresPower && !powered;
+            const isMountEmpStunned = !isMountUnpowered && mDef && mDef.requiresPower && (m.empStunTimer || 0) > 0;
+            if (isMountUnpowered) {
+              const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
+              drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
+            } else if (isMountEmpStunned) {
+              const empZ = showDualHp ? dualHpZ + 8 : topZ + (hasPips || hasRank ? 14 : 6);
+              drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, m.empStunTimer || 0, timeSec, badgeScaleCap, zScale, P);
+            }
+          } else {
+            const isDamaged = st.hp < st.maxHp && st.hp > 0;
+            const isUnpowered = state.isNight && def && def.requiresPower && !powered;
+            const isTierEvo = !!(ZS.Game && ZS.Game.isTierEvolutionDef && ZS.Game.isTierEvolutionDef(def));
+            const isWallHub = isWall && wallMask !== 0 && ((wallMask & 5) !== 0 && (wallMask & 10) !== 0);
+            const showWallPips = isWall && lv >= 2 && (wallMask === 0 || isWallHub || isWallInspOrHov);
+            const hasPips = id !== 'command_hq' && !isTierEvo && (isWall ? showWallPips : lv >= 2);
+            const hasRank = (st.rank || 0) >= 1;
+            const topZ = id === 'command_hq'
+              ? ((ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null)?.maxZ || 36)
+              : R.getStructVisualTopZ(id, lv);
+
+            if (isDamaged) {
+              let hpZ = topZ + 8 + (hasPips || hasRank ? 6 : 0);
+              let hpW = 26;
+              if (id === 'command_hq') {
+                const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null;
+                hpZ = (hqInfo ? hqInfo.maxZ : 36) + 8;
+                hpW = hqInfo ? hqInfo.hpBarWidth : 38;
+              }
+              const barPos = Iso.gridToScreen(tx + 0.5, ty + 0.5, hpZ);
+              const bw = hpW * zScale;
+              const bh = 4 * zScale;
+              const ratio = Math.max(0, st.hp / st.maxHp);
+              ctx.fillStyle = P.outlineDark || '#1B2430';
+              ctx.fillRect(barPos.x - bw * 0.5 - 1.2, barPos.y - 1.2, bw + 2.4, bh + 2.4);
+              ctx.fillStyle = ratio > 0.5 ? P.heal : ratio > 0.25 ? P.caution : P.danger;
+              ctx.fillRect(barPos.x - bw * 0.5, barPos.y, bw * ratio, bh);
+            }
+
+            // Facility Upgrade ◆ Pips in Info Layer (Lv.2 = ◆◆ #F2F4F7, Lv.3 = ◆◆◆ #FF9F43, 70% alpha at night)
+            if (hasPips) {
+              drawUpgradePips(ctx, tx + 0.5, ty + 0.5, topZ + 9, lv, hasRank, state.isNight, st.upgradeAnimTimer || 0, zScale);
+            }
+
+            // Combat Veterancy Rank Badge in Info Layer (Rank 1 Bronze Chevron, Rank 2 Silver 2-Chevron [NO cyan], Rank 3 Gold Star)
+            if (hasRank) {
+              drawRankBadge(ctx, tx + 0.5, ty + 0.5, topZ + 9, st.rank || 0, hasPips, st.promoAnimTimer || 0, zScale);
+            }
+
+            const isEmpStunned = !isUnpowered && def && def.requiresPower && (st.empStunTimer || 0) > 0;
+            if (isUnpowered) {
+              const warnZ = isDamaged ? 35 : 29;
+              drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
+            } else if (isEmpStunned) {
+              const empZ = Math.max(topZ + (hasPips || hasRank ? 12 : 4), isDamaged ? 32 : 24);
+              drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, Math.min(1.65, zScale)), zScale, P);
+            }
+          }
+          if (structOccAlpha < 0.995) ctx.restore();
+        } else if (item.kind === 'zombie') {
+          const z = item.z;
+          if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(z.x, z.y));
+          const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
+          const m = z._framePose || (R.getQuantizedZombiePoseMetrics ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec) : R.getZombiePoseMetrics(z, zDef, timeSec));
+
+          if (state.nightAlpha > 0.05) {
+            const eyes = z._frameEyes || R.getZombieEyePositions(z, zDef, timeSec, zScale, m);
+            const occluded = z._frameEyes != null && z._frameEyesOccluded !== undefined
+              ? z._frameEyesOccluded
+              : R.isZombieEyesOccluded(state, z, eyes, zScale);
+            if (!occluded) {
+              nightEyes.push({ eyes, zDef });
+            }
+          }
+
+          // Shocker Info-Layer Spark Arc connecting 3 dorsal rod tips (#FFE14D)
+          if (z.type === 'shocker') {
+            const rodOffsets = [[-0.09, 13.0], [0, 15.5], [0.09, 13.0]];
+            const tips = [];
+            for (let r = 0; r < rodOffsets.length; r++) {
+              const oy = rodOffsets[r][0] * m.sc;
+              const rh = rodOffsets[r][1] * m.sc;
+              tips.push(Iso.gridToScreen(
+                z.x - m.fx * 0.26 * m.sc + m.px * oy,
+                z.y - m.fy * 0.26 * m.sc + m.py * oy,
+                m.bodyBaseZ + 8.0 * m.sc + rh + 1.1 * m.sc
+              ));
+            }
+            ctx.save();
+            ctx.strokeStyle = P.mutantSpark || '#FFE14D';
+            ctx.lineWidth = 1.2 * zScale;
+            ctx.beginPath();
+            ctx.moveTo(tips[0].x, tips[0].y);
+            ctx.lineTo((tips[0].x + tips[1].x) * 0.5 + 2 * zScale, (tips[0].y + tips[1].y) * 0.5 - 3 * zScale);
+            ctx.lineTo(tips[1].x, tips[1].y);
+            ctx.lineTo((tips[1].x + tips[2].x) * 0.5 - 2 * zScale, (tips[1].y + tips[2].y) * 0.5 - 2 * zScale);
+            ctx.lineTo(tips[2].x, tips[2].y);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Buffed Zombie War Cry Speed Lines (#E040FB 2 speed lines behind body)
+          if (z.frenzyTimer > 0) {
+            const bPt = Iso.gridToScreen(z.x - m.fx * 0.28 * m.sc - m.px * 0.12 * m.sc, z.y - m.fy * 0.28 * m.sc - m.py * 0.12 * m.sc, 7 * m.sc);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(224, 64, 251, 0.75)';
+            ctx.lineWidth = 1.6 * zScale;
+            ctx.beginPath();
+            ctx.moveTo(bPt.x - 10 * zScale, bPt.y);
+            ctx.lineTo(bPt.x - 2 * zScale, bPt.y - 3 * zScale);
+            ctx.moveTo(bPt.x - 7 * zScale, bPt.y + 5 * zScale);
+            ctx.lineTo(bPt.x + 1 * zScale, bPt.y + 2 * zScale);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Leaper Leap Trajectory Dotted Arc (#FF8FA3 +26px peak)
+          if (z.leapState) {
+            const ls = z.leapState;
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(255, 143, 163, 0.85)';
+            ctx.lineWidth = 1.6 * zScale;
+            ctx.beginPath();
+            for (let k = 0; k <= 16; k++) {
+              const u = k / 16;
+              const gx = ls.startX + (ls.targetX - ls.startX) * u;
+              const gy = ls.startY + (ls.targetY - ls.startY) * u;
+              const gz = 1 + Math.sin(Math.PI * u) * 26;
+              const pt = Iso.gridToScreen(gx, gy, gz);
+              if (k === 0) ctx.moveTo(pt.x, pt.y);
+              else ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+          }
+
+          // Boss Siege Charge Windup Target Crosshair (#FF4D6D above target wall/gate)
+          if (zDef.isBoss && z.chargeState && z.chargeState.phase === 'windup') {
+            const cs = z.chargeState;
+            if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(cs.targetX, cs.targetY));
+            const cp = Iso.gridToScreen(cs.targetX, cs.targetY, 34);
+            if (Iso.setElevationOffset) Iso.setElevationOffset(getElev(z.x, z.y));
+            const cr = 9 * zScale;
+            ctx.save();
+            ctx.strokeStyle = P.danger;
+            ctx.lineWidth = 2.2 * zScale;
+            ctx.beginPath();
+            ctx.arc(cp.x, cp.y, cr, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cp.x - 14 * zScale, cp.y);
+            ctx.lineTo(cp.x - 5 * zScale, cp.y);
+            ctx.moveTo(cp.x + 5 * zScale, cp.y);
+            ctx.lineTo(cp.x + 14 * zScale, cp.y);
+            ctx.moveTo(cp.x, cp.y - 14 * zScale);
+            ctx.lineTo(cp.x, cp.y - 5 * zScale);
+            ctx.moveTo(cp.x, cp.y + 5 * zScale);
+            ctx.lineTo(cp.x, cp.y + 14 * zScale);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          if (z.hp < z.maxHp || zDef.isBoss) {
+            const hpTop = Iso.gridToScreen(z.x, z.y, m.topZ);
+            const bw = (zDef.isBoss ? 42 : 22) * zScale;
+            const bh = (zDef.isBoss ? 5.2 : 3.4) * zScale;
             ctx.fillStyle = P.outlineDark || '#1B2430';
-            ctx.fillRect(barPos.x - bw * 0.5 - 1.2, barPos.y - 1.2, bw + 2.4, bh + 2.4);
-            ctx.fillStyle = ratio > 0.5 ? P.heal : ratio > 0.25 ? P.caution : P.danger;
-            ctx.fillRect(barPos.x - bw * 0.5, barPos.y, bw * ratio, bh);
+            ctx.fillRect(hpTop.x - bw * 0.5 - 1.2, hpTop.y - 1.2, bw + 2.4, bh + 2.4);
+            ctx.fillStyle = P.danger;
+            ctx.fillRect(hpTop.x - bw * 0.5, hpTop.y, bw * Math.max(0, z.hp / z.maxHp), bh);
           }
-
-          // Facility Upgrade ◆ Pips in Info Layer (Lv.2 = ◆◆ #F2F4F7, Lv.3 = ◆◆◆ #FF9F43, 70% alpha at night)
-          if (hasPips) {
-            drawUpgradePips(ctx, tx + 0.5, ty + 0.5, topZ + 9, lv, hasRank, state.isNight, st.upgradeAnimTimer || 0, zScale);
-          }
-
-          // Combat Veterancy Rank Badge in Info Layer (Rank 1 Bronze Chevron, Rank 2 Silver 2-Chevron [NO cyan], Rank 3 Gold Star)
-          if (hasRank) {
-            drawRankBadge(ctx, tx + 0.5, ty + 0.5, topZ + 9, st.rank || 0, hasPips, st.promoAnimTimer || 0, zScale);
-          }
-
-          const isEmpStunned = !isUnpowered && def && def.requiresPower && (st.empStunTimer || 0) > 0;
-          if (isUnpowered) {
-            const warnZ = isDamaged ? 35 : 29;
-            drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
-          } else if (isEmpStunned) {
-            const empZ = Math.max(topZ + (hasPips || hasRank ? 12 : 4), isDamaged ? 32 : 24);
-            drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, Math.min(1.65, zScale)), zScale, P);
-          }
-        }
-        if (structOccAlpha < 0.995) ctx.restore();
-      } else if (item.kind === 'zombie') {
-        const z = item.z;
-        const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
-        const m = z._framePose || (R.getQuantizedZombiePoseMetrics ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec) : R.getZombiePoseMetrics(z, zDef, timeSec));
-
-        if (state.nightAlpha > 0.05) {
-          const eyes = z._frameEyes || R.getZombieEyePositions(z, zDef, timeSec, zScale, m);
-          const occluded = z._frameEyes != null && z._frameEyesOccluded !== undefined
-            ? z._frameEyesOccluded
-            : R.isZombieEyesOccluded(state, z, eyes, zScale);
-          if (!occluded) {
-            nightEyes.push({ eyes, zDef });
-          }
-        }
-
-        // Shocker Info-Layer Spark Arc connecting 3 dorsal rod tips (#FFE14D)
-        if (z.type === 'shocker') {
-          const rodOffsets = [[-0.09, 13.0], [0, 15.5], [0.09, 13.0]];
-          const tips = [];
-          for (let r = 0; r < rodOffsets.length; r++) {
-            const oy = rodOffsets[r][0] * m.sc;
-            const rh = rodOffsets[r][1] * m.sc;
-            tips.push(Iso.gridToScreen(
-              z.x - m.fx * 0.26 * m.sc + m.px * oy,
-              z.y - m.fy * 0.26 * m.sc + m.py * oy,
-              m.bodyBaseZ + 8.0 * m.sc + rh + 1.1 * m.sc
-            ));
-          }
-          ctx.save();
-          ctx.strokeStyle = P.mutantSpark || '#FFE14D';
-          ctx.lineWidth = 1.2 * zScale;
-          ctx.beginPath();
-          ctx.moveTo(tips[0].x, tips[0].y);
-          ctx.lineTo((tips[0].x + tips[1].x) * 0.5 + 2 * zScale, (tips[0].y + tips[1].y) * 0.5 - 3 * zScale);
-          ctx.lineTo(tips[1].x, tips[1].y);
-          ctx.lineTo((tips[1].x + tips[2].x) * 0.5 - 2 * zScale, (tips[1].y + tips[2].y) * 0.5 - 2 * zScale);
-          ctx.lineTo(tips[2].x, tips[2].y);
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // Buffed Zombie War Cry Speed Lines (#E040FB 2 speed lines behind body)
-        if (z.frenzyTimer > 0) {
-          const bPt = Iso.gridToScreen(z.x - m.fx * 0.28 * m.sc - m.px * 0.12 * m.sc, z.y - m.fy * 0.28 * m.sc - m.py * 0.12 * m.sc, 7 * m.sc);
-          ctx.save();
-          ctx.strokeStyle = 'rgba(224, 64, 251, 0.75)';
-          ctx.lineWidth = 1.6 * zScale;
-          ctx.beginPath();
-          ctx.moveTo(bPt.x - 10 * zScale, bPt.y);
-          ctx.lineTo(bPt.x - 2 * zScale, bPt.y - 3 * zScale);
-          ctx.moveTo(bPt.x - 7 * zScale, bPt.y + 5 * zScale);
-          ctx.lineTo(bPt.x + 1 * zScale, bPt.y + 2 * zScale);
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // Leaper Leap Trajectory Dotted Arc (#FF8FA3 +26px peak)
-        if (z.leapState) {
-          const ls = z.leapState;
-          ctx.save();
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = 'rgba(255, 143, 163, 0.85)';
-          ctx.lineWidth = 1.6 * zScale;
-          ctx.beginPath();
-          for (let k = 0; k <= 16; k++) {
-            const u = k / 16;
-            const pt = Iso.gridToScreen(
-              ls.startX + (ls.targetX - ls.startX) * u,
-              ls.startY + (ls.targetY - ls.startY) * u,
-              1 + Math.sin(Math.PI * u) * 26
-            );
-            if (k === 0) ctx.moveTo(pt.x, pt.y);
-            else ctx.lineTo(pt.x, pt.y);
-          }
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.restore();
-        }
-
-        // Boss Siege Charge Windup Target Crosshair (#FF4D6D above target wall/gate)
-        if (zDef.isBoss && z.chargeState && z.chargeState.phase === 'windup') {
-          const cs = z.chargeState;
-          const cp = Iso.gridToScreen(cs.targetX, cs.targetY, 34);
-          const cr = 9 * zScale;
-          ctx.save();
-          ctx.strokeStyle = P.danger;
-          ctx.lineWidth = 2.2 * zScale;
-          ctx.beginPath();
-          ctx.arc(cp.x, cp.y, cr, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(cp.x - 14 * zScale, cp.y);
-          ctx.lineTo(cp.x - 5 * zScale, cp.y);
-          ctx.moveTo(cp.x + 5 * zScale, cp.y);
-          ctx.lineTo(cp.x + 14 * zScale, cp.y);
-          ctx.moveTo(cp.x, cp.y - 14 * zScale);
-          ctx.lineTo(cp.x, cp.y - 5 * zScale);
-          ctx.moveTo(cp.x, cp.y + 5 * zScale);
-          ctx.lineTo(cp.x, cp.y + 14 * zScale);
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        if (z.hp < z.maxHp || zDef.isBoss) {
-          const hpTop = Iso.gridToScreen(z.x, z.y, m.topZ);
-          const bw = (zDef.isBoss ? 42 : 22) * zScale;
-          const bh = (zDef.isBoss ? 5.2 : 3.4) * zScale;
-          ctx.fillStyle = P.outlineDark || '#1B2430';
-          ctx.fillRect(hpTop.x - bw * 0.5 - 1.2, hpTop.y - 1.2, bw + 2.4, bh + 2.4);
-          ctx.fillStyle = P.danger;
-          ctx.fillRect(hpTop.x - bw * 0.5, hpTop.y, bw * Math.max(0, z.hp / z.maxHp), bh);
         }
       }
+    } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
     }
 
     // 3. Batched Nighttime Emissive Eye Halos (single composite switch + cached stamp) & Pinpoints
@@ -1076,11 +1116,12 @@ window.ZS = window.ZS || {};
     const vp = viewW != null ? { w: viewW, h: viewH } : Iso.getViewport();
     const padX = 110 * zScale;
     const padY = 50 * zScale;
+    const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
     ctx.save();
     ctx.textAlign = 'center';
     for (let i = 0; i < list.length; i++) {
       const ft = list[i];
-      const p = Iso.gridToScreen(ft.x, ft.y, ft.z);
+      const p = Iso.gridToScreen(ft.x, ft.y, ft.z + getElev(ft.x, ft.y));
       if (p.x < -padX || p.x > vp.w + padX || p.y < -padY || p.y > vp.h + padY) continue;
       const alpha = Math.min(1, (ft.life / ft.maxLife) * 1.4);
       ctx.globalAlpha = Math.max(0, alpha);
@@ -1126,9 +1167,11 @@ window.ZS = window.ZS || {};
     const prevCamX = Iso.cam.x;
     const prevCamY = Iso.cam.y;
     const prevZoom = Iso.cam.zoom;
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
     const prevEmis = R.emissiveList;
 
     try {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(0);
       Iso.setViewport(sz, sz);
       Iso.resetRenderModifiers();
       Iso.setSceneTint('#FFE8BA', 0.045);
@@ -1185,6 +1228,7 @@ window.ZS = window.ZS || {};
         R.drawStructure(tctx, dummySt, 0, 0, dummyState, true, 0.45, zoom);
       }
     } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
       Iso.setViewport(prevVp.w, prevVp.h);
       Iso.cam.x = prevCamX;
       Iso.cam.y = prevCamY;

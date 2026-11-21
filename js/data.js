@@ -151,7 +151,27 @@ ZS.DATA = (function () {
     milSolarGrid: '#89A1B8',
     milSolarGlint: '#B8D0E6',
     hqAmberCore: '#FFF3D6',
-    hqGoldTrim: '#E2A83B'
+    hqGoldTrim: '#E2A83B',
+
+    // 8. Procedural Terrain Tokens (#67 — zero #5EF2FF cyan!)
+    rockBase: '#5B646F',
+    rockDark: '#3D444D',
+    rockMoss: '#5D7455',
+    plateauCliffSlate: '#424A56',
+    plateauCliffOchre: '#8E6A42',
+    plateauCliffSoil: '#473628',
+    plateauTopA: '#5D775A',
+    plateauTopB: '#577054',
+    rampStone: '#7E786C',
+    rampCurb: '#535B65',
+    energyGeoRim: '#8D5B3C',
+    energyGeoBasalt: '#463F39',
+    energyGeoFissure: '#D96B27',
+    energyGeoCore: '#F59E3F',
+    energyGeoHot: '#FFD07A',
+    energyWindSlate: '#6B7873',
+    energyWindRing: '#8FA099',
+    energyWindDust: '#D6E2DC'
   };
 
   const WALL_TIERS = {
@@ -219,8 +239,66 @@ ZS.DATA = (function () {
 
   return {
   VERSION: 'v0.6.0',
-  GRID_SIZE: 22,
-  HQ_POS: { x: 10, y: 10 },
+  GRID_SIZE: 26,
+  HQ_POS: { x: 13, y: 13 },
+  PLATEAU_ELEV_Z: 10,
+  RAMP_ELEV_Z: 5,
+  ROCK_TOP_Z: 17,
+  ENERGY_BONUS: {
+    windMult: 1.5,
+    solarDayMult: 1.5,
+    solarNightGen: 0.8,
+    batteryCapMult: 1.35,
+    batteryChargeMult: 2.0
+  },
+  PLATEAU_BONUS: {
+    rangeAdd: 1.0,
+    mountCap: 1.25,
+    critAdd: 0.08,
+    lightAdd: 1.0,
+    auraAdd: 0.5
+  },
+  RAMP_SPEED: {
+    uphill: 0.70,
+    downhill: 1.25
+  },
+  TERRAIN_TYPES: {
+    rock: {
+      id: 'rock',
+      name: '자연 암석 (바위)',
+      elev: 0,
+      topZ: 17,
+      desc: '이동 및 건설 불가. 투사체는 상공으로 통과하며 인접 성벽·게이트와 자동 연결됩니다.'
+    },
+    plateau: {
+      id: 'plateau',
+      name: '고지대 암반',
+      elev: 10,
+      desc: '고도 +10. 초소·포탑 사거리 +1.0(성벽 거치 합산 최대 +1.25)·치명 +8%p, 조명 반경 +1.0·오라 +0.5.'
+    },
+    ramp: {
+      id: 'ramp',
+      name: '경사 언덕',
+      elev: 5,
+      desc: '고지대 연결 경사로. 오르막 이속 -30%·내리막 +25%. 스파이크 트랩만 설치 가능.'
+    },
+    energy: {
+      id: 'energy',
+      name: '자연 에너지 스팟',
+      elev: 0,
+      subKinds: {
+        wind: {
+          name: '강풍 협곡 스팟',
+          desc: '풍력 주·야간 +50%(×1.5), 태양광 주간 +50%·야간 +0.8/s, 배터리 용량 +35%·주간 충전 2배.'
+        },
+        geothermal: {
+          name: '지열 균열 스팟',
+          desc: '풍력 주·야간 +50%(×1.5), 태양광 주간 +50%·야간 +0.8/s, 배터리 용량 +35%·주간 충전 2배.'
+        }
+      },
+      desc: '풍력 주·야간 +50%(×1.5), 태양광 주간 +50%·야간 상시 +0.8/s, 배터리 용량 +35%·주간 충전 2배.'
+    }
+  },
   PALETTE,
 
   INITIAL_RESOURCES: {
