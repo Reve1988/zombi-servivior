@@ -656,6 +656,10 @@ window.ZS = window.ZS || {};
         if (uiState.inspectedTile && ZS.Game.upgradeWallBase) {
           ZS.Game.upgradeWallBase(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
         }
+      } else if (e.code === 'KeyV') {
+        if (!isTyping && !e.ctrlKey && !e.metaKey && !e.altKey && ZS.Game.toggleWindOverlay) {
+          ZS.Game.toggleWindOverlay();
+        }
       } else if (e.code === 'KeyM') {
         U.setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
       } else if (e.code === 'KeyX') {
@@ -700,6 +704,13 @@ window.ZS = window.ZS || {};
       U.setToolMode('inspect');
       ZS.Game.startNightWave();
     });
+
+    const windLayerBtn = document.getElementById('btn-toggle-wind-layer');
+    if (windLayerBtn) {
+      windLayerBtn.addEventListener('click', () => {
+        if (ZS.Game.toggleWindOverlay) ZS.Game.toggleWindOverlay();
+      });
+    }
 
     const reconCardEl = document.getElementById('recon-card');
     if (reconCardEl) {

@@ -372,19 +372,15 @@ window.ZS = window.ZS || {};
     let dayCharge = (prof && prof.dayCharge) || 0;
     let nightGen = (prof && prof.nightGen) || 0;
     const terrain = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
-    const onEnergy = !!(terrain && terrain.kind === 'energy');
-    if (onEnergy) {
-      const eb = DATA.ENERGY_BONUS || {};
-      if (defId === 'wind_turbine') {
-        dayCharge = +(dayCharge * (eb.windMult || 1.5)).toFixed(2);
-        nightGen = +(nightGen * (eb.windMult || 1.5)).toFixed(3);
-      } else if (defId === 'solar_array') {
-        dayCharge = +(dayCharge * (eb.solarDayMult || 1.5)).toFixed(2);
-        nightGen = +(nightGen + (eb.solarNightGen != null ? eb.solarNightGen : 0.8)).toFixed(3);
-      } else if (defId === 'battery_bank') {
-        powerCap = Math.round(powerCap * (eb.batteryCapMult || 1.35));
-        dayCharge = +(dayCharge * (eb.batteryChargeMult || 2.0)).toFixed(2);
-      }
+    const onWind = !!(terrain && terrain.kind === 'wind');
+    const windTier = onWind ? (terrain.tier || 1) : 0;
+    const wzCfg = DATA.WIND_ZONE || {};
+    const windMult = onWind
+      ? (terrain.windMult || (windTier === 2 ? (wzCfg.coreMult || 1.70) : (wzCfg.outerMult || 1.40)))
+      : 1.0;
+    if (onWind && defId === 'wind_turbine') {
+      dayCharge = +(dayCharge * windMult).toFixed(2);
+      nightGen = +(nightGen * windMult).toFixed(3);
     }
     const div = G.getDivisionDef ? G.getDivisionDef() : null;
     if (div && div.solarBatteryMult && (defId === 'solar_array' || defId === 'battery_bank')) {
@@ -395,8 +391,9 @@ window.ZS = window.ZS || {};
       powerCap,
       dayCharge,
       nightGen,
-      onEnergy,
-      subKind: terrain && terrain.subKind ? terrain.subKind : null
+      onWind,
+      windTier,
+      windMult
     };
   }
 

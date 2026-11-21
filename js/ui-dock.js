@@ -354,18 +354,19 @@ window.ZS = window.ZS || {};
           tipIcon: 'nav-recon',
           tipIconCls: 'icon-muted'
         };
-      case 'energy': {
-        const isWind = tCell.subKind === 'wind';
-        const subTitle = isWind ? '에너지 스팟 — 강풍 능선' : '에너지 스팟 — 지열 균열';
+      case 'wind': {
+        const isCore = (tCell.tier || 1) >= 2;
+        const pct = isCore ? 70 : 40;
+        const title = isCore ? '강풍 지대 — 돌풍 핵심 (+70%)' : '강풍 지대 (+40%)';
         return {
-          title: subTitle,
-          badge: '풍력 ×1.5 · 태양광 ×1.5 (야간 +0.8/s 유지) · 배터리 용량 ×1.35 / 충전 ×2.0',
-          desc: isWind
-            ? '강한 바람이 모이는 고효율 발전 지형입니다. 풍력·태양광·배터리 성능이 크게 증가합니다.'
-            : '지열 에너지가 솟아오르는 발전 명당입니다. 풍력·태양광·배터리 성능이 크게 증가합니다.',
-          tipText: `${subTitle} — 발전·저장 효율 대폭 증가`,
-          tipIcon: 'res-power',
-          tipIconCls: 'icon-power'
+          title,
+          badge: `풍력 터빈 주·야간 발전 +${pct}% (×${(isCore ? 1.7 : 1.4).toFixed(1)})`,
+          desc: isCore
+            ? '바람 에너지가 강하게 집중되는 돌풍 중심 구역입니다. 풍력 터빈의 주·야간 발전량이 +70% 증가합니다.'
+            : '자연 바람길이 통과하는 강풍 구역입니다. 풍력 터빈의 주·야간 발전량이 +40% 증가합니다.',
+          tipText: `${title} — 풍력 발전 +${pct}%`,
+          tipIcon: 'hud-wind',
+          tipIconCls: 'icon-heal'
         };
       }
       default:
@@ -399,12 +400,12 @@ window.ZS = window.ZS || {};
     }
 
     const hoveredTerrain = ZS.Game.getTerrainAt ? ZS.Game.getTerrainAt(tx, ty) : (st.terrainGrid && st.terrainGrid[ty] && st.terrainGrid[ty][tx]);
-    const tKey = hoveredTerrain ? `${hoveredTerrain.kind}:${hoveredTerrain.subKind || ''}` : '';
+    const tKey = hoveredTerrain ? `${hoveredTerrain.kind}:${hoveredTerrain.tier || 0}` : '';
     const moveSrcKey = uiState.movingSource ? `${uiState.movingSource.tx},${uiState.movingSource.ty}` : '';
     const vKey = uiState.selectedItemId
       ? `${st.freeVouchers[uiState.selectedItemId] || 0},${st.freeVouchers.barricade_wall || 0}`
       : '0';
-    const nextKey = `${st.phase}|${uiState.mode}|${uiState.selectedItemId || ''}|${tx},${ty}|${tKey}|${moveSrcKey}|${Math.floor(st.wood)},${Math.floor(st.scrap)},${Math.floor(st.coin)}|${st.popUsed},${st.agents},${st.popCap}|${st.hqLevel}|${st.bossDefeated ? 1 : 0}|${vKey}`;
+    const nextKey = `${st.phase}|${uiState.mode}|${uiState.selectedItemId || ''}|${tx},${ty}|${tKey}|${st.showWindOverlay ? 1 : 0}|${moveSrcKey}|${Math.floor(st.wood)},${Math.floor(st.scrap)},${Math.floor(st.coin)}|${st.popUsed},${st.agents},${st.popCap}|${st.hqLevel}|${st.bossDefeated ? 1 : 0}|${vKey}`;
 
     if (nextKey !== lastTipStateKey) {
       lastTipStateKey = nextKey;
@@ -430,10 +431,10 @@ window.ZS = window.ZS || {};
           ) {
             return '고지대 보너스: 조명 +1.0 · 오라 반경 +0.5';
           }
-        } else if (tCell.kind === 'energy' && def.subType === 'power') {
-          if (def.id === 'wind_turbine') return '에너지 스팟: 충전·야간발전 ×1.5';
-          if (def.id === 'solar_array') return '에너지 스팟: 충전 ×1.5 · 야간 +0.8/s 지속';
-          if (def.id === 'battery_bank') return '에너지 스팟: 용량 ×1.35 · 주간충전 ×2.0';
+        } else if (tCell.kind === 'wind' && def.id === 'wind_turbine' && st.showWindOverlay) {
+          return (tCell.tier || 1) >= 2
+            ? '돌풍 핵심 지대 (+70%): 풍력 발전 ×1.7'
+            : '강풍 지대 (+40%): 풍력 발전 ×1.4';
         } else if (tCell.kind === 'ramp' && def.id === 'razor_pad') {
           return '경사로 가시 함정 설치 가능 (등판 -30% 감속 중첩)';
         }
@@ -474,8 +475,8 @@ window.ZS = window.ZS || {};
           if (bonusTip) {
             tipText = bonusTip;
             tipKind = 'ok';
-            tipIcon = hoveredTerrain.kind === 'energy' ? 'res-power' : 'nav-recon';
-            tipIconCls = hoveredTerrain.kind === 'energy' ? 'icon-power' : 'icon-heal';
+            tipIcon = hoveredTerrain.kind === 'wind' ? 'hud-wind' : 'nav-recon';
+            tipIconCls = 'icon-heal';
           }
         }
       } else if (uiState.mode === 'move' && uiState.movingSource) {
@@ -513,17 +514,19 @@ window.ZS = window.ZS || {};
           if (moveBonus) {
             tipText = moveBonus;
             tipKind = 'ok';
-            tipIcon = hoveredTerrain.kind === 'energy' ? 'res-power' : 'nav-recon';
-            tipIconCls = hoveredTerrain.kind === 'energy' ? 'icon-power' : 'icon-heal';
+            tipIcon = hoveredTerrain.kind === 'wind' ? 'hud-wind' : 'nav-recon';
+            tipIconCls = 'icon-heal';
           }
         }
       } else if (uiState.mode === 'inspect' && hoveredTerrain && !(st.structGrid[ty] && st.structGrid[ty][tx])) {
-        const meta = getTerrainUiMeta(hoveredTerrain);
-        if (meta) {
-          tipText = meta.tipText;
-          tipKind = 'info';
-          tipIcon = meta.tipIcon;
-          tipIconCls = meta.tipIconCls;
+        if (hoveredTerrain.kind !== 'wind' || st.showWindOverlay) {
+          const meta = getTerrainUiMeta(hoveredTerrain);
+          if (meta) {
+            tipText = meta.tipText;
+            tipKind = 'info';
+            tipIcon = meta.tipIcon;
+            tipIconCls = meta.tipIconCls;
+          }
         }
       }
 
@@ -808,10 +811,10 @@ window.ZS = window.ZS || {};
     const tMeta = getTerrainUiMeta(tCell);
 
     if (!obj) {
-      if (tMeta) {
+      if (tMeta && (tCell.kind !== 'wind' || st.showWindOverlay)) {
         const floorSuffix = fDef ? ` (바닥: ${escapeHtml(fDef.name)})` : '';
-        const iconId = tCell.kind === 'energy' ? 'res-power' : 'nav-recon';
-        const iconCls = tCell.kind === 'energy' ? 'icon-power' : 'icon-coin';
+        const iconId = tCell.kind === 'wind' ? 'hud-wind' : 'nav-recon';
+        const iconCls = tCell.kind === 'wind' ? 'icon-heal' : 'icon-coin';
         setDetailHtml(`${ozIcon(iconId, 14, iconCls)} <b>[${escapeHtml(tMeta.title)}]</b> ${escapeHtml(tMeta.badge)} — ${escapeHtml(tMeta.desc)}${floorSuffix}`);
       } else if (fDef) {
         setDetailHtml(`${ozIcon('cat-decor', 14, 'icon-coin')} <b>[${escapeHtml(fDef.name)}]</b> 시공됨 — ${escapeHtml(fDef.desc)}`);
@@ -1069,7 +1072,8 @@ window.ZS = window.ZS || {};
       const prof = ZS.Game.getStructLevelProfile(def, lv);
       const dispName = ZS.Game.getStructureDisplayName(obj);
       const isPlateau = !!(tCell && tCell.kind === 'plateau');
-      const isEnergy = !!(tCell && tCell.kind === 'energy');
+      const onWindZone = !!(def.id === 'wind_turbine' && tCell && tCell.kind === 'wind');
+      const windPct = onWindZone ? ((tCell.tier || 1) >= 2 ? 70 : 40) : 0;
       const divDef2 = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
       const thornsMult2 = (divDef2 && divDef2.thornsMult) || 1.0;
       let statSummary = '';
@@ -1105,8 +1109,8 @@ window.ZS = window.ZS || {};
       } else if (def.subType === 'power') {
         const pwrEff = ZS.Game.getTerrainPowerStats ? ZS.Game.getTerrainPowerStats(def.id, prof, tx, ty) : prof;
         const nightTxt = pwrEff.nightGen > 0 ? ` · 야간 +${pwrEff.nightGen.toFixed(2)}/s` : '';
-        const engTxt = isEnergy ? ' · ★에너지 스팟 증폭' : '';
-        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${pwrEff.dayCharge}${nightTxt} · 저장 용량 +${pwrEff.powerCap}${engTxt}`;
+        const windTxt = onWindZone ? ` · ★강풍지대 +${windPct}%` : '';
+        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${pwrEff.dayCharge}${nightTxt} · 저장 용량 +${pwrEff.powerCap}${windTxt}`;
       } else if (def.subType === 'housing') {
         statSummary = `${ozIcon('res-agent', 13)}요원 수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }

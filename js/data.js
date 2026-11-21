@@ -163,15 +163,7 @@ ZS.DATA = (function () {
     plateauTopA: '#5D775A',
     plateauTopB: '#577054',
     rampStone: '#7E786C',
-    rampCurb: '#535B65',
-    energyGeoRim: '#8D5B3C',
-    energyGeoBasalt: '#463F39',
-    energyGeoFissure: '#D96B27',
-    energyGeoCore: '#F59E3F',
-    energyGeoHot: '#FFD07A',
-    energyWindSlate: '#6B7873',
-    energyWindRing: '#8FA099',
-    energyWindDust: '#D6E2DC'
+    rampCurb: '#535B65'
   };
 
   const WALL_TIERS = {
@@ -244,12 +236,11 @@ ZS.DATA = (function () {
   PLATEAU_ELEV_Z: 10,
   RAMP_ELEV_Z: 5,
   ROCK_TOP_Z: 17,
-  ENERGY_BONUS: {
-    windMult: 1.5,
-    solarDayMult: 1.5,
-    solarNightGen: 0.8,
-    batteryCapMult: 1.35,
-    batteryChargeMult: 2.0
+  WIND_ZONE: {
+    outerMult: 1.40,
+    coreMult: 1.70,
+    minTiles: 10,
+    maxTiles: 16
   },
   PLATEAU_BONUS: {
     rangeAdd: 1.0,
@@ -282,21 +273,15 @@ ZS.DATA = (function () {
       elev: 5,
       desc: '고지대 연결 경사로. 오르막 이속 -30%·내리막 +25%. 스파이크 트랩만 설치 가능.'
     },
-    energy: {
-      id: 'energy',
-      name: '자연 에너지 스팟',
+    wind: {
+      id: 'wind',
+      name: '강풍 지대',
       elev: 0,
-      subKinds: {
-        wind: {
-          name: '강풍 협곡 스팟',
-          desc: '풍력 주·야간 +50%(×1.5), 태양광 주간 +50%·야간 +0.8/s, 배터리 용량 +35%·주간 충전 2배.'
-        },
-        geothermal: {
-          name: '지열 균열 스팟',
-          desc: '풍력 주·야간 +50%(×1.5), 태양광 주간 +50%·야간 +0.8/s, 배터리 용량 +35%·주간 충전 2배.'
-        }
+      tiers: {
+        1: { name: '강풍 지대 (+40%)', mult: 1.40 },
+        2: { name: '돌풍 핵심 지대 (+70%)', mult: 1.70 }
       },
-      desc: '풍력 주·야간 +50%(×1.5), 태양광 주간 +50%·야간 상시 +0.8/s, 배터리 용량 +35%·주간 충전 2배.'
+      desc: '평소에는 보이지 않는 자연 바람길입니다. [강풍 레이어 V]를 켜서 위치를 확인할 수 있으며, 풍력 터빈 설치 시 주·야간 발전량이 +40%(주변부) / +70%(중심부) 증가합니다.'
     }
   },
   PALETTE,
@@ -700,7 +685,7 @@ ZS.DATA = (function () {
       powerCap: 10,
       cozy: 1,
       cozyGroup: 'wind_t1',
-      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다.'
+      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다. [강풍 레이어 V]로 강풍(+40%)·돌풍(+70%) 지대를 찾아 배치할 수 있습니다.'
     },
     battery_bank: {
       id: 'battery_bank',

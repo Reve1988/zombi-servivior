@@ -1194,6 +1194,8 @@ window.ZS = window.ZS || {};
     completeWave: G.completeWave,
     triggerGameOver: G.triggerGameOver,
     toggleReconPaths: G.toggleReconPaths,
+    toggleWindOverlay: G.toggleWindOverlay,
+    setWindOverlay: G.setWindOverlay,
     generateWaveIntel: G.generateWaveIntel,
     recomputePreviewPaths: G.recomputePreviewPaths,
     triggerNanoRepair: G.triggerNanoRepair,

@@ -209,9 +209,18 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function syncWindLayerButton(st) {
+    const btn = document.getElementById('btn-toggle-wind-layer');
+    if (!btn || !st) return;
+    const on = !!st.showWindOverlay;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
   function updateHud() {
     const st = ZS.Game.state;
     syncDivisionBadge(st);
+    syncWindLayerButton(st);
     const P = ZS.DATA.PALETTE;
     const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
     const phaseIconEl = document.getElementById('hud-phase-icon');
@@ -642,6 +651,7 @@ window.ZS = window.ZS || {};
 
     syncNightPhaseAndPowerHud(st);
     syncDivisionBadge(st);
+    syncWindLayerButton(st);
 
     const left = st.spawnQueue.length + st.zombies.length;
     document.getElementById('hud-enemies-left').textContent = `${left}기`;

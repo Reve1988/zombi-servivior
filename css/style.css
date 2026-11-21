@@ -609,6 +609,71 @@ button, input, select {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.wind-layer-btn {
+  position: relative;
+  z-index: 2;
+  height: 44px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: #CFE0EE;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: transform 0.16s ease, color 0.14s ease;
+}
+
+.wind-layer-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: var(--chamfer-8);
+  background: linear-gradient(155deg, #68829F 0%, #33465B 48%, #182330 100%);
+}
+
+.wind-layer-btn::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: var(--chamfer-6);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0, transparent 5px),
+    linear-gradient(180deg, #243447 0%, #131C28 100%);
+}
+
+.wind-layer-btn:hover {
+  color: #A7F3D0;
+}
+
+.wind-layer-btn:hover::before {
+  background: linear-gradient(155deg, #6EE7B7 0%, #4E7B73 52%, #1D2D36 100%);
+}
+
+.wind-layer-btn.active {
+  color: #FEF08A;
+}
+
+.wind-layer-btn.active::before {
+  background: linear-gradient(155deg, #FDE047 0%, #34D399 55%, #193A34 100%);
+}
+
+.wind-layer-btn.active::after {
+  background:
+    linear-gradient(180deg, rgba(250, 204, 21, 0.18) 0, transparent 7px),
+    linear-gradient(180deg, #1F3B34 0%, #112224 100%);
 }
 
 .settings-wrap {
