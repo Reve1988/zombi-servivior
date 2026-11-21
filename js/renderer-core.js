@@ -34,6 +34,8 @@ window.ZS = window.ZS || {};
     decalOcc: null,
     bakeCount: 0
   };
+  const occludeAlphaMap = new Map();
+  let lastOccTimeSec = -1;
   const R = (ZS._Renderer = {
     lightCanvas,
     lightCtx,
@@ -44,9 +46,12 @@ window.ZS = window.ZS || {};
     glowStampCache,
     emissiveStampCache,
     thumbnailCache,
+    occludeAlphaMap,
     bgCache,
     terrainCache,
     emissiveList: null,
+    currentEntityAlpha: 1.0,
+    hoverOccludedByFront: false,
     activeTrapTiles: null,
     cachedTerrainN: 0,
     terrainMeta: null,
@@ -989,7 +994,8 @@ window.ZS = window.ZS || {};
         h: dstH,
         originX: origin.x + snapDx,
         originY: origin.y + snapDy,
-        glowClusters: stamp.glowClusters
+        glowClusters: stamp.glowClusters,
+        alpha: R.currentEntityAlpha != null ? R.currentEntityAlpha : 1.0
       });
     }
   }
@@ -1539,6 +1545,55 @@ window.ZS = window.ZS || {};
 
     renderList.sort((a, b) => a.depth - b.depth);
 
+    const occDt = lastOccTimeSec >= 0 ? Math.min(0.1, Math.max(0, timeSec - lastOccTimeSec)) : 0.016;
+    lastOccTimeSec = timeSec;
+    const occStep = window.ZS_INSTANT_OCCLUDE ? 1 : (1 - Math.exp(-occDt * 22));
+    const activeHoverTile =
+      !window.ZS_SILHOUETTE_MODE &&
+      !uiState.mainMenuOpen &&
+      uiState.pointerClient &&
+      uiState.pointerClient.inside &&
+      uiState.hoverTile
+        ? uiState.hoverTile
+        : null;
+    let hoverOccluded = false;
+    const seenOcc = occludeAlphaMap.size > 0 ? new Set() : null;
+    for (let i = 0; i < renderList.length; i++) {
+      const item = renderList[i];
+      if (item.kind !== 'struct') continue;
+      const shouldFade = !!(
+        activeHoverTile &&
+        doesStructOccludeTarget(item.st, item.tx, item.ty, activeHoverTile.tx, activeHoverTile.ty)
+      );
+      if (shouldFade) hoverOccluded = true;
+      const occKey = (shouldFade || occludeAlphaMap.size > 0) ? (item.tx + ',' + item.ty) : null;
+      if (seenOcc && occKey) seenOcc.add(occKey);
+      let occA = 1.0;
+      if (shouldFade) {
+        const prev = occludeAlphaMap.get(occKey);
+        const cur = prev != null ? prev : 1.0;
+        occA = occStep >= 1 ? 0.28 : cur + (0.28 - cur) * occStep;
+        occludeAlphaMap.set(occKey, occA);
+      } else if (occKey && occludeAlphaMap.has(occKey)) {
+        const cur = occludeAlphaMap.get(occKey);
+        const next = occStep >= 1 ? 1.0 : cur + (1.0 - cur) * occStep;
+        if (next >= 0.992) {
+          occludeAlphaMap.delete(occKey);
+          occA = 1.0;
+        } else {
+          occludeAlphaMap.set(occKey, next);
+          occA = next;
+        }
+      }
+      item.occAlpha = occA;
+    }
+    if (seenOcc) {
+      for (const k of occludeAlphaMap.keys()) {
+        if (!seenOcc.has(k)) occludeAlphaMap.delete(k);
+      }
+    }
+    R.hoverOccludedByFront = hoverOccluded;
+
     const powered = computeBlackoutElectricPowered(state, timeSec);
     const statusPowered = !state.isNight || !state.blackoutActive;
     const nightEmissives = state.nightAlpha > 0.02 ? [] : null;
@@ -1547,7 +1602,18 @@ window.ZS = window.ZS || {};
     for (let i = 0; i < renderList.length; i++) {
       const item = renderList[i];
       if (item.kind === 'struct') {
-        R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
+        const occA = item.occAlpha != null ? item.occAlpha : 1.0;
+        if (occA < 0.995) {
+          ctx.save();
+          ctx.globalAlpha *= occA;
+          R.currentEntityAlpha = occA;
+          R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
+          R.currentEntityAlpha = 1.0;
+          ctx.restore();
+        } else {
+          R.currentEntityAlpha = 1.0;
+          R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
+        }
       } else if (item.kind === 'edge_prop') {
         R.emissiveList = null;
         drawPerimeterProp(ctx, item.ep, zScale);
@@ -2424,6 +2490,7 @@ window.ZS = window.ZS || {};
 
   function getStructVisualTopZ(id, level) {
     switch (id) {
+      case 'command_hq': return level >= 3 ? 46 : level === 2 ? 34 : 30;
       case 'barricade_wall': return level >= 3 ? 27.7 : level === 2 ? 14 : 10.9;
       case 'tactical_gate': return [16.5, 26.5, 28.0][Math.min(3, Math.max(1, level || 1)) - 1];
       case 'hesco_wall': return level >= 3 ? 19 : 14;
@@ -2452,6 +2519,31 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function getEffectiveStructTopZ(st) {
+    if (!st) return 0;
+    const lv = st.level || 1;
+    let topZ = getStructVisualTopZ(st.id, lv);
+    if (st.mounted) {
+      const mDefTop = getStructVisualTopZ(st.mounted.id, st.mounted.level || 1);
+      const deckZ = lv >= 3 ? 25.4 : 15.2;
+      topZ = Math.max(topZ, deckZ + Math.min(28, mDefTop));
+    }
+    return topZ;
+  }
+
+  function doesStructOccludeTarget(st, sx, sy, tx, ty) {
+    if (!st) return false;
+    const dSum = (sx + sy) - (tx + ty);
+    if (dSum < 1) return false;
+    const dCol = Math.abs((sx - sy) - (tx - ty));
+    if (dCol > 1) return false;
+    const topZ = getEffectiveStructTopZ(st);
+    // Flat ground traps (< 10px, e.g. razor_pad 5.4..6.45) never hide behind tiles
+    if (topZ < 10) return false;
+    const minTopZ = dSum <= 2 ? 10 : (dSum - 1) * 15 - 3;
+    return topZ >= minTopZ;
+  }
+
   // ===================== #6 SILHOUETTE PRIMITIVES (Top-Left 100% / 82% / 66% Shading) =====================
   function drawPolyFace(ctx, pts, hex, shadeFactor, isEmissive, withEdge, zScale) {
     const Iso = ZS.Iso;
@@ -2476,7 +2568,13 @@ window.ZS = window.ZS || {};
       for (let i = 0; i < pts.length; i++) {
         snap[i] = { x: pts[i].x, y: pts[i].y };
       }
-      R.emissiveList.push({ kind: 'poly', pts: snap, fill, hex });
+      R.emissiveList.push({
+        kind: 'poly',
+        pts: snap,
+        fill,
+        hex,
+        alpha: R.currentEntityAlpha != null ? R.currentEntityAlpha : 1.0
+      });
     }
   }
 
@@ -2986,7 +3084,14 @@ window.ZS = window.ZS || {};
     ctx.fillStyle = fill;
     ctx.fill();
     if (isEmissive && R.emissiveList && !window.ZS_SILHOUETTE_MODE) {
-      R.emissiveList.push({ kind: 'dot', p: { x: p.x, y: p.y }, r: rPx, hex, fill });
+      R.emissiveList.push({
+        kind: 'dot',
+        p: { x: p.x, y: p.y },
+        r: rPx,
+        hex,
+        fill,
+        alpha: R.currentEntityAlpha != null ? R.currentEntityAlpha : 1.0
+      });
     }
   }
 
@@ -3668,7 +3773,7 @@ window.ZS = window.ZS || {};
     const rx = 38 * fp * zScale;
     const ry = 19.5 * fp * zScale;
     ctx.save();
-    ctx.globalAlpha = Math.min(1, 0.92 * inten);
+    ctx.globalAlpha *= Math.min(1, 0.92 * inten);
     ctx.drawImage(glowStamp, center.x - rx, center.y - ry, rx * 2, ry * 2);
     ctx.restore();
 
@@ -3738,6 +3843,7 @@ window.ZS = window.ZS || {};
 
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
+      if ((e.alpha != null ? e.alpha : 1) < 0.55) continue;
       if (e.kind === 'stamp') {
         if (e.x + e.w < -cullPad || e.x > vp.w + cullPad || e.y + e.h < -cullPad || e.y > vp.h + cullPad) {
           continue;
@@ -3788,9 +3894,13 @@ window.ZS = window.ZS || {};
     }
 
     ctx.save();
-    ctx.globalAlpha = Math.min(1, 0.35 + nightAlpha * 0.65);
+    const baseEmissiveAlpha = Math.min(1, 0.35 + nightAlpha * 0.65);
+    ctx.globalAlpha = baseEmissiveAlpha;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
+      const ea = e.alpha != null ? e.alpha : 1;
+      if (ea <= 0.01) continue;
+      ctx.globalAlpha = baseEmissiveAlpha * ea;
       if (e.kind === 'stamp') {
         if (e.x + e.w < -cullPad || e.x > vp.w + cullPad || e.y + e.h < -cullPad || e.y > vp.h + cullPad) {
           continue;
