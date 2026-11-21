@@ -453,7 +453,7 @@ window.ZS = window.ZS || {};
             uiState.hoverB1DoorEdge = ZS.Game.findNearestB1DoorEdge ? ZS.Game.findNearestB1DoorEdge(clientX, clientY, gx, gy) : null;
           } else {
             ZS.Audio.playError();
-            U.showWaveBanner('방폭문 설치 불가', '구역과 복도 또는 서로 다른 구역 사이의 콘크리트 격벽을 클릭하세요.', 'warn');
+            U.showWaveBanner('방폭문 설치 불가', '전술 복도와 방 구역 사이의 콘크리트 격벽을 클릭하세요.', 'warn');
           }
         }
         return;

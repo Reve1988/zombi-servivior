@@ -289,7 +289,7 @@ ZS.DATA = (function () {
   },
   B1_ROOM_ORDER: ['quarters', 'research_lab', 'supply_depot', 'lounge', 'power_vault'],
   B1_CATEGORIES: [
-    { id: 'b1_ops',     iconId: 'b1-ops',     label: '굴착·구역·방폭문',   desc: '암반 굴착, 5대 방 역할 구역 지정·해제 및 3D 방폭문 연결' },
+    { id: 'b1_ops',     iconId: 'b1-ops',     label: '굴착·구역·방폭문',   desc: '암반 굴착, 전술 복도·5대 방 구역 지정·해제 및 3D 방폭문 연결' },
     { id: 'b1_living',  iconId: 'b1-living',  label: '생활관·휴게실',       desc: '생활관(4종) & 휴게실(5종) 지하 설비 배치' },
     { id: 'b1_systems', iconId: 'b1-systems', label: '연구·보급·축전·공용', desc: '연구실(4종)·보급 창고(2종)·지하 축전실(3종)·공용 조명(1종)' }
   ],
@@ -312,7 +312,18 @@ ZS.DATA = (function () {
       tag: '격벽 연결',
       costLabel: '무료',
       accent: '#F59E0B',
-      desc: '콘크리트 격벽(구역↔복도 또는 구역↔구역)을 클릭해 3D 방폭문을 설치·제거합니다. 승강기와 연결해야 활성화됩니다.'
+      desc: '전술 복도와 방 구역 사이의 콘크리트 격벽을 클릭해 3D 방폭문을 설치·제거합니다. 승강기와 복도·방폭문으로 연결된 방만 활성화됩니다.'
+    },
+    {
+      id: 'b1_zone_corridor',
+      mode: 'b1_zone',
+      role: 'corridor',
+      name: '전술 복도',
+      iconId: 'b1-corridor',
+      tag: '드래그 시공',
+      costLabel: '무료 통로',
+      accent: '#94A3B8',
+      desc: '드래그로 굴착된 흙바닥에 강철 그레이트 전술 복도를 시공합니다. 승강기와 복도·방폭문으로 연결된 방만 활성화됩니다.'
     },
     {
       id: 'b1_zone_quarters',
@@ -377,7 +388,7 @@ ZS.DATA = (function () {
       tag: '드래그 해제',
       costLabel: '초기화',
       accent: '#94A3B8',
-      desc: '지정된 구역 타일을 드래그 또는 클릭해 일반 흙바닥 복도로 되돌립니다. (가젯 미배치 시 가능)'
+      desc: '지정된 방 구역이나 전술 복도 타일을 드래그 또는 클릭해 일반 흙바닥으로 되돌립니다. (설비 미배치 시 가능)'
     }
   ],
   PLATEAU_ELEV_Z: 10,

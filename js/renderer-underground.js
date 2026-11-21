@@ -21,6 +21,13 @@ window.ZS = window.ZS || {};
     return (ZS.DATA && ZS.DATA.B1_ROOMS && ZS.DATA.B1_ROOMS[role]) || null;
   }
 
+  function getB1SpaceKey(cell) {
+    if (!cell || !cell.excavated || cell.bedrock || cell.elevator) return 'solid';
+    if (cell.permanentCorridor || cell.corridor) return 'corridor';
+    if (cell.roomId != null) return `room:${cell.roomId}`;
+    return 'dirt';
+  }
+
   function drawB1SubterraneanBackdrop(ctx, w, h, isSil) {
     if (isSil) {
       ctx.fillStyle = '#0F131A';
@@ -102,10 +109,11 @@ window.ZS = window.ZS || {};
       return;
     }
 
-    if (cell.permanentCorridor) {
-      // Steel-grate permanent elevator hall corridor (0px cyan!)
-      const frameCol = isSil ? '#CDD5DE' : '#3C4654';
-      const innerCol = isSil ? '#B6C0CA' : '#2A323D';
+    if (cell.permanentCorridor || cell.corridor) {
+      // Steel-grate corridor (connected vs unlinked caution dark-slate; 0px cyan!)
+      const isCorrConn = cell.permanentCorridor || !!(ug.corridorConnected && ug.corridorConnected[y * B1_SIZE + x]);
+      const frameCol = isSil ? (isCorrConn ? '#CDD5DE' : '#B8C0C8') : (isCorrConn ? '#3C4654' : '#313944');
+      const innerCol = isSil ? (isCorrConn ? '#B6C0CA' : '#A5AEB8') : (isCorrConn ? '#2A323D' : '#222831');
       Iso.drawTilePoly(ctx, x, y, 0, frameCol, '#1D242E', 0.8);
       if (!isSil) {
         const i0 = Iso.gridToScreen(x + 0.09, y + 0.09, 0.25);
@@ -113,7 +121,7 @@ window.ZS = window.ZS || {};
         const i2 = Iso.gridToScreen(x + 0.91, y + 0.91, 0.25);
         const i3 = Iso.gridToScreen(x + 0.09, y + 0.91, 0.25);
         R.drawPolyFace(ctx, [i0, i1, i2, i3], innerCol, 1.0, false, false, zScale);
-        ctx.strokeStyle = 'rgba(130, 146, 165, 0.34)';
+        ctx.strokeStyle = isCorrConn ? 'rgba(130, 146, 165, 0.34)' : 'rgba(110, 122, 138, 0.26)';
         ctx.lineWidth = Math.max(0.75, 0.9 * zScale);
         ctx.beginPath();
         for (let k = 1; k <= 3; k++) {
@@ -128,20 +136,47 @@ window.ZS = window.ZS || {};
           ctx.lineTo(d.x, d.y);
         }
         ctx.stroke();
-        // Subtle warm amber border highlight facing elevator core
-        if (Math.abs(x - 11) + Math.abs(y - 11) === 1) {
-          ctx.strokeStyle = 'rgba(229, 152, 56, 0.45)';
-          ctx.lineWidth = Math.max(1.0, 1.3 * zScale);
-          const r0 = Iso.gridToScreen(x + 0.14, y + 0.14, 0.35);
-          const r1 = Iso.gridToScreen(x + 0.86, y + 0.14, 0.35);
-          const r2 = Iso.gridToScreen(x + 0.86, y + 0.86, 0.35);
-          const r3 = Iso.gridToScreen(x + 0.14, y + 0.86, 0.35);
+
+        if (cell.permanentCorridor) {
+          // Subtle warm amber border highlight facing elevator core
+          if (Math.abs(x - 11) + Math.abs(y - 11) === 1) {
+            ctx.strokeStyle = 'rgba(229, 152, 56, 0.45)';
+            ctx.lineWidth = Math.max(1.0, 1.3 * zScale);
+            const r0 = Iso.gridToScreen(x + 0.14, y + 0.14, 0.35);
+            const r1 = Iso.gridToScreen(x + 0.86, y + 0.14, 0.35);
+            const r2 = Iso.gridToScreen(x + 0.86, y + 0.86, 0.35);
+            const r3 = Iso.gridToScreen(x + 0.14, y + 0.86, 0.35);
+            ctx.beginPath();
+            ctx.moveTo(r0.x, r0.y);
+            ctx.lineTo(r1.x, r1.y);
+            ctx.lineTo(r2.x, r2.y);
+            ctx.lineTo(r3.x, r3.y);
+            ctx.closePath();
+            ctx.stroke();
+          }
+        } else {
+          // Player tactical corridor: warm amber guide edges along non-corridor walls (or crimson caution if unlinked)
+          ctx.strokeStyle = isCorrConn ? 'rgba(229, 152, 56, 0.42)' : 'rgba(255, 77, 109, 0.42)';
+          ctx.lineWidth = Math.max(1.3, 1.7 * zScale);
+          const corrEdges = [
+            [0, -1, 0.14, 0.14, 0.86, 0.14],
+            [1, 0, 0.86, 0.14, 0.86, 0.86],
+            [0, 1, 0.86, 0.86, 0.14, 0.86],
+            [-1, 0, 0.14, 0.86, 0.14, 0.14]
+          ];
           ctx.beginPath();
-          ctx.moveTo(r0.x, r0.y);
-          ctx.lineTo(r1.x, r1.y);
-          ctx.lineTo(r2.x, r2.y);
-          ctx.lineTo(r3.x, r3.y);
-          ctx.closePath();
+          for (let i = 0; i < corrEdges.length; i++) {
+            const [dx, dy, xA, yA, xB, yB] = corrEdges[i];
+            const nx = x + dx;
+            const ny = y + dy;
+            const nc = nx >= 0 && ny >= 0 && nx < B1_SIZE && ny < B1_SIZE ? ug.grid[ny][nx] : null;
+            if (!nc || !nc.excavated || (!nc.permanentCorridor && !nc.corridor && !nc.elevator)) {
+              const pA = Iso.gridToScreen(x + xA, y + yA, 0.34);
+              const pB = Iso.gridToScreen(x + xB, y + yB, 0.34);
+              ctx.moveTo(pA.x, pA.y);
+              ctx.lineTo(pB.x, pB.y);
+            }
+          }
           ctx.stroke();
         }
       }
@@ -296,6 +331,7 @@ window.ZS = window.ZS || {};
   function drawB1RockFaceWall(ctx, faceSide, tx, ty, hRock, neighborCell, ug, isSil, zScale) {
     const Iso = ZS.Iso;
     const isZoned = !!(neighborCell && neighborCell.roomId != null);
+    const isCorr = !!(neighborCell && (neighborCell.permanentCorridor || neighborCell.corridor));
     const room = isZoned ? ug.rooms[neighborCell.roomId] : null;
     const rDef = room ? getRoomDef(room.role) : null;
     const shade = faceSide === 'south' ? 0.82 : 0.66;
@@ -313,9 +349,9 @@ window.ZS = window.ZS || {};
       ? Iso.gridToScreen(tx, ty + 1, hRock)
       : Iso.gridToScreen(tx + 1, ty, hRock);
 
-    if (isZoned) {
+    if (isZoned || isCorr) {
       // Concrete inner wall cladding panel (top-left 82% / 66% shading)
-      const concreteCol = isSil ? '#C8D0D8' : '#7C8896';
+      const concreteCol = isSil ? '#C8D0D8' : isCorr ? '#667382' : '#7C8896';
       R.drawPolyFace(ctx, [p0, p1, p2, p3], concreteCol, shade, false, false, zScale);
       if (!isSil) {
         // Dark plinth base & accent stripe
@@ -328,10 +364,15 @@ window.ZS = window.ZS || {};
         const b3 = faceSide === 'south'
           ? Iso.gridToScreen(tx, ty + 1, zBandTop)
           : Iso.gridToScreen(tx + 1, ty, zBandTop);
-        R.drawPolyFace(ctx, [b0, b1, b2, b3], '#4B5562', shade, false, false, zScale);
+        R.drawPolyFace(ctx, [b0, b1, b2, b3], isCorr ? '#3E4752' : '#4B5562', shade, false, false, zScale);
 
-        // Coping rim & subtle panel seam
-        const accent = (rDef && rDef.accent) || '#E8A848';
+        const b1W = (ug.grid && ug.grid.length) || 23;
+        const nX = faceSide === 'east' ? tx + 1 : tx;
+        const nY = faceSide === 'south' ? ty + 1 : ty;
+        const isCorrConn = isCorr && (neighborCell.permanentCorridor || !!(ug.corridorConnected && ug.corridorConnected[nY * b1W + nX]));
+        const accent = isCorr
+          ? (isCorrConn ? '#D9822B' : '#64748B')
+          : ((rDef && rDef.accent) || '#E8A848');
         const lA = faceSide === 'south'
           ? Iso.gridToScreen(tx + 0.04, ty + 1, zBandTop + 0.4)
           : Iso.gridToScreen(tx + 1, ty + 0.04, zBandTop + 0.4);
@@ -447,14 +488,22 @@ window.ZS = window.ZS || {};
         drawB1RockFaceWall(ctx, 'east', tx, ty, hRock, eastCell, ug, isSil, zScale);
       }
 
-      // If North or West neighbor is a zoned concrete room, draw crisp concrete wall-liner top coping on rock edge
+      // If North or West neighbor is a concrete room or corridor, draw crisp coping on rock edge
       const northCell = ty - 1 >= 0 ? ug.grid[ty - 1][tx] : null;
-      if (northCell && northCell.excavated && northCell.roomId != null) {
-        Iso.drawVoxelBox(ctx, tx, ty, hRock, 1.0, 0.11, 1.8, { base: '#8B96A4' });
+      if (northCell && northCell.excavated) {
+        if (northCell.roomId != null) {
+          Iso.drawVoxelBox(ctx, tx, ty, hRock, 1.0, 0.11, 1.8, { base: '#8B96A4' });
+        } else if (northCell.permanentCorridor || northCell.corridor) {
+          Iso.drawVoxelBox(ctx, tx, ty, hRock, 1.0, 0.11, 1.8, { base: '#7A8694' });
+        }
       }
       const westCell = tx - 1 >= 0 ? ug.grid[ty][tx - 1] : null;
-      if (westCell && westCell.excavated && westCell.roomId != null) {
-        Iso.drawVoxelBox(ctx, tx, ty, hRock, 0.11, 1.0, 1.8, { base: '#8B96A4' });
+      if (westCell && westCell.excavated) {
+        if (westCell.roomId != null) {
+          Iso.drawVoxelBox(ctx, tx, ty, hRock, 0.11, 1.0, 1.8, { base: '#8B96A4' });
+        } else if (westCell.permanentCorridor || westCell.corridor) {
+          Iso.drawVoxelBox(ctx, tx, ty, hRock, 0.11, 1.0, 1.8, { base: '#7A8694' });
+        }
       }
     }
   }
@@ -1052,11 +1101,11 @@ window.ZS = window.ZS || {};
         P.box(0.45, 0.45, 1.6, 0.10, 0.10, 14.4, { base: '#7B8A98', stroke: darkStroke });
         P.box(0.32, 0.34, 15.8, 0.36, 0.32, 3.6, { base: '#627280', stroke: darkStroke });
         if (!P.isSil) {
-          P.box(0.36, 0.64, 16.4, 0.28, 0.06, 2.4, { base: '#FFB347', stroke: darkStroke });
-          P.box(0.40, 0.66, 16.8, 0.20, 0.04, 1.6, { base: '#FFE6A8', stroke: darkStroke });
-          if (!P.isThumb) {
+          P.box(0.36, 0.64, 16.4, 0.28, 0.06, 2.4, { base: P.active ? '#FFB347' : '#58442C', stroke: darkStroke });
+          P.box(0.40, 0.66, 16.8, 0.20, 0.04, 1.6, { base: P.active ? '#FFE6A8' : '#735A3B', stroke: darkStroke });
+          if (P.active && !P.isThumb) {
             P.glowEllipse(0.5, 0.5, 0.1, 46, 24, '#FFB347', 0.22);
-          } else {
+          } else if (P.isThumb) {
             P.glowEllipse(0.5, 0.68, 16.5, 14, 10, '#FFB347', 0.34);
           }
         }
@@ -1189,7 +1238,7 @@ window.ZS = window.ZS || {};
 
       // Explicit isolated warning tag if disconnected (0 OS emojis — pure vector triangle!)
       if (!room.connected) {
-        const warnText = '출입문 미연결 — 대기';
+        const warnText = '복도·문 미연결 — 대기';
         const warnW = ctx.measureText(warnText).width + 26;
         const warnH = 21;
         const wx = sc.x - warnW * 0.5;
@@ -1302,9 +1351,10 @@ window.ZS = window.ZS || {};
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
           const c = ug.grid[y][x];
+          const hasG = !!(ug.b1StructGrid && ug.b1StructGrid[y] && ug.b1StructGrid[y][x]);
           const ok = mode === 'b1_zone'
-            ? !!(c && c.excavated && !c.permanentCorridor && !c.elevator && !c.bedrock && !roomLocked)
-            : !!(c && c.excavated && c.roomId != null && !roomLocked);
+            ? !!(c && c.excavated && !c.permanentCorridor && !c.elevator && !c.bedrock && !hasG && !roomLocked)
+            : !!(c && c.excavated && (c.roomId != null || (c.corridor && !c.permanentCorridor)) && !hasG && !roomLocked);
           const zOff = c && !c.excavated ? ((ZS.DATA.B1_ROCK_Z || 11) + 1.6) : 1.5;
           Iso.drawTilePoly(
             ctx,
@@ -1394,9 +1444,10 @@ window.ZS = window.ZS || {};
             ctx.restore();
           }
         } else if (mode === 'b1_zone' || mode === 'b1_unzone') {
+          const hasG = !!(ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx]);
           const ok = mode === 'b1_zone'
-            ? !!(cell && cell.excavated && !cell.permanentCorridor && !cell.elevator && !cell.bedrock)
-            : !!(cell && cell.excavated && cell.roomId != null);
+            ? !!(cell && cell.excavated && !cell.permanentCorridor && !cell.elevator && !cell.bedrock && !hasG)
+            : !!(cell && cell.excavated && (cell.roomId != null || (cell.corridor && !cell.permanentCorridor)) && !hasG);
           Iso.drawTilePoly(
             ctx,
             tx,
@@ -1578,16 +1629,17 @@ window.ZS = window.ZS || {};
         }
 
         // Draw North & West Concrete Partition Walls (or Blast Doors) before tile interior
+        const cellSpace = getB1SpaceKey(cell);
         if (!cell.elevator && ty > 1) {
           const north = ug.grid[ty - 1][tx];
-          if (north && north.excavated && !north.elevator && north.roomId !== cell.roomId) {
+          if (north && north.excavated && !north.elevator && getB1SpaceKey(north) !== cellSpace) {
             const key = `${tx},${ty - 1}|${tx},${ty}`;
             drawB1PartitionWallOrDoor(ctx, 'x', tx, ty, !!ug.doors[key], isSil, zScale);
           }
         }
         if (!cell.elevator && tx > 1) {
           const west = ug.grid[ty][tx - 1];
-          if (west && west.excavated && !west.elevator && west.roomId !== cell.roomId) {
+          if (west && west.excavated && !west.elevator && getB1SpaceKey(west) !== cellSpace) {
             const key = `${tx - 1},${ty}|${tx},${ty}`;
             drawB1PartitionWallOrDoor(ctx, 'y', tx, ty, !!ug.doors[key], isSil, zScale);
           }
@@ -1657,6 +1709,12 @@ window.ZS = window.ZS || {};
       } else if (toolId === 'b1_unzone') {
         Iso.drawTilePoly(tctx, 0, 0, 0, '#5D4B3B', '#433529', 0.8);
         Iso.drawVoxelBox(tctx, 0.18, 0.18, 0.2, 0.64, 0.64, 1.2, { base: '#7A6857' });
+      } else if (toolId === 'b1_zone_corridor') {
+        Iso.drawTilePoly(tctx, 0, 0, 0, '#3C4654', '#1D242E', 0.8);
+        Iso.drawVoxelBox(tctx, 0.12, 0.12, 0.1, 0.76, 0.76, 0.35, { base: '#2A323D', stroke: '#3E4752' });
+        Iso.drawVoxelBox(tctx, 0.04, 0.04, 0.2, 0.92, 0.12, 8.2, { base: '#667382' });
+        Iso.drawVoxelBox(tctx, 0.04, 0.84, 0.2, 0.92, 0.12, 8.2, { base: '#667382' });
+        Iso.drawVoxelBox(tctx, 0.22, 0.44, 0.45, 0.56, 0.12, 0.5, { base: '#E59838' });
       } else {
         const role = toolId.replace(/^b1_zone_/, '');
         const rDef = getRoomDef(role);
