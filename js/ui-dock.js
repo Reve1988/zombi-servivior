@@ -328,11 +328,21 @@ window.ZS = window.ZS || {};
     if (!tCell) return null;
     switch (tCell.kind) {
       case 'rock':
+        if (tCell.isPeak) {
+          return {
+            title: '산맥 주봉 (험준한 봉우리)',
+            badge: '이동·건설·직사 탄환 차단 · 로켓·EMP·폭격 통과',
+            desc: '높게 솟은 산맥 봉우리입니다. 직사 화기와 산성 침을 가로막지만, 다연장 로켓 포대·EMP 코일·전술 폭격은 산 너머로 타격합니다.',
+            tipText: '산맥 주봉 — 이동·건설·직사 탄환 차단 (로켓·EMP 통과)',
+            tipIcon: 'state-lock',
+            tipIconCls: 'icon-muted'
+          };
+        }
         return {
-          title: '자연 암석 (바위)',
+          title: '기슭 암석 (바위)',
           badge: '설치·통행 불가 · 탄환 통과',
-          desc: '시설 건설이나 이동이 불가능한 천연 바위 장애물입니다. 아군 탄환과 포격은 바위 위로 통과합니다.',
-          tipText: '자연 암석 — 설치·통행 불가 (탄환 통과)',
+          desc: '시설 건설이나 이동이 불가능한 천연 바위 장애물입니다. 아군 직사 탄환과 포격은 바위 위로 통과합니다.',
+          tipText: '기슭 암석 — 설치·통행 불가 (탄환 통과)',
           tipIcon: 'state-lock',
           tipIconCls: 'icon-muted'
         };
@@ -400,7 +410,7 @@ window.ZS = window.ZS || {};
     }
 
     const hoveredTerrain = ZS.Game.getTerrainAt ? ZS.Game.getTerrainAt(tx, ty) : (st.terrainGrid && st.terrainGrid[ty] && st.terrainGrid[ty][tx]);
-    const tKey = hoveredTerrain ? `${hoveredTerrain.kind}:${hoveredTerrain.tier || 0}` : '';
+    const tKey = hoveredTerrain ? `${hoveredTerrain.kind}:${hoveredTerrain.tier || 0}:${hoveredTerrain.isPeak ? 1 : 0}` : '';
     const moveSrcKey = uiState.movingSource ? `${uiState.movingSource.tx},${uiState.movingSource.ty}` : '';
     const vKey = uiState.selectedItemId
       ? `${st.freeVouchers[uiState.selectedItemId] || 0},${st.freeVouchers.barricade_wall || 0}`
@@ -1055,6 +1065,8 @@ window.ZS = window.ZS || {};
         : `${ozIcon('res-agent', 13)}요원 ${curPopUse}명`;
       const auraInfo = formatAuraStacksText(eff.auraStacks);
       const tBonusHint = eff.onPlateau ? ' · ★고지대(사거리+1.0, 치명+8%p)' : '';
+      const rangeLabel = eff.minRange > 0 ? `${eff.minRange.toFixed(1)}~${eff.range.toFixed(1)}` : eff.range.toFixed(1);
+      const splashTxt = eff.splashRadius > 0 ? ` · 폭발 ${eff.splashRadius.toFixed(2)}` : '';
       let nextPreview = '';
       if (lv < 3) {
         const nextEff = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
@@ -1065,7 +1077,7 @@ window.ZS = window.ZS || {};
         nextPreview = ` · ★${escapeHtml(eff.perkLabel)}`;
       }
       setDetailHtml(
-        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${eff.range.toFixed(1)} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${auraInfo}${tBonusHint}${nextPreview}`,
+        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${rangeLabel}${splashTxt} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${auraInfo}${tBonusHint}${nextPreview}`,
         actionHtml
       );
     } else if (ZS.Game.isUpgradeableDef(def)) {

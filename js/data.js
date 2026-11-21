@@ -157,13 +157,20 @@ ZS.DATA = (function () {
     rockBase: '#5B646F',
     rockDark: '#3D444D',
     rockMoss: '#5D7455',
+    rockPeakBase: '#4B525B',
+    rockPeakDark: '#2F353D',
+    rockPeakCap: '#6E7680',
     plateauCliffSlate: '#424A56',
     plateauCliffOchre: '#8E6A42',
     plateauCliffSoil: '#473628',
     plateauTopA: '#5D775A',
     plateauTopB: '#577054',
+    plateauRimSoft: 'rgba(176, 196, 152, 0.28)',
     rampStone: '#7E786C',
-    rampCurb: '#535B65'
+    rampCurb: '#535B65',
+    rampEarth: '#6B665D',
+    rampEarthDark: '#534E46',
+    rampFlagstone: '#7E786E'
   };
 
   const WALL_TIERS = {
@@ -235,7 +242,8 @@ ZS.DATA = (function () {
   HQ_POS: { x: 13, y: 13 },
   PLATEAU_ELEV_Z: 10,
   RAMP_ELEV_Z: 5,
-  ROCK_TOP_Z: 17,
+  ROCK_TOP_Z: 16,
+  ROCK_PEAK_TOP_Z: 33,
   WIND_ZONE: {
     outerMult: 1.40,
     coreMult: 1.70,
@@ -256,10 +264,17 @@ ZS.DATA = (function () {
   TERRAIN_TYPES: {
     rock: {
       id: 'rock',
-      name: '자연 암석 (바위)',
+      name: '기슭 암석 (바위)',
       elev: 0,
-      topZ: 17,
-      desc: '이동 및 건설 불가. 투사체는 상공으로 통과하며 인접 성벽·게이트와 자동 연결됩니다.'
+      topZ: 16,
+      desc: '이동 및 건설 불가. 직사·곡사 탄환은 상공으로 통과하며 인접 성벽·게이트와 자동 연결됩니다.'
+    },
+    rock_peak: {
+      id: 'rock_peak',
+      name: '산맥 주봉',
+      elev: 0,
+      topZ: 33,
+      desc: '높게 솟은 산맥 봉우리. 이동·건설 및 직사 탄환·산성 침을 가로막지만, 다연장 로켓 포대·EMP·폭격은 산 너머로 통과합니다.'
     },
     plateau: {
       id: 'plateau',
@@ -421,7 +436,7 @@ ZS.DATA = (function () {
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
     vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
-    missile_pod: '고폭 확산탄 (폭발 반경 1.75 확대)',
+    missile_pod: '고폭 확산탄 (폭발 반경 1.95 확대)',
     emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
 
@@ -616,7 +631,7 @@ ZS.DATA = (function () {
     },
     missile_pod: {
       id: 'missile_pod',
-      name: '다연장 유탄 포드',
+      name: '다연장 로켓 포대',
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
@@ -624,14 +639,15 @@ ZS.DATA = (function () {
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
       powerIdle: 0.85,
-      powerShot: 1.9,
+      powerShot: 2.4,
       maxHp: 260,
-      range: 5.5,
-      damage: 48,
-      splashRadius: 1.35,
-      fireRate: 0.78,
-      projType: 'missile',
-      desc: '[전력 소모] 몰려오는 좀비 무리에 고폭 마이크로 유탄을 발사해 광역 피해를 입힙니다.'
+      minRange: 2.2,
+      range: 8.0,
+      damage: 64,
+      splashRadius: 1.50,
+      fireRate: 0.58,
+      projType: 'rocket',
+      desc: '[전력 소모 · 곡사 포격] 산맥 너머 원거리 적군에 고각 로켓을 발사해 광역 폭발 피해를 줍니다. (최소 사거리 2.2 · 정전 시 정지)'
     },
     emp_coil: {
       id: 'emp_coil',

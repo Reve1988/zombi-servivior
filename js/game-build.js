@@ -138,6 +138,7 @@ window.ZS = window.ZS || {};
     let dmgScale = 1.0;
     let rateScale = 1.0;
     let rangeAdd = 0;
+    let minRange = def.minRange || 0;
     let critAdd = 0;
     let powerIdle = def.powerIdle || 0;
     let powerShot = def.powerShot || 0;
@@ -261,7 +262,7 @@ window.ZS = window.ZS || {};
           powerShot = 0.24;
           critAdd = 0.12;
         } else if (def.id === 'missile_pod') {
-          splashRadius = 1.75;
+          splashRadius = 1.95;
         } else if (def.id === 'emp_coil') {
           chainCount = 5;
           slowDuration = 2.4;
@@ -332,6 +333,7 @@ window.ZS = window.ZS || {};
       dmgScale,
       rateScale,
       rangeAdd,
+      minRange,
       critAdd,
       powerIdle,
       powerShot,
@@ -733,6 +735,7 @@ window.ZS = window.ZS || {};
       damage: baseDmg * dmgMult,
       fireRate: baseRate * rateMult,
       range: baseRange * rangeMult,
+      minRange: prof.minRange || def.minRange || 0,
       lightRadius,
       lightColor,
       auraRadius,

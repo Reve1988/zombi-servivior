@@ -100,15 +100,23 @@ window.ZS = window.ZS || {};
       const st = state.structGrid[cy] && state.structGrid[cy][cx];
       if (st) {
         if (st.id === 'command_hq') {
-          if (Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles) {
+          if (
+            Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles &&
+            (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, hqCx, hqCy))
+          ) {
             return { tx: cx, ty: cy, gx: hqCx, gy: hqCy };
           }
           break;
         }
         const def = DATA.ITEMS[st.id];
         if (!(def && def.passable)) {
-          if (Math.hypot(cx + 0.5 - z.x, cy + 0.5 - z.y) <= rangeTiles) {
-            return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          const candGx = cx + 0.5;
+          const candGy = cy + 0.5;
+          if (
+            Math.hypot(candGx - z.x, candGy - z.y) <= rangeTiles &&
+            (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, candGx, candGy))
+          ) {
+            return { tx: cx, ty: cy, gx: candGx, gy: candGy };
           }
           break;
         }
@@ -121,7 +129,11 @@ window.ZS = window.ZS || {};
       if (visited.has(key) || cx < 0 || cy < 0 || cx >= N || cy >= N) break;
       visited.add(key);
     }
-    if (Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x]) {
+    if (
+      Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles &&
+      state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x] &&
+      (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, hqCx, hqCy))
+    ) {
       return { tx: DATA.HQ_POS.x, ty: DATA.HQ_POS.y, gx: hqCx, gy: hqCy };
     }
     let best = null;
@@ -136,10 +148,12 @@ window.ZS = window.ZS || {};
         if (!st || st.id === 'command_hq') continue;
         const def = DATA.ITEMS[st.id];
         if (def && def.passable) continue;
-        const d = Math.hypot(sx + 0.5 - z.x, sy + 0.5 - z.y);
-        if (d <= rangeTiles && d < bestD) {
+        const candGx = sx + 0.5;
+        const candGy = sy + 0.5;
+        const d = Math.hypot(candGx - z.x, candGy - z.y);
+        if (d <= rangeTiles && d < bestD && (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, candGx, candGy))) {
           bestD = d;
-          best = { tx: sx, ty: sy, gx: sx + 0.5, gy: sy + 0.5 };
+          best = { tx: sx, ty: sy, gx: candGx, gy: candGy };
         }
       }
     }
@@ -1152,6 +1166,8 @@ window.ZS = window.ZS || {};
     regenerateMapSeed: G.regenerateMapSeed,
     getTerrainAt: G.getTerrainAt,
     getTerrainElevationAt: G.getTerrainElevationAt,
+    findFirstPeakOnSegment: G.findFirstPeakOnSegment,
+    hasDirectLineOfSight: G.hasDirectLineOfSight,
     getTerrainPowerStats: G.getTerrainPowerStats,
     loadGame: G.loadGame,
     clearSaveAndReset: G.clearSaveAndReset,
