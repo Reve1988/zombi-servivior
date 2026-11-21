@@ -195,6 +195,7 @@ window.ZS = window.ZS || {};
     state.blackoutActive = nightStartsDry;
     state.blackoutTriggered = nightStartsDry;
     state.reconNightFadeTimer = 2.0;
+    if (G.recomputeUndergroundEffects) G.recomputeUndergroundEffects();
     if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     if (!state.nextWaveIntel || state.nextWaveIntel.wave !== state.wave) {
@@ -451,6 +452,7 @@ window.ZS = window.ZS || {};
         const rebootTarget = Math.min(state.powerCap || REBOOT_POWER, REBOOT_POWER);
         if (state.power > 0 && state.power >= rebootTarget) {
           state.blackoutActive = false;
+          if (G.recomputeUndergroundEffects) G.recomputeUndergroundEffects();
           if (G.invalidateStatsCache) G.invalidateStatsCache();
           G.notifyCombatHud();
           G.banner('전력 복구 — 자동 방어 재가동!', `풍력 발전으로 전력 ${Math.floor(state.power)} 도달! 포탑과 투광등이 다시 가동됩니다.`, 'good');
@@ -532,6 +534,7 @@ window.ZS = window.ZS || {};
     if (state.blackoutActive) return;
     state.blackoutActive = true;
     state.power = 0;
+    if (G.recomputeUndergroundEffects) G.recomputeUndergroundEffects();
     if (G.invalidateStatsCache) G.invalidateStatsCache();
     if (!state.blackoutTriggered) {
       state.blackoutTriggered = true;

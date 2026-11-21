@@ -61,15 +61,16 @@ window.ZS = window.ZS || {};
 
     const drill1Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_1') : 0;
     const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
-    const rpBase = (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0);
+    const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
     const rpMult = 1 + (st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0);
-    const rpGainPreview = Math.round((jobs.research || 0) * rpBase * rpMult);
+    const rpGainPreview = Math.round(rawScientistRp * rpMult);
 
     const prodCount = jobs.prod || 0;
-    const prodWoodPreview = prodCount * 5 + (st.b1SupplyWood || 0);
-    const prodScrapPreview = prodCount * 4 + (st.b1SupplyScrap || 0);
+    const prodWoodPreview = Math.round(prodCount * 5 + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0));
+    const prodScrapPreview = Math.round(prodCount * 4 + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0));
+    const prodCoinPreview = Math.round(st.b1SupplyCoin || 0);
     const digPerProd = drill1Lv > 0 ? 4 : 3;
-    const digGainPreview = Math.round((2 + prodCount * digPerProd) * (1 + (st.b1DigMult || 0)));
+    const digGainPreview = Math.round((2 + prodCount * digPerProd) * (1 + (st.b1DigApBonusMult || st.b1DigMult || 0)));
     const digCapPreview = Math.max(16, (2 + prodCount * digPerProd) * 2 + (drill1Lv > 0 ? 8 : 0));
 
     const combatAtFloor = (jobs.combat || 0) <= popUsed;
@@ -99,8 +100,8 @@ window.ZS = window.ZS || {};
         count: jobs.research || 0,
         canMinus: !isGameOver && (jobs.research || 0) > 0,
         canPlus: !isGameOver && canAdjustRoleUp(st, 'research'),
-        floorCue: `<span class="job-floor-cue"><span>과학자 기본 +${hqInfo.baseRpPerScientist || 2} RP/일${drill2Lv > 0 ? ' · 파쇄기 +15%' : ''}</span></span>`,
-        previewHtml: `새벽 정산 <b class="txt-rp">+${rpGainPreview} RP/일</b> · 보스 처치 시 <b>+6 RP</b> 추가`
+        floorCue: `<span class="job-floor-cue"><span>과학자 기본 +${hqInfo.baseRpPerScientist || 2} RP/일${(st.b1LabFlatRp || 0) > 0 ? ` · 데스크 +${Math.round(st.b1LabFlatRp)}` : ''}${(st.b1LabFlatPerWaveRp || 0) > 0 ? ` · 고정 +${st.b1LabFlatPerWaveRp}` : ''}${drill2Lv > 0 || (st.b1LabMult || 0) > 0 ? ` · 증폭 +${Math.round(((st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0)) * 100)}%` : ''}</span></span>`,
+        previewHtml: `새벽 정산 <b class="txt-rp">+${rpGainPreview} RP/일</b> · 보스 처치 시 <b>+${Math.round(6 * (1 + (st.b1BossRpMult || 0)))} RP</b> 추가`
       },
       {
         role: 'prod',
@@ -114,7 +115,7 @@ window.ZS = window.ZS || {};
         floorCue: st.undergroundUnlocked
           ? `<span class="job-floor-cue ap-cue"><span>보유 굴착력 ${st.digAp || 0}/${st.digApCap || digCapPreview} AP</span></span>`
           : `<span class="job-floor-cue"><span>본부 Lv.2 증축 시 지하 굴착력(AP) 개방</span></span>`,
-        previewHtml: `새벽 생산 <b class="txt-wood">+${prodWoodPreview} 목재</b> · <b class="txt-scrap">+${prodScrapPreview} 고철</b>${st.undergroundUnlocked ? ` · <b class="txt-ap">+${digGainPreview} AP</b> (상한 ${digCapPreview})` : ''}`
+        previewHtml: `새벽 생산 <b class="txt-wood">+${prodWoodPreview} 목재</b> · <b class="txt-scrap">+${prodScrapPreview} 고철</b>${prodCoinPreview > 0 ? ` · <b class="txt-coin">+${prodCoinPreview} 코인</b>` : ''}${st.undergroundUnlocked ? ` · <b class="txt-ap">+${digGainPreview} AP</b> (상한 ${digCapPreview})` : ''}`
       }
     ];
 

@@ -52,6 +52,28 @@ window.ZS = window.ZS || {};
     digApCap: 24,
     activeLayer: 'surface',
     underground: null,
+    b1PopCap: 0,
+    b1LabFlatRp: 0,
+    b1LabFlatPerWaveRp: 0,
+    b1LabMult: 0,
+    b1BossRpMult: 0,
+    b1HoloCritAdd: 0,
+    b1SupplyWood: 0,
+    b1SupplyScrap: 0,
+    b1SupplyProdWood: 0,
+    b1SupplyProdScrap: 0,
+    b1SupplyCoin: 0,
+    b1TraderDisc: 0,
+    b1MannedFireRateMult: 0,
+    b1MannedXpMult: 0,
+    b1DigApBonusMult: 0,
+    b1DigMult: 0,
+    b1PowerCap: 0,
+    b1DayCharge: 0,
+    b1NightGen: 0,
+    b1PowerDrainSave: 0,
+    b1NightIdleDrain: 0,
+    b1CozySynergy: 0,
 
     cozyScore: 0,
     cozyFloorRaw: 0,
@@ -1326,6 +1348,28 @@ window.ZS = window.ZS || {};
     state.digApCap = 24;
     state.activeLayer = 'surface';
     state.underground = G.createDefaultUnderground ? G.createDefaultUnderground() : null;
+    state.b1PopCap = 0;
+    state.b1LabFlatRp = 0;
+    state.b1LabFlatPerWaveRp = 0;
+    state.b1LabMult = 0;
+    state.b1BossRpMult = 0;
+    state.b1HoloCritAdd = 0;
+    state.b1SupplyWood = 0;
+    state.b1SupplyScrap = 0;
+    state.b1SupplyProdWood = 0;
+    state.b1SupplyProdScrap = 0;
+    state.b1SupplyCoin = 0;
+    state.b1TraderDisc = 0;
+    state.b1MannedFireRateMult = 0;
+    state.b1MannedXpMult = 0;
+    state.b1DigApBonusMult = 0;
+    state.b1DigMult = 0;
+    state.b1PowerCap = 0;
+    state.b1DayCharge = 0;
+    state.b1NightGen = 0;
+    state.b1PowerDrainSave = 0;
+    state.b1NightIdleDrain = 0;
+    state.b1CozySynergy = 0;
     if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
     if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
     state.freeVouchers = divDef.startingVouchers ? { ...divDef.startingVouchers } : {};
@@ -1650,7 +1694,8 @@ window.ZS = window.ZS || {};
     const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
     const div = getDivisionDef();
     const divXpMult = (def.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
-    const gained = rawXp * cozyXpMult * divXpMult;
+    const b1XpMult = def.subType === 'manned' ? (1.0 + (state.b1MannedXpMult || 0)) : 1.0;
+    const gained = rawXp * cozyXpMult * divXpMult * b1XpMult;
     st.xp = +((st.xp || 0) + gained).toFixed(3);
     st.kills = (st.kills || 0) + 1;
     const onWall = isMounted !== undefined
@@ -1673,20 +1718,21 @@ window.ZS = window.ZS || {};
       const bonus = xpTable.bossGlobalBonus || 4.0;
       const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
       const div = getDivisionDef();
+      const b1MannedMult = 1.0 + (state.b1MannedXpMult || 0);
       for (let y = 0; y < N; y++) {
         for (let x = 0; x < N; x++) {
           const s = state.structGrid[y] && state.structGrid[y][x];
           if (!s || s.id === 'command_hq' || s.hp <= 0) continue;
           const d = DATA.ITEMS[s.id];
           if (isCombatVeterancyDef(d)) {
-            const dMult = (d.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+            const dMult = ((d.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0) * (d.subType === 'manned' ? b1MannedMult : 1.0);
             s.xp = +((s.xp || 0) + bonus * cozyXpMult * dMult).toFixed(3);
             applyPromoteCheck(s, d, x, y, false, true);
           }
           if (s.mounted && s.mounted.hp > 0) {
             const md = DATA.ITEMS[s.mounted.id];
             if (isCombatVeterancyDef(md)) {
-              const mdMult = (md.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+              const mdMult = ((md.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0) * (md.subType === 'manned' ? b1MannedMult : 1.0);
               s.mounted.xp = +((s.mounted.xp || 0) + bonus * cozyXpMult * mdMult).toFixed(3);
               applyPromoteCheck(s.mounted, md, x, y, true, true);
             }
@@ -2028,6 +2074,13 @@ window.ZS = window.ZS || {};
         : null;
       if (!state.jobs) migratedTechOrJobs = true;
 
+      state.activeLayer = 'surface';
+      if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
+      if (G.deserializeUnderground) {
+        G.deserializeUnderground(d.underground);
+      } else if (G.createDefaultUnderground) {
+        state.underground = G.createDefaultUnderground();
+      }
       G.recalculateBaseStats(true);
       if (!d.jobs || typeof d.jobs !== 'object') {
         const minC = Math.min(state.agents, Math.max(1, state.popUsed || 0));
@@ -2039,13 +2092,6 @@ window.ZS = window.ZS || {};
       normalizeJobs();
       state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
-      state.activeLayer = 'surface';
-      if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
-      if (G.deserializeUnderground) {
-        G.deserializeUnderground(d.underground);
-      } else if (G.createDefaultUnderground) {
-        state.underground = G.createDefaultUnderground();
-      }
       if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
       state.showReconPaths = d.showReconPaths !== undefined ? !!d.showReconPaths : true;
       state.showWindOverlay = !!d.showWindOverlay;

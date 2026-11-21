@@ -3,6 +3,7 @@ window.ZS = window.ZS || {};
 (function () {
   const uiState = {
     activeCategory: 'defense',
+    activeB1Category: 'b1_ops',
     mode: 'inspect', // 'inspect' | 'build' | 'move' | 'remove' | 'b1_dig' | 'b1_door' | 'b1_zone' | 'b1_unzone'
     selectedItemId: null,
     selectedB1ToolId: null,
@@ -828,6 +829,7 @@ window.ZS = window.ZS || {};
     uiState.selectedItemId = null;
     uiState.selectedB1ToolId = null;
     uiState.selectedB1Role = null;
+    if (!uiState.activeB1Category) uiState.activeB1Category = 'b1_ops';
     if (U.renderCategoryTabs) U.renderCategoryTabs();
     if (U.setToolMode) U.setToolMode('inspect');
   }

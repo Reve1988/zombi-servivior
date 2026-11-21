@@ -598,16 +598,528 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawB1PlaceholderGadget(ctx, gadget, tx, ty, isSil, zScale) {
+  const _b1GadgetThumbCache = new Map();
+  const _b1GlowStampCache = new Map();
+
+  function getB1GlowStamp(color) {
+    if (_b1GlowStampCache.has(color)) return _b1GlowStampCache.get(color);
+    const s = 64;
+    const c = document.createElement('canvas');
+    c.width = s;
+    c.height = s;
+    const gctx = c.getContext('2d');
+    const grad = gctx.createRadialGradient(s * 0.5, s * 0.5, 1, s * 0.5, s * 0.5, s * 0.5);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, s, s);
+    _b1GlowStampCache.set(color, c);
+    return c;
+  }
+
+  function makeB1WorldPainter(ctx, tx, ty, baseZ, isSil, timeSec, opts) {
     const Iso = ZS.Iso;
-    const baseCol = isSil ? '#B8C0C8' : '#738292';
-    Iso.drawVoxelBox(ctx, tx + 0.22, ty + 0.22, 0.5, 0.56, 0.56, 7.5, {
-      base: baseCol,
-      stroke: 'rgba(18, 24, 32, 0.45)'
-    });
-    if (!isSil) {
-      Iso.drawVoxelBox(ctx, tx + 0.30, ty + 0.30, 8.0, 0.40, 0.40, 2.2, { base: '#E59838' });
+    const powered = opts ? !opts.blackoutPaused : true;
+    const active = opts && opts.active !== undefined ? !!opts.active : true;
+    return {
+      isSil: !!isSil,
+      isThumb: false,
+      powered,
+      active,
+      timeSec: timeSec || 0,
+      pt(lx, ly, lz) {
+        return Iso.gridToScreen(tx + lx, ty + ly, baseZ + lz);
+      },
+      box(lx, ly, lz, sx, sy, h, boxOpts) {
+        const o = Object.assign({}, boxOpts);
+        if (isSil) {
+          o.base = '#B8C0C8';
+          delete o.top;
+          delete o.left;
+          delete o.right;
+          o.stroke = 'rgba(18, 24, 32, 0.35)';
+        }
+        Iso.drawVoxelBox(ctx, tx + lx, ty + ly, baseZ + lz, sx, sy, h, o);
+      },
+      poly(pts3d, fill, stroke, lineWidth) {
+        if (isSil && !fill) return;
+        ctx.save();
+        ctx.beginPath();
+        for (let i = 0; i < pts3d.length; i++) {
+          const p = Iso.gridToScreen(tx + pts3d[i][0], ty + pts3d[i][1], baseZ + pts3d[i][2]);
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        if (fill) {
+          ctx.fillStyle = isSil ? '#B8C0C8' : fill;
+          ctx.fill();
+        }
+        if (stroke) {
+          ctx.strokeStyle = isSil ? 'rgba(18, 24, 32, 0.35)' : stroke;
+          ctx.lineWidth = lineWidth || 1;
+          ctx.stroke();
+        }
+        ctx.restore();
+      },
+      glowEllipse(lx, ly, lz, rx, ry, color, alpha) {
+        if (isSil || !color || alpha <= 0) return;
+        const p = Iso.gridToScreen(tx + lx, ty + ly, baseZ + lz);
+        const stamp = getB1GlowStamp(color);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(stamp, p.x - rx, p.y - ry, rx * 2, ry * 2);
+        ctx.restore();
+      }
+    };
+  }
+
+  function makeB1MiniPainter(ctx, originX, originY, tileScale, zScale) {
+    const Iso = ZS.Iso;
+    const cos = Math.cos(Math.PI / 6);
+    const sin = Math.sin(Math.PI / 6);
+    function pt(lx, ly, lz) {
+      const ix = (lx - ly) * tileScale * cos * 0.52;
+      const iy = (lx + ly) * tileScale * sin * 0.52 - lz * zScale;
+      return { x: originX + ix, y: originY + iy };
     }
+    return {
+      isSil: false,
+      isThumb: true,
+      powered: true,
+      active: true,
+      timeSec: 0.4,
+      pt,
+      box(lx, ly, lz, sx, sy, h, opts) {
+        const base = (opts && opts.base) || '#738292';
+        const topCol = (opts && opts.top) || base;
+        const leftCol = (opts && opts.left) || (Iso.shadeHex ? Iso.shadeHex(base, 0.82) : base);
+        const rightCol = (opts && opts.right) || (Iso.shadeHex ? Iso.shadeHex(base, 0.66) : base);
+        const stroke = (opts && opts.stroke) || 'rgba(14, 20, 28, 0.7)';
+        const lw = (opts && opts.lineWidth) || 0.85;
+
+        const p000 = pt(lx, ly, lz);
+        const p100 = pt(lx + sx, ly, lz);
+        const p110 = pt(lx + sx, ly + sy, lz);
+        const p010 = pt(lx, ly + sy, lz);
+        const p001 = pt(lx, ly, lz + h);
+        const p101 = pt(lx + sx, ly, lz + h);
+        const p111 = pt(lx + sx, ly + sy, lz + h);
+        const p011 = pt(lx, ly + sy, lz + h);
+
+        function drawFace(pts, fill) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.closePath();
+          ctx.fillStyle = fill;
+          ctx.fill();
+          if (stroke) {
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = lw;
+            ctx.stroke();
+          }
+        }
+        drawFace([p010, p110, p111, p011], leftCol);
+        drawFace([p100, p110, p111, p101], rightCol);
+        drawFace([p001, p101, p111, p011], topCol);
+      },
+      poly(pts3d, fill, stroke, lineWidth) {
+        ctx.save();
+        ctx.beginPath();
+        for (let i = 0; i < pts3d.length; i++) {
+          const p = pt(pts3d[i][0], pts3d[i][1], pts3d[i][2]);
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineWidth || 0.9;
+          ctx.stroke();
+        }
+        ctx.restore();
+      },
+      glowEllipse(lx, ly, lz, rx, ry, color, alpha) {
+        if (!color || alpha <= 0) return;
+        const p = pt(lx, ly, lz);
+        const rScaled = Math.max(3, rx * 0.42);
+        ctx.save();
+        const grad = ctx.createRadialGradient(p.x, p.y, 0.5, p.x, p.y, rScaled);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rScaled, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    };
+  }
+
+  function paintB1Gadget(P, id) {
+    const darkStroke = 'rgba(14, 20, 28, 0.62)';
+    const onCyan = P.powered && P.active;
+    const cyan = onCyan ? '#5EF2FF' : '#24313E';
+    const cyanMid = onCyan ? '#36B8C8' : '#1B2530';
+    const pulse = onCyan ? (0.78 + 0.22 * Math.sin(P.timeSec * 3.8)) : 0;
+
+    if (!P.isSil && !P.isThumb) {
+      P.poly(
+        [[0.08, 0.08, 0.04], [0.92, 0.08, 0.04], [0.92, 0.92, 0.04], [0.08, 0.92, 0.04]],
+        'rgba(8, 12, 18, 0.34)',
+        null,
+        0
+      );
+    }
+
+    switch (id) {
+      case 'b1_bunk_bed': {
+        // Steel 4-post frame + lower & upper tactical bunks + ladder (0px cyan)
+        P.box(0.14, 0.14, 0, 0.07, 0.07, 18.5, { base: '#465361', stroke: darkStroke });
+        P.box(0.79, 0.14, 0, 0.07, 0.07, 18.5, { base: '#465361', stroke: darkStroke });
+        P.box(0.14, 0.78, 0, 0.07, 0.07, 18.5, { base: '#465361', stroke: darkStroke });
+        P.box(0.79, 0.78, 0, 0.07, 0.07, 18.5, { base: '#465361', stroke: darkStroke });
+        // Lower bunk + pillow + olive mattress
+        P.box(0.16, 0.17, 2.2, 0.68, 0.64, 1.4, { base: '#505E6C', stroke: darkStroke });
+        P.box(0.18, 0.20, 3.6, 0.64, 0.58, 2.2, { base: '#7B8B63', stroke: darkStroke });
+        P.box(0.20, 0.22, 5.8, 0.18, 0.42, 1.0, { base: '#DAD4C2', stroke: darkStroke });
+        P.box(0.42, 0.20, 5.8, 0.38, 0.56, 0.9, { base: '#4B6378', stroke: darkStroke });
+        // Upper bunk + rail
+        P.box(0.16, 0.17, 11.2, 0.68, 0.64, 1.4, { base: '#505E6C', stroke: darkStroke });
+        P.box(0.18, 0.20, 12.6, 0.64, 0.58, 2.2, { base: '#87976E', stroke: darkStroke });
+        P.box(0.20, 0.22, 14.8, 0.18, 0.42, 1.0, { base: '#DFD9C7', stroke: darkStroke });
+        P.box(0.42, 0.20, 14.8, 0.38, 0.56, 0.9, { base: '#556E84', stroke: darkStroke });
+        P.box(0.20, 0.78, 15.0, 0.58, 0.05, 2.2, { base: '#697988', stroke: darkStroke });
+        // Side ladder rungs
+        P.box(0.58, 0.81, 2.5, 0.05, 0.05, 13.5, { base: '#8B9AA8', stroke: darkStroke });
+        P.box(0.72, 0.81, 2.5, 0.05, 0.05, 13.5, { base: '#8B9AA8', stroke: darkStroke });
+        break;
+      }
+      case 'b1_locker': {
+        // Twin olive-slate steel lockers with louvers & brass locks (0px cyan)
+        P.box(0.16, 0.18, 0, 0.68, 0.62, 1.4, { base: '#3B4652', stroke: darkStroke });
+        P.box(0.18, 0.20, 1.4, 0.31, 0.58, 18.0, { base: '#576878', stroke: darkStroke });
+        P.box(0.51, 0.20, 1.4, 0.31, 0.58, 18.0, { base: '#5E7080', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.22, 0.75, 15.4, 0.22, 0.04, 2.0, { base: '#2D3844', stroke: darkStroke });
+          P.box(0.55, 0.75, 15.4, 0.22, 0.04, 2.0, { base: '#2D3844', stroke: darkStroke });
+          P.box(0.24, 0.76, 9.6, 0.08, 0.04, 1.6, { base: '#D8A94E', stroke: darkStroke });
+          P.box(0.57, 0.76, 9.6, 0.08, 0.04, 1.6, { base: '#D8A94E', stroke: darkStroke });
+          P.box(0.22, 0.26, 19.4, 0.28, 0.28, 2.6, { base: '#8B6D4E', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_shower_booth': {
+        // Ceramic tiled enclosure + basin + stainless showerhead (0px cyan)
+        P.box(0.14, 0.14, 0, 0.72, 0.72, 2.4, { base: '#7B8A98', stroke: darkStroke });
+        P.box(0.24, 0.24, 2.2, 0.52, 0.52, 0.5, { base: '#2F3B47', stroke: darkStroke });
+        P.box(0.14, 0.14, 2.4, 0.72, 0.12, 17.6, { base: '#A2B0BD', stroke: darkStroke });
+        P.box(0.14, 0.14, 2.4, 0.12, 0.72, 17.6, { base: '#94A3B1', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.46, 0.24, 6.0, 0.08, 0.08, 12.2, { base: '#CDD7E0', stroke: darkStroke });
+          P.box(0.40, 0.26, 17.2, 0.20, 0.18, 1.4, { base: '#DFE7EE', stroke: darkStroke });
+          P.box(0.18, 0.44, 11.2, 0.08, 0.28, 1.2, { base: '#C87654', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_air_purifier': {
+        // Cylindrical-chamfered HEPA purifier tower with cyan HEPA ring
+        P.box(0.22, 0.22, 0, 0.56, 0.56, 2.0, { base: '#485564', stroke: darkStroke });
+        P.box(0.26, 0.26, 2.0, 0.48, 0.48, 13.0, { base: '#C7D3DD', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.32, 0.72, 4.2, 0.36, 0.04, 6.2, { base: '#34414E', stroke: darkStroke });
+          P.box(0.30, 0.30, 15.0, 0.40, 0.40, 1.6, { base: cyanMid, stroke: darkStroke });
+          P.box(0.28, 0.28, 16.6, 0.44, 0.44, 2.2, { base: '#8FA0AF', stroke: darkStroke });
+          P.box(0.45, 0.73, 12.4, 0.10, 0.04, 1.4, { base: cyan, stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.5, 16.0, 12, 7, '#5EF2FF', 0.22 * pulse);
+        break;
+      }
+      case 'b1_research_desk': {
+        // Walnut/steel workstation + blueprint + warm amber brass lamp (0px cyan)
+        P.box(0.14, 0.20, 0, 0.12, 0.58, 7.6, { base: '#424E5B', stroke: darkStroke });
+        P.box(0.74, 0.20, 0, 0.12, 0.58, 7.6, { base: '#424E5B', stroke: darkStroke });
+        P.box(0.12, 0.18, 7.6, 0.76, 0.62, 1.6, { base: '#765D46', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.22, 0.34, 9.2, 0.32, 0.28, 0.5, { base: '#E4DAC0', stroke: darkStroke });
+          P.box(0.58, 0.26, 9.2, 0.16, 0.16, 4.8, { base: '#9BA8B4', stroke: darkStroke });
+          // Warm brass desk lamp
+          P.box(0.20, 0.22, 9.2, 0.12, 0.12, 5.2, { base: '#8E6B3A', stroke: darkStroke });
+          P.box(0.22, 0.24, 14.2, 0.16, 0.14, 1.8, { base: '#FFB347', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_server_rack': {
+        // Twin dark server cabinets + vertical cyan blade LED strips
+        P.box(0.14, 0.20, 0, 0.34, 0.58, 19.2, { base: '#34404C', stroke: darkStroke });
+        P.box(0.52, 0.20, 0, 0.34, 0.58, 19.2, { base: '#3B4856', stroke: darkStroke });
+        P.box(0.16, 0.22, 19.2, 0.68, 0.54, 1.8, { base: '#556574', stroke: darkStroke });
+        if (!P.isSil) {
+          for (let z = 3.2; z <= 15.2; z += 4.0) {
+            P.box(0.18, 0.76, z, 0.26, 0.04, 1.6, { base: '#212A33', stroke: darkStroke });
+            P.box(0.56, 0.76, z, 0.26, 0.04, 1.6, { base: '#212A33', stroke: darkStroke });
+            P.box(0.36, 0.78, z + 0.3, 0.07, 0.04, 1.0, { base: cyan, stroke: darkStroke });
+            P.box(0.74, 0.78, z + 0.3, 0.07, 0.04, 1.0, { base: cyan, stroke: darkStroke });
+          }
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.85, 11.0, 14, 8, '#5EF2FF', 0.24 * pulse);
+        break;
+      }
+      case 'b1_specimen_bench': {
+        // Stainless bench + glowing bio-lime/amber containment cylinder (0px cyan)
+        P.box(0.14, 0.20, 0, 0.72, 0.58, 7.8, { base: '#52606E', stroke: darkStroke });
+        P.box(0.12, 0.18, 7.8, 0.76, 0.62, 1.6, { base: '#96A4B0', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.24, 0.26, 9.4, 0.22, 0.22, 1.4, { base: '#3D4854', stroke: darkStroke });
+          P.box(0.26, 0.28, 10.8, 0.18, 0.18, 5.4, { base: '#8AD968', stroke: darkStroke });
+          P.box(0.24, 0.26, 16.2, 0.22, 0.22, 1.2, { base: '#465462', stroke: darkStroke });
+          P.box(0.54, 0.34, 9.4, 0.22, 0.26, 3.2, { base: '#D48A45', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_holo_table': {
+        // Heavy tactical octagonal-stepped base + hovering cyan holographic projection
+        P.box(0.14, 0.14, 0, 0.72, 0.72, 5.8, { base: '#3E4B59', stroke: darkStroke });
+        P.box(0.20, 0.20, 5.8, 0.60, 0.60, 2.2, { base: '#586776', stroke: darkStroke });
+        P.box(0.28, 0.28, 8.0, 0.44, 0.44, 0.9, { base: '#1E2832', stroke: darkStroke });
+        if (!P.isSil) {
+          if (onCyan) {
+            const lift = 0.8 * Math.sin(P.timeSec * 3.0);
+            P.box(0.32, 0.32, 10.6 + lift, 0.36, 0.36, 1.2, { base: cyanMid, stroke: '#9BF9FF' });
+            P.box(0.40, 0.40, 12.6 + lift, 0.20, 0.20, 4.6, { base: cyan, stroke: '#CCFDFD' });
+          } else {
+            P.box(0.34, 0.34, 8.9, 0.32, 0.32, 0.8, { base: '#24313E', stroke: darkStroke });
+          }
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.5, 13.5, 17, 10, '#5EF2FF', 0.32 * pulse);
+        break;
+      }
+      case 'b1_pallet_rack': {
+        // Industrial orange uprights + wooden crate & strapped steel scrap (0px cyan)
+        P.box(0.12, 0.16, 0, 0.08, 0.08, 19.0, { base: '#D67E33', stroke: darkStroke });
+        P.box(0.80, 0.16, 0, 0.08, 0.08, 19.0, { base: '#D67E33', stroke: darkStroke });
+        P.box(0.12, 0.76, 0, 0.08, 0.08, 19.0, { base: '#D67E33', stroke: darkStroke });
+        P.box(0.80, 0.76, 0, 0.08, 0.08, 19.0, { base: '#D67E33', stroke: darkStroke });
+        // Shelves
+        P.box(0.14, 0.18, 2.0, 0.72, 0.64, 1.2, { base: '#4D5A68', stroke: darkStroke });
+        P.box(0.14, 0.18, 10.8, 0.72, 0.64, 1.2, { base: '#4D5A68', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.20, 0.24, 3.2, 0.30, 0.50, 5.2, { base: '#A27B52', stroke: darkStroke });
+          P.box(0.52, 0.24, 3.2, 0.28, 0.48, 4.4, { base: '#75805B', stroke: darkStroke });
+          P.box(0.20, 0.24, 12.0, 0.34, 0.48, 4.8, { base: '#7B8B99', stroke: darkStroke });
+          P.box(0.56, 0.26, 12.0, 0.22, 0.42, 3.6, { base: '#B28A5B', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_logistics_term': {
+        // Steel logistics console + dual angled cyan manifest screens + freight box
+        P.box(0.14, 0.24, 0, 0.72, 0.52, 8.0, { base: '#4C5B6A', stroke: darkStroke });
+        P.box(0.16, 0.20, 8.0, 0.68, 0.34, 1.5, { base: '#697988', stroke: darkStroke });
+        P.box(0.22, 0.22, 9.5, 0.26, 0.14, 7.6, { base: '#2D3742', stroke: darkStroke });
+        P.box(0.52, 0.22, 9.5, 0.26, 0.14, 7.6, { base: '#2D3742', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.25, 0.34, 10.6, 0.20, 0.04, 5.4, { base: cyan, stroke: darkStroke });
+          P.box(0.55, 0.34, 10.6, 0.20, 0.04, 5.4, { base: cyan, stroke: darkStroke });
+          P.box(0.22, 0.54, 9.4, 0.20, 0.20, 2.0, { base: '#B68952', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.45, 13.5, 13, 8, '#5EF2FF', 0.24 * pulse);
+        break;
+      }
+      case 'vending_machine': {
+        // Smart beverage dispenser: crimson armor + warm backlit glass cans (0px cyan)
+        P.box(0.18, 0.20, 0, 0.64, 0.58, 20.5, { base: '#B24840', stroke: darkStroke });
+        P.box(0.20, 0.74, 2.0, 0.38, 0.06, 15.5, { base: '#34404C', stroke: darkStroke });
+        if (!P.isSil) {
+          // Warm backlit drink window
+          P.box(0.23, 0.77, 8.2, 0.32, 0.04, 8.4, { base: '#FFF2CE', stroke: darkStroke });
+          P.box(0.25, 0.79, 13.8, 0.09, 0.03, 1.8, { base: '#FF6B5A', stroke: darkStroke });
+          P.box(0.36, 0.79, 13.8, 0.09, 0.03, 1.8, { base: '#FFB347', stroke: darkStroke });
+          P.box(0.25, 0.79, 10.6, 0.09, 0.03, 1.8, { base: '#7AE084', stroke: darkStroke });
+          P.box(0.36, 0.79, 10.6, 0.09, 0.03, 1.8, { base: '#D88E4A', stroke: darkStroke });
+          P.box(0.62, 0.76, 10.4, 0.14, 0.04, 3.6, { base: '#FFB347', stroke: darkStroke });
+          P.box(0.24, 0.77, 2.8, 0.30, 0.05, 3.2, { base: '#1E2730', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'lounge_set': {
+        // Tactical sectional sofa + low steel coffee table + mug (0px cyan)
+        P.box(0.12, 0.14, 0, 0.76, 0.24, 9.5, { base: '#965E3C', stroke: darkStroke });
+        P.box(0.12, 0.38, 0, 0.24, 0.48, 9.5, { base: '#8B5636', stroke: darkStroke });
+        P.box(0.16, 0.18, 2.4, 0.70, 0.28, 3.2, { base: '#B87850', stroke: darkStroke });
+        P.box(0.16, 0.44, 2.4, 0.28, 0.40, 3.2, { base: '#B0724B', stroke: darkStroke });
+        // Low coffee table
+        P.box(0.46, 0.48, 0, 0.42, 0.38, 3.2, { base: '#4C5866', stroke: darkStroke });
+        P.box(0.44, 0.46, 3.2, 0.46, 0.42, 1.0, { base: '#788694', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.56, 0.56, 4.2, 0.10, 0.10, 1.8, { base: '#EDE4D0', stroke: darkStroke });
+          P.box(0.66, 0.22, 5.6, 0.16, 0.16, 2.2, { base: '#5E7262', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_coffee_bar': {
+        // Wood/steel coffee bar + copper espresso machine + warm cup stack (0px cyan)
+        P.box(0.12, 0.20, 0, 0.76, 0.58, 8.6, { base: '#72523B', stroke: darkStroke });
+        P.box(0.10, 0.18, 8.6, 0.80, 0.62, 1.5, { base: '#8A98A6', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.20, 0.26, 10.1, 0.36, 0.28, 5.4, { base: '#B87141', stroke: darkStroke });
+          P.box(0.24, 0.50, 11.4, 0.28, 0.08, 2.0, { base: '#434E5B', stroke: darkStroke });
+          P.box(0.32, 0.52, 14.0, 0.12, 0.04, 1.2, { base: '#FFB347', stroke: darkStroke });
+          P.box(0.64, 0.32, 10.1, 0.14, 0.14, 2.8, { base: '#EDE5D4', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'arcade_neon': {
+        // Dark arcade cabinet + magenta trim + neon cyan CRT & marquee
+        P.box(0.22, 0.20, 0, 0.56, 0.54, 11.0, { base: '#343D4B', stroke: darkStroke });
+        P.box(0.22, 0.20, 11.0, 0.56, 0.36, 9.0, { base: '#3B4555', stroke: darkStroke });
+        if (!P.isSil) {
+          const neonMag = onCyan ? '#FF5EB8' : '#3E2B3A';
+          P.box(0.20, 0.20, 2.0, 0.04, 0.54, 17.5, { base: neonMag, stroke: darkStroke });
+          P.box(0.76, 0.20, 2.0, 0.04, 0.54, 17.5, { base: neonMag, stroke: darkStroke });
+          // CRT display + marquee
+          P.box(0.28, 0.54, 12.0, 0.44, 0.05, 5.2, { base: cyan, stroke: darkStroke });
+          P.box(0.26, 0.55, 18.0, 0.48, 0.06, 2.2, { base: neonMag, stroke: darkStroke });
+          P.box(0.30, 0.54, 10.0, 0.40, 0.20, 1.2, { base: '#4D5A68', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.72, 13.5, 13, 8, '#5EF2FF', 0.26 * pulse);
+        break;
+      }
+      case 'b1_media_screen': {
+        // Twin steel floor trusses + wide cyan tactical display wall
+        P.box(0.20, 0.24, 0, 0.12, 0.42, 3.0, { base: '#485664', stroke: darkStroke });
+        P.box(0.68, 0.24, 0, 0.12, 0.42, 3.0, { base: '#485664', stroke: darkStroke });
+        P.box(0.22, 0.38, 3.0, 0.08, 0.12, 14.0, { base: '#5E6E7D', stroke: darkStroke });
+        P.box(0.70, 0.38, 3.0, 0.08, 0.12, 14.0, { base: '#5E6E7D', stroke: darkStroke });
+        P.box(0.08, 0.34, 7.2, 0.84, 0.18, 11.4, { base: '#27313B', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.13, 0.50, 8.2, 0.74, 0.04, 9.2, { base: cyanMid, stroke: darkStroke });
+          P.box(0.18, 0.52, 11.2, 0.64, 0.04, 2.8, { base: cyan, stroke: darkStroke });
+          P.box(0.18, 0.52, 9.2, 0.20, 0.04, 1.4, { base: onCyan ? '#FFB347' : '#3A3228', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.65, 12.5, 16, 9, '#5EF2FF', 0.25 * pulse);
+        break;
+      }
+      case 'b1_ess_rack': {
+        // Armored ESS battery rack + compact #5EF2FF charge bar when connected
+        P.box(0.14, 0.18, 0, 0.72, 0.64, 19.6, { base: '#3F4C5A', stroke: darkStroke });
+        if (!P.isSil) {
+          for (let i = 0; i < 3; i++) {
+            const z = 2.4 + i * 5.4;
+            P.box(0.18, 0.78, z, 0.64, 0.06, 4.2, { base: '#566676', stroke: darkStroke });
+            P.box(0.22, 0.81, z + 1.4, 0.36, 0.04, 1.2, { base: cyan, stroke: darkStroke });
+            P.box(0.66, 0.81, z + 1.4, 0.10, 0.04, 1.2, { base: '#FFB347', stroke: darkStroke });
+          }
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.86, 10.0, 10, 6, '#5EF2FF', 0.16);
+        break;
+      }
+      case 'b1_power_panel': {
+        // High-voltage switchgear cabinet + amber busbar + cyan meter strip
+        P.box(0.16, 0.22, 0, 0.68, 0.54, 18.6, { base: '#556372', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.22, 0.73, 10.6, 0.32, 0.05, 5.6, { base: '#242D36', stroke: darkStroke });
+          P.box(0.26, 0.76, 12.8, 0.24, 0.04, 1.6, { base: cyan, stroke: darkStroke });
+          P.box(0.58, 0.74, 11.4, 0.16, 0.06, 4.4, { base: '#D44D44', stroke: darkStroke });
+          P.box(0.22, 0.73, 4.2, 0.54, 0.05, 3.8, { base: '#D68E45', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.42, 0.84, 13.0, 9, 5, '#5EF2FF', 0.16);
+        break;
+      }
+      case 'b1_backup_gen': {
+        // Olive diesel generator block + exhaust stack + cyan bus indicator
+        const vib = onCyan && !P.isThumb ? Math.sin(P.timeSec * 36) * 0.22 : 0;
+        P.box(0.12, 0.18, 0, 0.76, 0.64, 2.2, { base: '#3A4552', stroke: darkStroke });
+        P.box(0.14, 0.22, 2.2 + vib, 0.72, 0.56, 11.2, { base: '#5E6C58', stroke: darkStroke });
+        P.box(0.20, 0.24, 13.4 + vib, 0.16, 0.16, 6.2, { base: '#46515D', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.68, 0.26, 4.0 + vib, 0.20, 0.48, 7.6, { base: '#323C46', stroke: darkStroke });
+          P.box(0.22, 0.76, 8.6 + vib, 0.26, 0.05, 1.6, { base: cyan, stroke: darkStroke });
+          P.box(0.56, 0.36, 13.4 + vib, 0.16, 0.16, 1.4, { base: '#D48036', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.36, 0.84, 9.0, 9, 5, '#5EF2FF', 0.16);
+        break;
+      }
+      case 'b1_ceiling_led':
+      default: {
+        // Unpowered tactical amber tripod worklight (STRICTLY warm amber #FFB347, 0px cyan!)
+        P.box(0.24, 0.24, 0, 0.52, 0.52, 1.6, { base: '#4E5C6A', stroke: darkStroke });
+        P.box(0.45, 0.45, 1.6, 0.10, 0.10, 14.4, { base: '#7B8A98', stroke: darkStroke });
+        P.box(0.32, 0.34, 15.8, 0.36, 0.32, 3.6, { base: '#627280', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.36, 0.64, 16.4, 0.28, 0.06, 2.4, { base: '#FFB347', stroke: darkStroke });
+          P.box(0.40, 0.66, 16.8, 0.20, 0.04, 1.6, { base: '#FFE6A8', stroke: darkStroke });
+          if (!P.isThumb) {
+            P.glowEllipse(0.5, 0.5, 0.1, 46, 24, '#FFB347', 0.22);
+          } else {
+            P.glowEllipse(0.5, 0.68, 16.5, 14, 10, '#FFB347', 0.34);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  function drawB1GadgetStatusBadge(ctx, tx, ty, status, zScale) {
+    const Iso = ZS.Iso;
+    if (!status || status.active) return;
+    const p = Iso.gridToScreen(tx + 0.5, ty + 0.5, 22);
+    const label = !status.connected ? '미연결' : 'OFF';
+    const bg = !status.connected ? 'rgba(64, 42, 18, 0.88)' : 'rgba(48, 22, 26, 0.88)';
+    const border = !status.connected ? '#FFB347' : '#FF6B6B';
+    ctx.save();
+    ctx.font = '700 12px "Pretendard", "Noto Sans KR", sans-serif';
+    const w = Math.max(38, ctx.measureText(label).width + 12);
+    const h = 18;
+    const bx = p.x - w * 0.5;
+    const by = p.y - h - 2;
+    ctx.fillStyle = bg;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, w, h, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = border;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, p.x, by + h * 0.5 + 0.5);
+    ctx.restore();
+  }
+
+  function drawB1Gadget(ctx, gadget, tx, ty, ug, state, timeSec, isSil, zScale) {
+    const status = ZS.Game && ZS.Game.getB1GadgetStatus
+      ? ZS.Game.getB1GadgetStatus(tx, ty)
+      : { connected: true, blackoutPaused: false, active: true };
+    const timer = gadget.buildAnimTimer || 0;
+    const dropZ = timer > 0 ? Math.sin((timer / 0.24) * Math.PI) * 6.5 : 0;
+    const painter = makeB1WorldPainter(ctx, tx, ty, 2.0 + dropZ, isSil, timeSec, status);
+    paintB1Gadget(painter, gadget.id);
+    if (!isSil && state && state.phase !== 'night') {
+      drawB1GadgetStatusBadge(ctx, tx, ty, status, zScale);
+    } else if (!isSil && status && status.connected && status.blackoutPaused) {
+      drawB1GadgetStatusBadge(ctx, tx, ty, status, zScale);
+    }
+  }
+
+  function renderB1GadgetThumbnail(itemId, size) {
+    const sz = size || 48;
+    const key = `${itemId}_${sz}`;
+    if (_b1GadgetThumbCache.has(key)) return _b1GadgetThumbCache.get(key);
+    const canvas = document.createElement('canvas');
+    canvas.width = sz;
+    canvas.height = sz;
+    const ctx = canvas.getContext('2d');
+    const painter = makeB1MiniPainter(ctx, sz * 0.5, sz * 0.64, sz * 0.72, sz * 0.025);
+    paintB1Gadget(painter, itemId);
+    const url = canvas.toDataURL('image/png');
+    _b1GadgetThumbCache.set(key, url);
+    return url;
   }
 
   function drawB1RoomLabelsAndWarnings(ctx, ug, B1_SIZE, zScale) {
@@ -900,6 +1412,102 @@ window.ZS = window.ZS || {};
       }
     }
 
+    // 5b. B1 Gadget build / move / remove overlays
+    if (uiState.mode === 'build' && uiState.selectedItemId) {
+      const def = ZS.DATA.ITEMS[uiState.selectedItemId];
+      if (def && def.domain === 'underground') {
+        if (def.requiredRole && ug.rooms) {
+          for (let ry = 1; ry < B1_SIZE - 1; ry++) {
+            for (let rx = 1; rx < B1_SIZE - 1; rx++) {
+              const c = ug.grid[ry][rx];
+              if (!c || !c.excavated || c.elevator || c.permanentCorridor || c.roomId == null) continue;
+              const r = ug.rooms[c.roomId];
+              if (r && r.role === def.requiredRole) {
+                Iso.drawTilePoly(ctx, rx, ry, 2.05, 'rgba(114, 232, 138, 0.10)', 'rgba(114, 232, 138, 0.34)', 0.9);
+              }
+            }
+          }
+        }
+        if (uiState.hoverTile) {
+          const { tx, ty } = uiState.hoverTile;
+          if (tx >= 1 && ty >= 1 && tx < B1_SIZE - 1 && ty < B1_SIZE - 1) {
+            const check = ZS.Game && ZS.Game.canPlaceB1Item
+              ? ZS.Game.canPlaceB1Item(def.id, tx, ty)
+              : { ok: false };
+            const cell = ug.grid[ty][tx];
+            const zOff = cell && !cell.excavated ? (cell.bedrock ? 13.5 : (ZS.DATA.B1_ROCK_Z || 11) + 1.6) : 2.1;
+            Iso.drawTilePoly(
+              ctx, tx, ty, zOff,
+              check.ok ? 'rgba(114, 232, 138, 0.28)' : 'rgba(255, 107, 107, 0.28)',
+              check.ok ? '#72E88A' : '#FF6B6B',
+              2.0
+            );
+            if (check.ok) {
+              ctx.save();
+              ctx.globalAlpha = 0.62;
+              paintB1Gadget(
+                makeB1WorldPainter(ctx, tx, ty, 2.0, false, timeSec, { connected: true, powered: true, active: true }),
+                def.id
+              );
+              ctx.restore();
+            }
+          }
+        }
+      }
+    } else if (uiState.mode === 'move') {
+      const src = uiState.movingSource;
+      if (src) {
+        Iso.drawTilePoly(ctx, src.tx, src.ty, 2.15, 'rgba(255, 179, 71, 0.28)', '#FFB347', 2.2);
+        const srcGadget = ug.b1StructGrid && ug.b1StructGrid[src.ty] && ug.b1StructGrid[src.ty][src.tx];
+        const srcDef = srcGadget && ZS.DATA.ITEMS[srcGadget.id];
+        if (srcDef && srcDef.requiredRole && ug.rooms) {
+          for (let ry = 1; ry < B1_SIZE - 1; ry++) {
+            for (let rx = 1; rx < B1_SIZE - 1; rx++) {
+              const c = ug.grid[ry][rx];
+              if (!c || !c.excavated || c.elevator || c.permanentCorridor || c.roomId == null) continue;
+              const r = ug.rooms[c.roomId];
+              if (r && r.role === srcDef.requiredRole) {
+                Iso.drawTilePoly(ctx, rx, ry, 2.05, 'rgba(114, 232, 138, 0.10)', 'rgba(114, 232, 138, 0.34)', 0.9);
+              }
+            }
+          }
+        }
+        if (uiState.hoverTile && srcGadget) {
+          const { tx, ty } = uiState.hoverTile;
+          const check = ZS.Game && ZS.Game.canMoveB1Item
+            ? ZS.Game.canMoveB1Item(src.tx, src.ty, tx, ty)
+            : { ok: false };
+          Iso.drawTilePoly(
+            ctx, tx, ty, 2.1,
+            check.ok ? 'rgba(114, 232, 138, 0.28)' : 'rgba(255, 107, 107, 0.28)',
+            check.ok ? '#72E88A' : '#FF6B6B',
+            2.0
+          );
+          if (check.ok) {
+            ctx.save();
+            ctx.globalAlpha = 0.62;
+            paintB1Gadget(
+              makeB1WorldPainter(ctx, tx, ty, 2.0, false, timeSec, { connected: true, powered: true, active: true }),
+              srcGadget.id
+            );
+            ctx.restore();
+          }
+        }
+      } else if (uiState.hoverTile) {
+        const { tx, ty } = uiState.hoverTile;
+        const g = ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+        if (g) {
+          Iso.drawTilePoly(ctx, tx, ty, 2.1, 'rgba(255, 179, 71, 0.28)', '#FFB347', 2.0);
+        }
+      }
+    } else if (uiState.mode === 'remove' && uiState.hoverTile) {
+      const { tx, ty } = uiState.hoverTile;
+      const g = ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+      if (g) {
+        Iso.drawTilePoly(ctx, tx, ty, 2.1, 'rgba(255, 92, 92, 0.32)', '#FF5C5C', 2.0);
+      }
+    }
+
     // 6. Inspected tile outline
     if (uiState.inspectedTile) {
       const { tx, ty } = uiState.inspectedTile;
@@ -919,6 +1527,7 @@ window.ZS = window.ZS || {};
     const ug = ZS.Game && ZS.Game.ensureUndergroundState ? ZS.Game.ensureUndergroundState() : state.underground;
     if (!ug) return;
 
+    R.emissiveList = null;
     drawB1SubterraneanBackdrop(ctx, w, h, isSil);
     Iso.resetRenderModifiers();
 
@@ -990,7 +1599,7 @@ window.ZS = window.ZS || {};
 
         const gadget = ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
         if (gadget) {
-          drawB1PlaceholderGadget(ctx, gadget, tx, ty, isSil, zScale);
+          drawB1Gadget(ctx, gadget, tx, ty, ug, state, timeSec, isSil, zScale);
         }
       }
     }
@@ -1000,6 +1609,7 @@ window.ZS = window.ZS || {};
       drawB1RoomLabelsAndWarnings(ctx, ug, B1_SIZE, zScale);
     }
 
+    R.emissiveList = null;
     Iso.resetRenderModifiers();
   }
 
@@ -1074,10 +1684,12 @@ window.ZS = window.ZS || {};
     b1TerrainCache,
     ensureB1TerrainCache,
     renderUnderground,
-    renderB1ToolThumbnail
+    renderB1ToolThumbnail,
+    renderB1GadgetThumbnail
   });
 
   if (ZS.Renderer) {
     ZS.Renderer.renderB1ToolThumbnail = renderB1ToolThumbnail;
+    ZS.Renderer.renderB1GadgetThumbnail = renderB1GadgetThumbnail;
   }
 })();

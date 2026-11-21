@@ -3458,6 +3458,22 @@ window.ZS = window.ZS || {};
       case 'lounge_set': return 28;
       case 'arcade_neon': return 27;
       case 'boss_trophy': return 37;
+      case 'b1_bunk_bed': return 21;
+      case 'b1_locker': return 22;
+      case 'b1_shower_booth': return 22;
+      case 'b1_air_purifier': return 21;
+      case 'b1_research_desk': return 18;
+      case 'b1_server_rack': return 23;
+      case 'b1_specimen_bench': return 19;
+      case 'b1_holo_table': return 19;
+      case 'b1_pallet_rack': return 21;
+      case 'b1_logistics_term': return 19;
+      case 'b1_coffee_bar': return 18;
+      case 'b1_media_screen': return 21;
+      case 'b1_ess_rack': return 22;
+      case 'b1_power_panel': return 21;
+      case 'b1_backup_gen': return 22;
+      case 'b1_ceiling_led': return 21;
       default: return 24;
     }
   }

@@ -2056,7 +2056,8 @@ button, input, select {
 
 .card-lock-badge,
 .card-voucher-badge,
-.card-cap-badge {
+.card-cap-badge,
+.card-role-badge {
   position: absolute;
   top: 3px;
   right: 4px;
@@ -2069,6 +2070,18 @@ button, input, select {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.15;
+}
+
+.card-role-badge {
+  background: rgba(11, 17, 25, 0.9);
+  border: 1px solid rgba(169, 188, 207, 0.34);
+  color: #E2ECF6;
+  gap: 3px;
+}
+
+.card-role-badge .b1-role-dot {
+  width: 6px;
+  height: 6px;
 }
 
 .card-lock-badge {
@@ -2135,6 +2148,16 @@ button, input, select {
   gap: 4px;
   font-size: 12px;
   font-weight: 700;
+}
+
+.card-costs.triple-costs {
+  gap: 2px;
+  max-width: 100%;
+}
+
+.card-costs.triple-costs .cost-chip {
+  padding: 1px 2px;
+  gap: 1px;
 }
 
 .cost-chip {

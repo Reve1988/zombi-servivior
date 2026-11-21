@@ -465,6 +465,44 @@ window.ZS = window.ZS || {};
         }
         return;
       }
+      if (uiState.mode === 'build') {
+        if (!isDrag && uiState.selectedItemId && ZS.Game.placeB1Item) {
+          ZS.Game.placeB1Item(uiState.selectedItemId, tx, ty);
+        }
+        return;
+      }
+      if (uiState.mode === 'remove') {
+        if (!isDrag && ZS.Game.removeB1ItemAt) {
+          ZS.Game.removeB1ItemAt(tx, ty);
+        }
+        return;
+      }
+      if (uiState.mode === 'move') {
+        if (!isDrag) {
+          const ug = st.underground;
+          if (!uiState.movingSource) {
+            const g = ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+            if (g) {
+              uiState.movingSource = { tx, ty };
+              ZS.Audio.playClick();
+              if (U.updateCursorTooltip) U.updateCursorTooltip();
+            } else {
+              ZS.Audio.playError();
+              U.showWaveBanner('이동 대상 없음', '이동할 지하 가젯이 있는 타일을 먼저 클릭하세요.', 'warn');
+            }
+          } else {
+            const src = uiState.movingSource;
+            if (src.tx === tx && src.ty === ty) {
+              uiState.movingSource = null;
+              ZS.Audio.playClick();
+            } else if (ZS.Game.moveB1Item && ZS.Game.moveB1Item(src.tx, src.ty, tx, ty)) {
+              uiState.movingSource = null;
+            }
+            if (U.updateCursorTooltip) U.updateCursorTooltip();
+          }
+        }
+        return;
+      }
       if (!isDrag) {
         U.inspectTileAt(tx, ty);
       }
@@ -741,13 +779,23 @@ window.ZS = window.ZS || {};
         if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden && !isTechModalOpen()) {
           const slotIdx = Number(RegExp.$1) - 1;
           if (ZS.Game.state.activeLayer === 'underground') {
-            const tools = ZS.DATA.B1_TOOLS || [];
-            if (tools[slotIdx]) {
-              if (uiState.dockCollapsed) U.setDockCollapsed(false);
-              if (U.selectB1Tool) U.selectB1Tool(tools[slotIdx]);
+            if (!uiState.activeB1Category || uiState.activeB1Category === 'b1_ops') {
+              const tools = ZS.DATA.B1_TOOLS || [];
+              if (tools[slotIdx]) {
+                if (uiState.dockCollapsed) U.setDockCollapsed(false);
+                if (U.selectB1Tool) U.selectB1Tool(tools[slotIdx]);
+              }
+            } else {
+              const b1Items = Object.values(ZS.DATA.ITEMS).filter(
+                (def) => def.domain === 'underground' && def.b1Category === uiState.activeB1Category
+              );
+              if (b1Items[slotIdx]) {
+                if (uiState.dockCollapsed) U.setDockCollapsed(false);
+                if (U.selectBuildCard) U.selectBuildCard(b1Items[slotIdx]);
+              }
             }
           } else {
-            const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
+            const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory && def.domain !== 'underground');
             if (items[slotIdx]) {
               if (uiState.dockCollapsed) U.setDockCollapsed(false);
               if (U.selectBuildCard) U.selectBuildCard(items[slotIdx]);
@@ -767,11 +815,11 @@ window.ZS = window.ZS || {};
           ZS.Game.toggleWindOverlay();
         }
       } else if (e.code === 'KeyM') {
-        if (ZS.Game.state.activeLayer !== 'underground') {
+        if (ZS.Game.state.phase === 'day') {
           U.setToolMode(uiState.mode === 'move' ? 'inspect' : 'move');
         }
       } else if (e.code === 'KeyX') {
-        if (ZS.Game.state.activeLayer !== 'underground') {
+        if (ZS.Game.state.phase === 'day') {
           if (uiState.dockCollapsed) U.setDockCollapsed(false);
           U.setToolMode(uiState.mode === 'remove' ? 'inspect' : 'remove');
         }

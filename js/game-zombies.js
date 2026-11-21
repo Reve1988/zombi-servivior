@@ -832,22 +832,24 @@ window.ZS = window.ZS || {};
       state.scrap += scavengeScrap;
     }
 
-    const rpBase = (hqInfo.baseRpPerScientist || 2) + (state.b1LabFlatRp || 0);
+    const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (state.b1LabFlatRp || 0) + (state.b1LabFlatPerWaveRp || 0);
     const drill2Bonus = (G.getTechLevel && G.getTechLevel('b1_drill_2') > 0) ? 0.15 : 0;
     const rpMult = 1 + (state.b1LabMult || 0) + drill2Bonus;
-    const rpGain = Math.round((jobs.research || 0) * rpBase * rpMult);
+    const rpGain = Math.round(rawScientistRp * rpMult);
     state.rp = (state.rp || 0) + rpGain;
 
     const prodCount = jobs.prod || 0;
-    const prodWood = prodCount * 5 + (state.b1SupplyWood || 0);
-    const prodScrap = prodCount * 4 + (state.b1SupplyScrap || 0);
+    const prodWood = Math.round(prodCount * 5 + (state.b1SupplyWood || 0) + (state.b1SupplyProdWood || 0));
+    const prodScrap = Math.round(prodCount * 4 + (state.b1SupplyScrap || 0) + (state.b1SupplyProdScrap || 0));
+    const supplyCoin = Math.round(state.b1SupplyCoin || 0);
     state.wood += prodWood;
     state.scrap += prodScrap;
+    if (supplyCoin > 0) state.coin += supplyCoin;
 
     let digGain = 0;
     if (state.undergroundUnlocked) {
       const digPerProd = (G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 4 : 3;
-      digGain = Math.round((2 + prodCount * digPerProd) * (1 + (state.b1DigMult || 0)));
+      digGain = Math.round((2 + prodCount * digPerProd) * (1 + (state.b1DigApBonusMult || state.b1DigMult || 0)));
       const digCap = Math.max(16, (2 + prodCount * digPerProd) * 2 + ((G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 8 : 0));
       state.digApCap = digCap;
       state.digAp = Math.min(digCap, (state.digAp || 0) + digGain);
@@ -899,12 +901,13 @@ window.ZS = window.ZS || {};
 
     const rpMsg = rpGain > 0 ? ` · 연구 +${rpGain} RP` : '';
     const prodMsg = prodWood > 0 || prodScrap > 0 ? ` · 생산 +${prodWood}W/+${prodScrap}S` : '';
+    const supplyCoinMsg = supplyCoin > 0 ? ` · 물류 +${supplyCoin}C` : '';
     const scavMsg = scavengeWood > 0 ? ` · 수색 +${scavengeWood}W/+${scavengeScrap}S` : '';
     const digMsg = digGain > 0 ? ` · 굴착력 +${digGain} AP` : '';
     const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
     G.banner(
       `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
-      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 전력 +${gainedPower}${rpMsg}${prodMsg}${scavMsg}${digMsg}${agentMsg}`,
+      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 전력 +${gainedPower}${rpMsg}${prodMsg}${supplyCoinMsg}${scavMsg}${digMsg}${agentMsg}`,
       'good'
     );
     if (newlyUnlocked.length > 0) {
@@ -1054,6 +1057,22 @@ window.ZS = window.ZS || {};
       case 'repair_bay': return ['#475361', '#F0A93A', '#4ADE80'];
       case 'lounge_set': return ['#F4E6C8', '#E8A04A', '#E8EEF5'];
       case 'arcade_neon': return ['#3A2C54', '#FF5CE1', '#52E8FF'];
+      case 'b1_bunk_bed': return ['#3B4552', '#5F7055', '#E6DEC8'];
+      case 'b1_locker': return ['#566575', '#6B7A5E', '#C4D0DC'];
+      case 'b1_shower_booth': return ['#DCE5EE', '#8A96A4', '#D49A5A'];
+      case 'b1_air_purifier': return ['#CFD8E3', '#3B4552', '#5EF2FF'];
+      case 'b1_coffee_bar': return ['#6E5035', '#C4D0DC', '#FFB347'];
+      case 'b1_media_screen': return ['#2B333D', '#5EF2FF', '#FFC94A'];
+      case 'b1_research_desk': return ['#4B5664', '#8A6A45', '#FFB347'];
+      case 'b1_server_rack': return ['#252E3A', '#525E6B', '#5EF2FF'];
+      case 'b1_specimen_bench': return ['#8A96A4', '#3B4552', '#C084FC'];
+      case 'b1_holo_table': return ['#2D3744', '#5EF2FF', '#E2A83B'];
+      case 'b1_pallet_rack': return ['#39434F', '#D97724', '#9B7953'];
+      case 'b1_logistics_term': return ['#3B4552', '#E59838', '#5EF2FF'];
+      case 'b1_ess_rack': return ['#2D3744', '#B87333', '#5EF2FF'];
+      case 'b1_power_panel': return ['#4C5868', '#E59838', '#5EF2FF'];
+      case 'b1_backup_gen': return ['#D9822B', '#39434F', '#5EF2FF'];
+      case 'b1_ceiling_led': return ['#2E3744', '#E59838', '#FFB347'];
       case 'boss_trophy': return ['#2E3744', '#D4AF37', '#FFE066'];
       case 'command_hq': return ['#5B6B7C', '#DCE4EC', '#FFD27A'];
       default: return ['#94A3B8', '#64748B', '#D49A5A'];
@@ -1257,6 +1276,8 @@ window.ZS = window.ZS || {};
     removeAt: G.removeAt,
     getRepairAllInfo: G.getRepairAllInfo,
     repairAllStructures: G.repairAllStructures,
+    getEffectiveTraderOfferCost: G.getEffectiveTraderOfferCost,
+    getEffectiveTraderRefreshCost: G.getEffectiveTraderRefreshCost,
     refreshTraderOffers: G.refreshTraderOffers,
     exchangeResource: G.exchangeResource,
     getNightConsumableCost: G.getNightConsumableCost,
