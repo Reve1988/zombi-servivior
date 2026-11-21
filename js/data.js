@@ -1104,6 +1104,120 @@ ZS.DATA = (function () {
       coinPerWave: 4,
       desc: '다음 1회 야간 웨이브 동안 모든 성벽·게이트·전초기지 피격 피해 -20% 및 근접 반사 +15%p (새벽 정산 시 자동 해제).'
     }
-  ]
+  ],
+
+  DIVISION_ORDER: ['mobile_corps', 'iron_engineers', 'nightwatch', 'arc_tech'],
+
+  DIVISIONS: {
+    mobile_corps: {
+      id: 'mobile_corps',
+      name: '기동방위대',
+      shortName: '기동방위대',
+      subtitle: '표준 기동 전개 교리',
+      iconId: 'div-mobile',
+      accentColor: '#FFC94A',
+      unlockedByDefault: true,
+      unlockCondition: null,
+      unlockHint: '기본 해금 교리',
+      hqCostMult: 0.85,
+      badgeTag: '본부 -15%',
+      pros: [
+        '본부(HQ) 증축 비용(목재·고철·코인) -15%'
+      ],
+      cons: [
+        '패널티 없음 (표준 올라운더)'
+      ],
+      hasPenalty: false
+    },
+    iron_engineers: {
+      id: 'iron_engineers',
+      name: '철벽 공병단',
+      shortName: '철벽 공병단',
+      subtitle: '축성·방벽·공병 특화 교리',
+      iconId: 'div-iron',
+      accentColor: '#4ADE80',
+      unlockedByDefault: true,
+      unlockCondition: null,
+      unlockHint: '기본 해금 교리',
+      startingVouchers: { razor_pad: 3 },
+      fortHpMult: 1.35,
+      thornsMult: 1.5,
+      trapDpsMult: 1.5,
+      repairMaxCd: 12,
+      rangeMult: 0.85,
+      badgeTag: '축성 +35% · 수리 12s',
+      pros: [
+        '시작 시 강철 스파이크 트랩 보급권 ×3 지급',
+        '성벽·통문·스파이크 트랩 최대 내구도 +35%',
+        '성벽·통문 반사 피해 & 트랩 지속피해 +50%',
+        '긴급 나노 수리 드론 대기시간 18초 → 12초'
+      ],
+      cons: [
+        '모든 요원 초소 및 자동 포탑 사거리 -15%'
+      ],
+      hasPenalty: true
+    },
+    nightwatch: {
+      id: 'nightwatch',
+      name: '나이트워치 유격대',
+      shortName: '나이트워치',
+      subtitle: '야간 정전 유격·정예 요원 교리',
+      iconId: 'div-nightwatch',
+      accentColor: '#E2E8F0',
+      unlockedByDefault: false,
+      unlockCondition: 'survive_blackout',
+      unlockHint: '블랙아웃이 발생한 야간 웨이브 방어에 1회 생존하면 해금',
+      startingAgentsBonus: 2,
+      basePopCapBonus: 2,
+      startingVouchers: { rifle_bunker: 1 },
+      voucherRank1: { rifle_bunker: 1 },
+      mannedXpMult: 2.0,
+      blackoutMannedFireRateMult: 1.40,
+      blackoutMannedCritAdd: 0.20,
+      solarBatteryMult: 0.60,
+      turretCostMult: 1.30,
+      badgeTag: '숙련 ×2 · 정전 유격',
+      pros: [
+        '시작 가용 요원 +2명 & 본부 기본 수용량 +2',
+        '소총 벙커 보급권 ×1 (첫 보급 배치 숙련 Rank 1)',
+        '요원 초소 전투 숙련 XP 획득량 2배',
+        '정전(블랙아웃) 중 요원 초소 연사 +40% · 치명 +20%p'
+      ],
+      cons: [
+        '태양광·배터리 주간 충전량 및 저장 용량 -40%',
+        '무인 자동 포탑 건설·업그레이드 비용 +30%'
+      ],
+      hasPenalty: true
+    },
+    arc_tech: {
+      id: 'arc_tech',
+      name: '아크 테크놀로지',
+      shortName: '아크 테크',
+      subtitle: '고전압 전력망·오버드라이브 교리',
+      iconId: 'div-arc',
+      accentColor: '#5EF2FF',
+      isElectricDivision: true,
+      unlockedByDefault: false,
+      unlockCondition: 'reach_wave_15',
+      unlockHint: 'WAVE 15에 도달하면 영구 해금',
+      startingVouchers: { wind_turbine: 1, battery_bank: 1 },
+      overdriveThreshold: 0.70,
+      overdriveTurretFireRateMult: 1.25,
+      overdriveFloodlightMult: 1.25,
+      overdriveEmpDurationMult: 0.35,
+      fieldTentPopCapMult: 0.65,
+      badgeTag: 'ARC ≥70%',
+      pros: [
+        '시작 시 풍력 터빈 보급권 ×1 + 배터리 보급권 ×1 지급',
+        '전력 ≥70% 유지 시 자동 포탑 연사력 +25%',
+        '전력 ≥70% 유지 시 LED 투광등 조명·오라 반경 +25%',
+        '전력 ≥70% 유지 시 전기 시설 EMP 기절 시간 -65%'
+      ],
+      cons: [
+        '모든 티어 야전 숙소 요원 수용량 -35%'
+      ],
+      hasPenalty: true
+    }
+  }
   };
 })();

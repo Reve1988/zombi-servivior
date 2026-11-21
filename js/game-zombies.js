@@ -68,6 +68,9 @@ window.ZS = window.ZS || {};
       }
       if (def.isBoss) {
         state.bossDefeated = true;
+        if (G.recordDivisionProgress) {
+          G.recordDivisionProgress(state.divisionId, state.wave, state.wave >= 20);
+        }
         if (woodGain > 0) {
           addFloatingText(z.x - 0.32, z.y, 22, `+${woodGain}`, DATA.PALETTE.resWood, 13, DATA.PALETTE.outlineDark);
         }
@@ -630,9 +633,11 @@ window.ZS = window.ZS || {};
           }
 
           // Wall/Gate Thorns (+15%p melee reflection when Reactive Armor Coating is active)
-          const totalThorns = ((bProf && bProf.thornsRatio) || 0) + (reactiveOn ? 0.15 : 0);
+          const div = G.getDivisionDef ? G.getDivisionDef() : null;
+          const thornsMult = (div && div.thornsMult) || 1.0;
+          const totalThorns = (((bProf && bProf.thornsRatio) || 0) + (reactiveOn ? 0.15 : 0)) * thornsMult;
           if (totalThorns > 0) {
-            const minRefl = (bProf && bProf.thornsMin) || 4;
+            const minRefl = Math.round(((bProf && bProf.thornsMin) || 4) * thornsMult);
             const reflDmg = Math.max(minRefl, Math.round(z.damage * totalThorns));
             state.projectiles.push({
               kind: 'spark',
@@ -742,6 +747,7 @@ window.ZS = window.ZS || {};
 
   function completeWave() {
     const clearedWave = state.wave;
+    const hadBlackout = !!state.blackoutTriggered;
     state.phase = 'day';
     state.isNight = false;
     state.blackoutActive = false;
@@ -823,12 +829,32 @@ window.ZS = window.ZS || {};
     G.refreshTraderOffers(false);
     ZS.Audio.playWaveClear();
 
+    const isRunCleared = !!(state.bossDefeated && clearedWave >= 20);
+    if (G.recordDivisionProgress) {
+      G.recordDivisionProgress(state.divisionId, state.wave, isRunCleared);
+    }
+
+    const newlyUnlocked = [];
+    if (hadBlackout && G.unlockDivision && G.unlockDivision('nightwatch')) {
+      newlyUnlocked.push(G.getDivisionDef('nightwatch').name);
+    }
+    if (state.wave >= 15 && G.unlockDivision && G.unlockDivision('arc_tech')) {
+      newlyUnlocked.push(G.getDivisionDef('arc_tech').name);
+    }
+
     const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
     G.banner(
       `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
       `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 주간 충전 전력 +${gainedPower}${agentMsg}`,
       'good'
     );
+    if (newlyUnlocked.length > 0) {
+      G.banner(
+        `사령관 분과 영구 해금: ${newlyUnlocked.join(', ')}`,
+        '새 작전 개시 시 사령관 지휘 분과 선택 창에서 즉시 출격할 수 있습니다!',
+        'good'
+      );
+    }
 
     G.saveGame();
     G.notifyUi();
@@ -836,6 +862,9 @@ window.ZS = window.ZS || {};
 
   function triggerGameOver() {
     state.phase = 'gameover';
+    if (G.recordDivisionProgress) {
+      G.recordDivisionProgress(state.divisionId, state.wave, !!(state.bossDefeated && state.wave >= 20));
+    }
     if (G.invalidateStatsCache) G.invalidateStatsCache();
     ZS.Audio.playBlackout();
     G.banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
@@ -1106,6 +1135,15 @@ window.ZS = window.ZS || {};
     state: G.state,
     getEnvInfo: G.getEnvInfo,
     getSaveKey: G.getSaveKey,
+    getMetaKey: G.getMetaKey,
+    getDivisionDef: G.getDivisionDef,
+    getCommanderMeta: G.getCommanderMeta,
+    isDivisionUnlocked: G.isDivisionUnlocked,
+    unlockDivision: G.unlockDivision,
+    setLastSelectedDivision: G.setLastSelectedDivision,
+    recordDivisionProgress: G.recordDivisionProgress,
+    debugUnlockAllDivisions: G.debugUnlockAllDivisions,
+    isArcOverdriveActive: G.isArcOverdriveActive,
     isScreenShakeEnabled: G.isScreenShakeEnabled,
     setScreenShakeEnabled: G.setScreenShakeEnabled,
     toggleScreenShake: G.toggleScreenShake,
@@ -1118,6 +1156,9 @@ window.ZS = window.ZS || {};
     loadGame: G.loadGame,
     clearSaveAndReset: G.clearSaveAndReset,
     getHqLevelInfo: G.getHqLevelInfo,
+    getEffectiveHqUpgradeCost: G.getEffectiveHqUpgradeCost,
+    getEffectiveBuildCost: G.getEffectiveBuildCost,
+    getEffectiveUpgradeCost: G.getEffectiveUpgradeCost,
     canUpgradeHq: G.canUpgradeHq,
     upgradeHq: G.upgradeHq,
     isUpgradeableDef: G.isUpgradeableDef,
@@ -1149,6 +1190,9 @@ window.ZS = window.ZS || {};
     buyNightConsumable: G.buyNightConsumable,
     buyTraderOffer: G.buyTraderOffer,
     startNightWave: G.startNightWave,
+    triggerBlackout: G.triggerBlackout,
+    completeWave: G.completeWave,
+    triggerGameOver: G.triggerGameOver,
     toggleReconPaths: G.toggleReconPaths,
     generateWaveIntel: G.generateWaveIntel,
     recomputePreviewPaths: G.recomputePreviewPaths,
