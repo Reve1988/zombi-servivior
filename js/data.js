@@ -436,7 +436,7 @@ ZS.DATA = (function () {
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
     vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
-    missile_pod: '고폭 확산탄 (폭발 반경 1.95 확대)',
+    missile_pod: '6연장 융단 포격 (1회 6발 연속 포격 · 광역 제압)',
     emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
 
@@ -639,15 +639,17 @@ ZS.DATA = (function () {
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
       powerIdle: 0.85,
-      powerShot: 2.4,
+      powerShot: 2.0,
       maxHp: 260,
       minRange: 2.2,
       range: 8.0,
-      damage: 64,
-      splashRadius: 1.50,
-      fireRate: 0.58,
+      damage: 24,
+      salvoCount: 2,
+      salvoScatter: 0.25,
+      splashRadius: 1.20,
+      fireRate: 0.48,
       projType: 'rocket',
-      desc: '[전력 소모 · 곡사 포격] 산맥 너머 원거리 적군에 고각 로켓을 발사해 광역 폭발 피해를 줍니다. (최소 사거리 2.2 · 정전 시 정지)'
+      desc: '[전력 소모 · 다연장 곡사] 산맥 너머 적군에 고각 로켓을 연속 일제 발사(2→3→6발)해 광역 제압합니다. (최소 사거리 2.2 · 정전 시 정지)'
     },
     emp_coil: {
       id: 'emp_coil',

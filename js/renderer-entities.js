@@ -768,6 +768,11 @@ window.ZS = window.ZS || {};
     }
   }
 
+  const _rkCur = { x: 0, y: 0 };
+  const _rkPrev = { x: 0, y: 0 };
+  const _rkGnd = { x: 0, y: 0 };
+  const _rkTmp = { x: 0, y: 0 };
+
   function drawProjectiles(ctx, projectiles, zScale, viewW, viewH) {
     if (!projectiles || projectiles.length === 0) return;
     const Iso = ZS.Iso;
@@ -786,22 +791,22 @@ window.ZS = window.ZS || {};
           const sZ = p.startZ != null ? p.startZ : 18;
           const tZ = p.targetZ != null ? p.targetZ : 0;
           const lift = Math.max(24, (p.peakZ || 62) - Math.max(sZ, tZ));
-          const arcPt = (u) => {
+          const arcProj = (u, outPt) => {
             const gx = p.startX + (p.targetX - p.startX) * u;
             const gy = p.startY + (p.targetY - p.startY) * u;
             const linZ = sZ + (tZ - sZ) * u;
             const gz = linZ + 4 * lift * u * (1 - u);
-            return Iso.gridToScreen(gx, gy, gz);
+            return Iso.projectTo(gx, gy, gz, outPt);
           };
           const maxL = p.maxLife || 0.6;
           const uNow = Math.max(0, Math.min(1, 1 - Math.max(0, p.life) / maxL));
-          const curP = arcPt(uNow);
+          const curP = arcProj(uNow, _rkCur);
           if (curP.x < -pad || curP.x > vp.w + pad || curP.y < -pad || curP.y > vp.h + pad) continue;
-          const prevP = arcPt(Math.max(0, uNow - 0.045));
+          const prevP = arcProj(Math.max(0, uNow - 0.045), _rkPrev);
           const angScreen = Math.atan2(curP.y - prevP.y, curP.x - prevP.x);
 
           // Ground shadow directly below rocket height for clear altitude reading
-          const gPos = Iso.gridToScreen(p.x, p.y, getElev(p.x, p.y) + 0.5);
+          const gPos = Iso.projectTo(p.x, p.y, getElev(p.x, p.y) + 0.5, _rkGnd);
           ctx.save();
           ctx.fillStyle = 'rgba(8, 12, 18, 0.30)';
           ctx.beginPath();
@@ -814,9 +819,9 @@ window.ZS = window.ZS || {};
           ctx.lineCap = 'round';
           ctx.beginPath();
           const uTail = Math.max(0, uNow - 0.20);
-          for (let s = 0; s <= 6; s++) {
-            const su = uTail + ((uNow - uTail) * s) / 6;
-            const sp = arcPt(su);
+          for (let s = 0; s <= 4; s++) {
+            const su = uTail + ((uNow - uTail) * s) / 4;
+            const sp = arcProj(su, _rkTmp);
             if (s === 0) ctx.moveTo(sp.x, sp.y);
             else ctx.lineTo(sp.x, sp.y);
           }
@@ -1259,26 +1264,24 @@ window.ZS = window.ZS || {};
     const pad = Math.max(36, 48 * zScale);
     const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);
     const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+    ctx.save();
     try {
       for (let i = 0; i < particles.length; i++) {
         const pt = particles[i];
         const elev = getElev(pt.x, pt.y);
         if (Iso.setElevationOffset) Iso.setElevationOffset(elev);
-        const sc = Iso.gridToScreen(pt.x, pt.y, pt.z);
+        const sc = Iso.projectTo(pt.x, pt.y, pt.z, _rkTmp);
         if (sc.x < -pad || sc.x > vp.w + pad || sc.y < -pad || sc.y > vp.h + pad) continue;
         const alpha = Math.max(0, pt.life / (pt.maxLife || 0.5));
         if (pt.kind === 'cube') {
-          ctx.save();
           ctx.globalAlpha = Math.min(1, alpha * 1.25);
           const w = pt.w || 0.10;
           Iso.drawVoxelBox(ctx, pt.x - w * 0.5, pt.y - w * 0.5, pt.z, w, w, pt.h || 3.0, {
             base: pt.color || '#94A3B8',
             stroke: 'rgba(27, 36, 48, 0.38)'
           });
-          ctx.restore();
           continue;
         }
-        ctx.save();
         if (pt.kind === 'dust') {
           const grow = 1 + (1 - alpha) * 0.65;
           ctx.globalAlpha = alpha * 0.52;
@@ -1293,9 +1296,9 @@ window.ZS = window.ZS || {};
           ctx.arc(sc.x, sc.y, pt.size * zScale, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.restore();
       }
     } finally {
+      ctx.restore();
       if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
     }
   }
