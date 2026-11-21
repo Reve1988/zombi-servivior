@@ -3,11 +3,15 @@ window.ZS = window.ZS || {};
 (function () {
   const PROD_SAVE_KEY = 'outpost_zero_save_v1';
   const DEV_SAVE_KEY = 'outpost_zero_save_dev';
+  const PROD_META_KEY = 'outpost_zero_commander_meta_v1';
+  const DEV_META_KEY = 'outpost_zero_commander_meta_dev';
   const SETTINGS_KEY = 'outpost_zero_settings_v1';
   const DATA = ZS.DATA;
   const N = DATA.GRID_SIZE;
 
   const state = {
+    divisionId: 'mobile_corps',
+    divisionRank1Vouchers: {},
     wave: 1,
     hqLevel: 1,
     phase: 'day', // 'day' | 'night' | 'gameover'
@@ -101,6 +105,8 @@ window.ZS = window.ZS || {};
     N,
     PROD_SAVE_KEY,
     DEV_SAVE_KEY,
+    PROD_META_KEY,
+    DEV_META_KEY,
     SETTINGS_KEY,
     state,
     nextZombieUid: 1,
@@ -184,6 +190,128 @@ window.ZS = window.ZS || {};
 
   function getSaveKey() {
     return getEnvInfo().saveKey;
+  }
+
+  function getMetaKey() {
+    return getEnvInfo().useDevSave ? DEV_META_KEY : PROD_META_KEY;
+  }
+
+  function getDivisionDef(id) {
+    const divs = DATA.DIVISIONS || {};
+    const key = id || state.divisionId || 'mobile_corps';
+    return divs[key] || divs.mobile_corps || { id: 'mobile_corps', name: '기동방위대', unlockedByDefault: true };
+  }
+
+  function createDefaultCommanderMeta() {
+    const divisions = {};
+    const divs = DATA.DIVISIONS || {};
+    const order = DATA.DIVISION_ORDER || Object.keys(divs);
+    for (let i = 0; i < order.length; i++) {
+      const id = order[i];
+      const def = divs[id];
+      divisions[id] = {
+        unlocked: !!(def && def.unlockedByDefault),
+        bestWave: 0,
+        cleared: false
+      };
+    }
+    return {
+      version: 1,
+      lastDivisionId: 'mobile_corps',
+      divisions
+    };
+  }
+
+  function normalizeCommanderMeta(raw) {
+    const base = createDefaultCommanderMeta();
+    if (!raw || typeof raw !== 'object') return base;
+    const rawDivs = raw.divisions && typeof raw.divisions === 'object' ? raw.divisions : {};
+    const keys = Object.keys(base.divisions);
+    for (let i = 0; i < keys.length; i++) {
+      const id = keys[i];
+      const def = DATA.DIVISIONS && DATA.DIVISIONS[id];
+      const rec = rawDivs[id];
+      if (rec && typeof rec === 'object') {
+        base.divisions[id] = {
+          unlocked: !!(def && def.unlockedByDefault) || Boolean(rec.unlocked),
+          bestWave: Math.max(0, Math.floor(Number(rec.bestWave) || 0)),
+          cleared: Boolean(rec.cleared)
+        };
+      }
+    }
+    if (typeof raw.lastDivisionId === 'string' && base.divisions[raw.lastDivisionId] && base.divisions[raw.lastDivisionId].unlocked) {
+      base.lastDivisionId = raw.lastDivisionId;
+    }
+    return base;
+  }
+
+  function saveCommanderMeta(meta) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(getMetaKey(), JSON.stringify(meta));
+      }
+    } catch (e) {}
+    return meta;
+  }
+
+  function getCommanderMeta() {
+    try {
+      if (typeof localStorage === 'undefined') return createDefaultCommanderMeta();
+      const raw = localStorage.getItem(getMetaKey());
+      if (!raw) return createDefaultCommanderMeta();
+      return normalizeCommanderMeta(JSON.parse(raw));
+    } catch (e) {
+      return createDefaultCommanderMeta();
+    }
+  }
+
+  function isDivisionUnlocked(id) {
+    const divs = DATA.DIVISIONS || {};
+    const def = divs[id];
+    if (!def) return false;
+    if (def.unlockedByDefault) return true;
+    const meta = getCommanderMeta();
+    return !!(meta.divisions[id] && meta.divisions[id].unlocked);
+  }
+
+  function unlockDivision(id) {
+    const divs = DATA.DIVISIONS || {};
+    if (!divs[id]) return false;
+    const meta = getCommanderMeta();
+    const rec = meta.divisions[id] || { unlocked: false, bestWave: 0, cleared: false };
+    if (rec.unlocked) return false;
+    rec.unlocked = true;
+    meta.divisions[id] = rec;
+    saveCommanderMeta(meta);
+    return true;
+  }
+
+  function setLastSelectedDivision(id) {
+    const divs = DATA.DIVISIONS || {};
+    if (!divs[id]) return;
+    const meta = getCommanderMeta();
+    if (!meta.divisions[id] || !meta.divisions[id].unlocked) return;
+    meta.lastDivisionId = id;
+    saveCommanderMeta(meta);
+  }
+
+  function recordDivisionProgress(divId, wave, cleared) {
+    const id = (DATA.DIVISIONS && DATA.DIVISIONS[divId]) ? divId : (state.divisionId || 'mobile_corps');
+    const meta = getCommanderMeta();
+    const rec = meta.divisions[id] || { unlocked: isDivisionUnlocked(id), bestWave: 0, cleared: false };
+    const waveNum = Math.max(0, Math.floor(Number(wave) || 0));
+    if (waveNum > rec.bestWave) rec.bestWave = waveNum;
+    if (cleared) rec.cleared = true;
+    meta.divisions[id] = rec;
+    saveCommanderMeta(meta);
+    return rec;
+  }
+
+  function isArcOverdriveActive() {
+    if (state.divisionId !== 'arc_tech') return false;
+    if (state.blackoutActive) return false;
+    const thresh = (getDivisionDef('arc_tech').overdriveThreshold != null) ? getDivisionDef('arc_tech').overdriveThreshold : 0.70;
+    return state.powerCap > 0 && state.power >= state.powerCap * thresh;
   }
 
   function setCallbacks(cbs) {
@@ -623,13 +751,38 @@ window.ZS = window.ZS || {};
     return { seed: 670001, terrainGrid: fallbackGrid };
   }
 
-  function initNewGame(seedOverride) {
+  function resolveSeedAndDivisionArgs(arg1, arg2) {
+    let seedOverride = null;
+    let divisionId = null;
+    if (typeof arg1 === 'string' && DATA.DIVISIONS && DATA.DIVISIONS[arg1]) {
+      divisionId = arg1;
+      if (arg2 !== undefined && arg2 !== null && typeof arg2 !== 'string') {
+        seedOverride = arg2;
+      }
+    } else {
+      seedOverride = arg1 !== undefined ? arg1 : null;
+      if (typeof arg2 === 'string' && DATA.DIVISIONS && DATA.DIVISIONS[arg2]) {
+        divisionId = arg2;
+      }
+    }
+    return { seedOverride, divisionId };
+  }
+
+  function initNewGame(arg1, arg2) {
+    const args = resolveSeedAndDivisionArgs(arg1, arg2);
+    const chosenDivision = (args.divisionId && DATA.DIVISIONS && DATA.DIVISIONS[args.divisionId])
+      ? args.divisionId
+      : 'mobile_corps';
+    const divDef = getDivisionDef(chosenDivision);
+
     createEmptyGrids();
     G.pendingVeteranDemolish = null;
-    const gen = generateVerifiedTerrain(seedOverride);
+    const gen = generateVerifiedTerrain(args.seedOverride);
     state.terrainSeed = gen.seed;
     state.terrainGrid = gen.terrainGrid;
 
+    state.divisionId = chosenDivision;
+    state.divisionRank1Vouchers = divDef.voucherRank1 ? { ...divDef.voucherRank1 } : {};
     state.wave = 1;
     state.hqLevel = 1;
     state.phase = 'day';
@@ -648,15 +801,16 @@ window.ZS = window.ZS || {};
     state.coin = DATA.INITIAL_RESOURCES.coin;
 
     const hqInfo = getHqLevelInfo(1);
-    state.agents = DATA.HQ_STATS.startingAgents;
+    state.agents = DATA.HQ_STATS.startingAgents + (divDef.startingAgentsBonus || 0);
     state.debugBonusPopCap = 0;
-    state.freeVouchers = {};
+    state.freeVouchers = divDef.startingVouchers ? { ...divDef.startingVouchers } : {};
     state.traderRefreshCost = 15;
     state.traderRefreshCount = 0;
     state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
     state.agentRecruitProgress = 0;
     state.statsEpoch = 1;
     state.skills.repairCd = 0;
+    state.skills.repairMaxCd = divDef.repairMaxCd || 18;
     state.skills.airstrikeCd = 0;
 
     state.zombies = [];
@@ -921,7 +1075,9 @@ window.ZS = window.ZS || {};
     if (!isCombatVeterancyDef(def)) return;
 
     const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
-    const gained = rawXp * cozyXpMult;
+    const div = getDivisionDef();
+    const divXpMult = (def.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+    const gained = rawXp * cozyXpMult * divXpMult;
     st.xp = +((st.xp || 0) + gained).toFixed(3);
     st.kills = (st.kills || 0) + 1;
     const onWall = isMounted !== undefined
@@ -943,19 +1099,22 @@ window.ZS = window.ZS || {};
     if (isBoss) {
       const bonus = xpTable.bossGlobalBonus || 4.0;
       const cozyXpMult = 1.0 + ((state.cozyTier && state.cozyTier.xpBonus) || 0);
+      const div = getDivisionDef();
       for (let y = 0; y < N; y++) {
         for (let x = 0; x < N; x++) {
           const s = state.structGrid[y] && state.structGrid[y][x];
           if (!s || s.id === 'command_hq' || s.hp <= 0) continue;
           const d = DATA.ITEMS[s.id];
           if (isCombatVeterancyDef(d)) {
-            s.xp = +((s.xp || 0) + bonus * cozyXpMult).toFixed(3);
+            const dMult = (d.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+            s.xp = +((s.xp || 0) + bonus * cozyXpMult * dMult).toFixed(3);
             applyPromoteCheck(s, d, x, y, false, true);
           }
           if (s.mounted && s.mounted.hp > 0) {
             const md = DATA.ITEMS[s.mounted.id];
             if (isCombatVeterancyDef(md)) {
-              s.mounted.xp = +((s.mounted.xp || 0) + bonus * cozyXpMult).toFixed(3);
+              const mdMult = (md.subType === 'manned' && div && div.mannedXpMult) ? div.mannedXpMult : 1.0;
+              s.mounted.xp = +((s.mounted.xp || 0) + bonus * cozyXpMult * mdMult).toFixed(3);
               applyPromoteCheck(s.mounted, md, x, y, true, true);
             }
           }
@@ -994,6 +1153,8 @@ window.ZS = window.ZS || {};
         saveVersion: 2,
         defenseTierV2: true,
         balanceV3: true,
+        divisionId: state.divisionId || 'mobile_corps',
+        divisionRank1Vouchers: state.divisionRank1Vouchers || {},
         wave: state.wave,
         hqLevel: state.hqLevel,
         bossDefeated: state.bossDefeated,
@@ -1078,6 +1239,15 @@ window.ZS = window.ZS || {};
       }
       state.terrainGrid = nextTerrainGrid;
 
+      state.divisionId = (d.divisionId && DATA.DIVISIONS && DATA.DIVISIONS[d.divisionId])
+        ? d.divisionId
+        : 'mobile_corps';
+      state.divisionRank1Vouchers = (d.divisionRank1Vouchers && typeof d.divisionRank1Vouchers === 'object')
+        ? { ...d.divisionRank1Vouchers }
+        : {};
+      const loadedDiv = getDivisionDef(state.divisionId);
+      state.skills.repairMaxCd = loadedDiv.repairMaxCd || 18;
+      state.skills.repairCd = Math.min(state.skills.repairCd || 0, state.skills.repairMaxCd);
       state.wave = d.wave || 1;
       state.hqLevel = Math.max(1, Math.min(4, d.hqLevel || 1));
       state.phase = 'day';
@@ -1264,12 +1434,28 @@ window.ZS = window.ZS || {};
     return state.terrainSeed;
   }
 
-  function clearSaveAndReset(seedOverride) {
+  function clearSaveAndReset(arg1, arg2) {
     try {
       localStorage.removeItem(getSaveKey());
     } catch (e) {}
-    initNewGame(seedOverride);
-    banner('새 전초기지 작전 개시', '방어선과 발전 설비를 구축하고 모던 쉘터를 꾸며보세요!', 'info');
+    initNewGame(arg1, arg2);
+    const div = getDivisionDef();
+    banner(
+      `[${div.name}] 새 전초기지 작전 개시`,
+      '방어선과 발전 설비를 구축하고 모던 쉘터를 꾸며보세요!',
+      'info'
+    );
+  }
+
+  function debugUnlockAllDivisions() {
+    if (!isDebugAllowed()) return false;
+    const divs = DATA.DIVISIONS || {};
+    const keys = Object.keys(divs);
+    for (let i = 0; i < keys.length; i++) {
+      unlockDivision(keys[i]);
+    }
+    notifyUi();
+    return true;
   }
 
   // ================= DEBUG / STAGING CHEAT ACTIONS (DOUBLE-GATED) =================
@@ -1342,6 +1528,9 @@ window.ZS = window.ZS || {};
     G.refreshTraderOffers(false);
     ZS.Audio.playBuild();
     banner(`[DEBUG] WAVE ${state.wave} 이동`, state.wave % 5 === 0 ? '보스 변이체 출현 웨이브입니다!' : '웨이브 번호가 즉시 변경되었습니다.', 'info');
+    if (state.wave >= 15 && unlockDivision('arc_tech')) {
+      banner('사령관 분과 영구 해금: 아크 테크놀로지', 'WAVE 15 도달 조건 달성! 새 작전에서 선택할 수 있습니다.', 'good');
+    }
     saveGame();
     notifyUi();
     return true;
@@ -1394,6 +1583,15 @@ window.ZS = window.ZS || {};
     toggleScreenShake,
     getEnvInfo,
     getSaveKey,
+    getMetaKey,
+    getDivisionDef,
+    getCommanderMeta,
+    isDivisionUnlocked,
+    unlockDivision,
+    setLastSelectedDivision,
+    recordDivisionProgress,
+    debugUnlockAllDivisions,
+    isArcOverdriveActive,
     setCallbacks,
     invalidateStatsCache,
     notifyUi,

@@ -410,6 +410,7 @@ window.ZS = window.ZS || {};
       }
 
       // 1. Night Power Generation & Idle Drain (Wind Continuous + REBOOT_POWER = 12 Hysteresis)
+      const prevArcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
       const REBOOT_POWER = 12;
       const windGen = state.nightGen || 0;
       if (!state.blackoutActive) {
@@ -426,6 +427,7 @@ window.ZS = window.ZS || {};
         if (state.power > 0 && state.power >= rebootTarget) {
           state.blackoutActive = false;
           if (G.invalidateStatsCache) G.invalidateStatsCache();
+          G.notifyCombatHud();
           G.banner('전력 복구 — 자동 방어 재가동!', `풍력 발전으로 전력 ${Math.floor(state.power)} 도달! 포탑과 투광등이 다시 가동됩니다.`, 'good');
         }
       }
@@ -464,6 +466,13 @@ window.ZS = window.ZS || {};
       updateDefenders(dt);
       updateBurstQueue(dt);
 
+      // Invalidate stats cache if ARC Overdrive (>=70% power) threshold was crossed this tick
+      const nextArcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
+      if (nextArcOverdrive !== prevArcOverdrive) {
+        if (G.invalidateStatsCache) G.invalidateStatsCache();
+        G.notifyCombatHud();
+      }
+
       // 5. Update Projectiles
       updateProjectiles(dt);
 
@@ -496,6 +505,7 @@ window.ZS = window.ZS || {};
     } else {
       state.blackoutFlickerTimer = 0.22;
     }
+    G.notifyCombatHud();
   }
 
   function triggerBlackout() {
@@ -990,7 +1000,11 @@ window.ZS = window.ZS || {};
 
   function triggerShockerEmp(cx, cy, radius, duration) {
     const rad = radius || 2.1;
-    const dur = duration || 3.0;
+    const rawDur = duration || 3.0;
+    const arcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const empMult = arcOverdrive && div && div.overdriveEmpDurationMult != null ? div.overdriveEmpDurationMult : 1.0;
+    const dur = +(rawDur * empMult).toFixed(3);
     state.projectiles.push({
       kind: 'emp_ring',
       x: cx,

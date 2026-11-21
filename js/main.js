@@ -41,13 +41,19 @@ window.ZS = window.ZS || {};
       const hqLv = Math.max(1, Math.min(4, Number(parsed.hqLevel) || 1));
       const phaseLabel = parsed.phase === 'night' ? '야간 방어' : '주간 정비';
       const wavePad = String(Math.floor(waveNum)).padStart(2, '0');
+      const divId = (parsed.divisionId && ZS.DATA.DIVISIONS && ZS.DATA.DIVISIONS[parsed.divisionId])
+        ? parsed.divisionId
+        : 'mobile_corps';
+      const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef(divId) : null;
+      const divLabel = divDef ? ` · ${divDef.name}` : '';
       return {
         wave: Math.floor(waveNum),
         wavePad,
         hqLevel: hqLv,
+        divisionId: divId,
         phase: parsed.phase || 'day',
         phaseLabel,
-        summaryText: `WAVE ${wavePad} · ${phaseLabel} · 본부 Lv.${hqLv}`
+        summaryText: `WAVE ${wavePad}${divLabel} · ${phaseLabel} · 본부 Lv.${hqLv}`
       };
     } catch (e) {
       return null;
@@ -57,6 +63,158 @@ window.ZS = window.ZS || {};
   function isConfirmModalOpen() {
     const modal = document.getElementById('confirm-modal');
     return !!(modal && !modal.classList.contains('hidden'));
+  }
+
+  function isDivisionModalOpen() {
+    const modal = document.getElementById('division-modal');
+    return !!(modal && !modal.classList.contains('hidden'));
+  }
+
+  function closeDivisionModal() {
+    const modal = document.getElementById('division-modal');
+    if (modal) modal.classList.add('hidden');
+    uiState.divisionModalOpen = false;
+  }
+
+  function getDivisionClassSuffix(divId) {
+    if (divId === 'iron_engineers') return 'iron';
+    if (divId === 'nightwatch') return 'nightwatch';
+    if (divId === 'arc_tech') return 'arc';
+    return 'mobile';
+  }
+
+  function renderDivisionModal(lockedNoticeDivId) {
+    const grid = document.getElementById('division-cards');
+    const summaryEl = document.getElementById('division-modal-summary');
+    const confirmBtn = document.getElementById('btn-division-confirm');
+    if (!grid) return;
+
+    const divs = ZS.DATA.DIVISIONS || {};
+    const order = ZS.DATA.DIVISION_ORDER || Object.keys(divs);
+    const meta = ZS.Game.getCommanderMeta ? ZS.Game.getCommanderMeta() : { divisions: {}, lastDivisionId: 'mobile_corps' };
+
+    if (!uiState.selectedDivisionId || !divs[uiState.selectedDivisionId] || !(ZS.Game.isDivisionUnlocked && ZS.Game.isDivisionUnlocked(uiState.selectedDivisionId))) {
+      const fallback = meta.lastDivisionId && ZS.Game.isDivisionUnlocked && ZS.Game.isDivisionUnlocked(meta.lastDivisionId)
+        ? meta.lastDivisionId
+        : 'mobile_corps';
+      uiState.selectedDivisionId = fallback;
+    }
+
+    grid.innerHTML = order
+      .map((divId) => {
+        const def = divs[divId];
+        if (!def) return '';
+        const rec = (meta.divisions && meta.divisions[divId]) || {};
+        const unlocked = ZS.Game.isDivisionUnlocked ? ZS.Game.isDivisionUnlocked(divId) : !!def.unlockedByDefault;
+        const selected = unlocked && uiState.selectedDivisionId === divId;
+        const bestWave = Math.max(0, Number(rec.bestWave) || 0);
+        const cleared = !!rec.cleared;
+        const clsSuffix = getDivisionClassSuffix(divId);
+
+        const statePill = unlocked
+          ? selected
+            ? `<span class="div-pill state-selected">선택됨</span>`
+            : `<span class="div-pill state-ready">출격 가능</span>`
+          : `<span class="div-pill state-locked">${ozIcon('state-lock', 12)}<span>미해금</span></span>`;
+
+        const bestPill = bestWave > 0
+          ? `<span class="div-pill meta-best">BEST W${String(bestWave).padStart(2, '0')}</span>`
+          : `<span class="div-pill meta-best">기록 없음</span>`;
+
+        const clearPill = cleared
+          ? `<span class="div-pill meta-clear">${ozIcon('state-rank', 12)}<span>CLEAR</span></span>`
+          : '';
+
+        const unlockHtml = !unlocked
+          ? `<div class="div-unlock-box">${ozIcon('state-lock', 14, 'icon-danger')}<span>해금 조건: ${escapeHtml(def.unlockHint || '특수 조건 달성')}</span></div>`
+          : '';
+
+        const prosHtml = (def.pros || [])
+          .map((line) => `<div class="div-trait pro"><span class="div-trait-sign">+</span><span>${escapeHtml(line)}</span></div>`)
+          .join('');
+        const consHtml = (def.cons || [])
+          .map((line) => `<div class="div-trait ${def.hasPenalty === false ? 'neutral' : 'con'}"><span class="div-trait-sign">${def.hasPenalty === false ? '·' : '-'}</span><span>${escapeHtml(line)}</span></div>`)
+          .join('');
+
+        return `
+          <button
+            type="button"
+            class="division-card div-${clsSuffix}${selected ? ' selected' : ''}${unlocked ? '' : ' locked'}"
+            data-division-id="${escapeHtml(divId)}"
+            role="radio"
+            aria-checked="${selected ? 'true' : 'false'}"
+            aria-disabled="${unlocked ? 'false' : 'true'}"
+          >
+            <div class="div-card-top">
+              <div class="div-card-head">
+                <span class="div-card-emblem">${ozIcon(def.iconId || 'div-mobile', 24)}</span>
+                <div class="div-card-titles">
+                  <div class="div-card-name">${escapeHtml(def.name)}</div>
+                  <div class="div-card-sub">${escapeHtml(def.subtitle || '')}</div>
+                </div>
+              </div>
+              <div class="div-card-badges">
+                ${statePill}
+                ${bestPill}
+                ${clearPill}
+              </div>
+              ${unlockHtml}
+            </div>
+            <div class="div-card-lists">
+              <div class="div-trait-list">${prosHtml}</div>
+              <div class="div-trait-list">${consHtml}</div>
+            </div>
+          </button>
+        `;
+      })
+      .join('');
+
+    grid.querySelectorAll('.division-card').forEach((cardBtn) => {
+      cardBtn.addEventListener('click', () => {
+        const divId = cardBtn.getAttribute('data-division-id');
+        if (!divId) return;
+        const ok = ZS.Game.isDivisionUnlocked ? ZS.Game.isDivisionUnlocked(divId) : false;
+        if (!ok) {
+          ZS.Audio.playError();
+          renderDivisionModal(divId);
+          return;
+        }
+        uiState.selectedDivisionId = divId;
+        renderDivisionModal();
+      });
+    });
+
+    const selDef = divs[uiState.selectedDivisionId] || divs.mobile_corps;
+    if (summaryEl) {
+      if (lockedNoticeDivId && divs[lockedNoticeDivId]) {
+        const lDef = divs[lockedNoticeDivId];
+        summaryEl.className = 'division-foot-summary warn';
+        summaryEl.innerHTML = `${ozIcon('state-lock', 16, 'icon-danger')}<span>[${escapeHtml(lDef.name)}] 미해금 — ${escapeHtml(lDef.unlockHint || '')}</span>`;
+      } else if (selDef) {
+        summaryEl.className = 'division-foot-summary';
+        summaryEl.innerHTML = `${ozIcon(selDef.iconId || 'div-mobile', 18, selDef.isElectricDivision ? 'icon-power' : 'icon-coin')}<span>선택 분과: <b>${escapeHtml(selDef.name)}</b> — ${escapeHtml(selDef.subtitle || '')}</span>`;
+      }
+    }
+    if (confirmBtn) {
+      confirmBtn.disabled = !(selDef && ZS.Game.isDivisionUnlocked && ZS.Game.isDivisionUnlocked(selDef.id));
+    }
+  }
+
+  function openDivisionModal() {
+    const modal = document.getElementById('division-modal');
+    if (!modal) {
+      executeStartNewOperation('mobile_corps');
+      return;
+    }
+    const meta = ZS.Game.getCommanderMeta ? ZS.Game.getCommanderMeta() : null;
+    if (meta && meta.lastDivisionId && ZS.Game.isDivisionUnlocked && ZS.Game.isDivisionUnlocked(meta.lastDivisionId)) {
+      uiState.selectedDivisionId = meta.lastDivisionId;
+    } else if (!uiState.selectedDivisionId || !(ZS.Game.isDivisionUnlocked && ZS.Game.isDivisionUnlocked(uiState.selectedDivisionId))) {
+      uiState.selectedDivisionId = 'mobile_corps';
+    }
+    renderDivisionModal();
+    uiState.divisionModalOpen = true;
+    modal.classList.remove('hidden');
   }
 
   function closeConfirmModal() {
@@ -189,15 +347,24 @@ window.ZS = window.ZS || {};
     if (ZS.Audio.playBuild) ZS.Audio.playBuild();
   }
 
-  function executeStartNewOperation() {
+  function executeStartNewOperation(divId) {
+    let chosenId = divId || uiState.selectedDivisionId || 'mobile_corps';
+    if (ZS.Game.isDivisionUnlocked && !ZS.Game.isDivisionUnlocked(chosenId)) {
+      chosenId = 'mobile_corps';
+    }
+    if (ZS.Game.setLastSelectedDivision) {
+      ZS.Game.setLastSelectedDivision(chosenId);
+    }
+    closeDivisionModal();
     closeConfirmModal();
     uiState.inspectedTile = null;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
     setMainMenuOpen(false);
-    ZS.Game.clearSaveAndReset();
+    ZS.Game.clearSaveAndReset(chosenId);
+    const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef(chosenId) : null;
     U.showWaveBanner(
-      'Dead-End Defense 지휘권 인수 완료',
+      `${divDef ? divDef.name : '전초기지'} 지휘권 인수 완료`,
       '낮 동안 방어선·발전기·모던 쉘터를 구축하고 [웨이브 시작]을 눌러 야간 방어에 돌입하세요!',
       'info'
     );
@@ -207,14 +374,14 @@ window.ZS = window.ZS || {};
   function beginNewOperationFlow() {
     const info = getSavedOperationInfo();
     if (!info) {
-      executeStartNewOperation();
+      openDivisionModal();
       return;
     }
     openConfirmModal({
       title: '새 작전 개시 확인',
       desc: `현재 진행 중인 작전(WAVE ${info.wavePad})을 초기화하고 WAVE 01부터 새 작전을 시작할까요?`,
-      acceptText: '새 작전 개시',
-      onAccept: executeStartNewOperation
+      acceptText: '분과 선택',
+      onAccept: openDivisionModal
     });
   }
 
@@ -224,6 +391,7 @@ window.ZS = window.ZS || {};
     if (st.phase !== 'gameover' && saveFn) {
       saveFn();
     }
+    closeDivisionModal();
     closeConfirmModal();
     document.getElementById('settings-popover')?.classList.add('hidden');
     const settingsBtn = document.getElementById('btn-settings');
@@ -325,7 +493,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
       if (e.button === 2 || e.button === 1 || (e.button === 0 && keys['Space'])) {
         isPanning = true;
         panStart.x = e.clientX;
@@ -353,7 +521,7 @@ window.ZS = window.ZS || {};
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen()) {
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) {
         uiState.pointerClient.inside = false;
         uiState.hoverTile = null;
         U.updateCursorTooltip();
@@ -392,7 +560,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener(
       'wheel',
       (e) => {
-        if (uiState.mainMenuOpen || isConfirmModalOpen()) return;
+        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.91;
         ZS.Iso.zoomAtScreen(factor, e.clientX, e.clientY);
@@ -445,6 +613,10 @@ window.ZS = window.ZS || {};
           closeConfirmModal();
           return;
         }
+        if (isDivisionModalOpen()) {
+          closeDivisionModal();
+          return;
+        }
         if (guideEl && !guideEl.classList.contains('hidden')) {
           guideEl.classList.add('hidden');
           return;
@@ -460,7 +632,7 @@ window.ZS = window.ZS || {};
         return;
       }
 
-      if (uiState.mainMenuOpen || isConfirmModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
 
       keys[e.code] = true;
       const activeTag = document.activeElement && document.activeElement.tagName;
@@ -655,9 +827,25 @@ window.ZS = window.ZS || {};
       openConfirmModal({
         title: '새 작전 초기화 확인',
         desc: `현재 진행 중인 기지(WAVE ${curWavePad})를 초기화하고 WAVE 01부터 새 작전을 시작할까요?`,
-        acceptText: '새 작전 개시',
-        onAccept: executeStartNewOperation
+        acceptText: '분과 선택',
+        onAccept: openDivisionModal
       });
+    });
+
+    // Commander Division Modal Controls (#66)
+    document.getElementById('btn-close-division')?.addEventListener('click', () => {
+      closeDivisionModal();
+    });
+    document.getElementById('btn-division-cancel')?.addEventListener('click', () => {
+      closeDivisionModal();
+    });
+    document.getElementById('btn-division-confirm')?.addEventListener('click', () => {
+      executeStartNewOperation(uiState.selectedDivisionId);
+    });
+    document.getElementById('division-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'division-modal') {
+        closeDivisionModal();
+      }
     });
 
     // Title Main Menu & Custom Confirm Modal Controls (#65)
@@ -864,6 +1052,10 @@ window.ZS = window.ZS || {};
     isConfirmModalOpen,
     openConfirmModal,
     closeConfirmModal,
+    isDivisionModalOpen,
+    renderDivisionModal,
+    openDivisionModal,
+    closeDivisionModal,
     setMenuOptionsOpen,
     syncSettingsButtons,
     refreshMainMenuState,
