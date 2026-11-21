@@ -256,6 +256,8 @@ window.ZS = window.ZS || {};
         chipHtml = `<span class="cost-chip b1-ap-cost">${ozIcon('b1-dig', 13, 'icon-ap')}<span>${rangeTxt}</span></span>`;
       } else if (t.id === 'b1_door') {
         chipHtml = `<span class="cost-chip free">${ozIcon('b1-door', 13, 'icon-ap')}<span>무료 연결</span></span>`;
+      } else if (t.id === 'b1_zone_corridor') {
+        chipHtml = `<span class="cost-chip free">${ozIcon('b1-corridor', 13, 'icon-ap')}<span>무료 통로</span></span>`;
       } else if (t.id === 'b1_unzone') {
         chipHtml = `<span class="cost-chip">${escapeHtml(t.costLabel)}</span>`;
       } else {
@@ -775,18 +777,25 @@ window.ZS = window.ZS || {};
             tipIconCls = check.alreadyExcavated ? 'icon-muted' : 'icon-danger';
           }
         } else if (uiState.mode === 'b1_zone') {
-          const rDef = ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(uiState.selectedB1Role) : null;
-          const rName = rDef ? rDef.name : '방 구역';
+          const isCorrRole = uiState.selectedB1Role === 'corridor';
+          const rDef = !isCorrRole && ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(uiState.selectedB1Role) : null;
+          const rName = isCorrRole ? '전술 복도' : (rDef ? rDef.name : '방 구역');
           if (cell && cell.excavated && !cell.permanentCorridor && !cell.elevator && !cell.bedrock) {
+            const hasG = !!(ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx]);
             if (cell.roomId != null && ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId)) {
               tipText = '가젯이 배치된 구역은 먼저 가젯을 제거해야 수정할 수 있습니다.';
               tipKind = 'err';
               tipIcon = 'state-lock';
               tipIconCls = 'icon-danger';
+            } else if (hasG) {
+              tipText = '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 변경하세요.';
+              tipKind = 'err';
+              tipIcon = 'state-lock';
+              tipIconCls = 'icon-danger';
             } else {
-              tipText = `드래그하여 [${rName}] 구역 지정`;
+              tipText = isCorrRole ? '드래그하여 [전술 복도] 시공 (승강기 통로)' : `드래그하여 [${rName}] 구역 지정`;
               tipKind = 'ok';
-              tipIcon = (rDef && rDef.iconId) || 'b1-zone';
+              tipIcon = isCorrRole ? 'b1-corridor' : ((rDef && rDef.iconId) || 'b1-zone');
               tipIconCls = 'icon-heal';
             }
           } else {
@@ -798,20 +807,28 @@ window.ZS = window.ZS || {};
             tipIconCls = 'icon-danger';
           }
         } else if (uiState.mode === 'b1_unzone') {
-          if (cell && cell.roomId != null) {
-            if (ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId)) {
+          const hasG = !!(ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx]);
+          if (cell && (cell.roomId != null || (cell.corridor && !cell.permanentCorridor))) {
+            if (cell.roomId != null && ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId)) {
               tipText = '가젯이 배치된 구역은 먼저 가젯을 제거해야 해제할 수 있습니다.';
               tipKind = 'err';
               tipIcon = 'state-lock';
               tipIconCls = 'icon-danger';
+            } else if (hasG) {
+              tipText = '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 해제하세요.';
+              tipKind = 'err';
+              tipIcon = 'state-lock';
+              tipIconCls = 'icon-danger';
             } else {
-              tipText = '드래그하여 구역 지정 해제 (일반 흙바닥 복원)';
+              tipText = cell.corridor && !cell.permanentCorridor
+                ? '드래그하여 전술 복도 해제 (일반 흙바닥 복원)'
+                : '드래그하여 구역 지정 해제 (일반 흙바닥 복원)';
               tipKind = 'info';
               tipIcon = 'b1-unzone';
               tipIconCls = 'icon-ap';
             }
           } else {
-            tipText = '해제할 지정 구역이 없는 타일입니다.';
+            tipText = '해제할 지정 구역이나 전술 복도가 없는 타일입니다.';
             tipKind = 'info';
             tipIcon = 'b1-unzone';
             tipIconCls = 'icon-muted';
@@ -823,7 +840,7 @@ window.ZS = window.ZS || {};
             tipIcon = 'b1-door';
             tipIconCls = 'icon-ap';
           } else {
-            tipText = '구역과 복도 또는 다른 구역 사이의 콘크리트 격벽을 클릭하세요.';
+            tipText = '전술 복도와 방 구역 사이의 콘크리트 격벽을 클릭하세요.';
             tipKind = 'info';
             tipIcon = 'b1-door';
             tipIconCls = 'icon-muted';
@@ -890,7 +907,7 @@ window.ZS = window.ZS || {};
             const def = ZS.DATA.ITEMS[g.id];
             const gStatus = ZS.Game.getB1GadgetStatus ? ZS.Game.getB1GadgetStatus(tx, ty) : null;
             const stText = !gStatus || !gStatus.connected
-              ? '출입문 미연결(휴면)'
+              ? '복도·출입문 미연결(휴면)'
               : gStatus.blackoutPaused
               ? '야간 정전(중단)'
               : gStatus.diminished
@@ -910,15 +927,21 @@ window.ZS = window.ZS || {};
             tipKind = 'info';
             tipIcon = 'b1-zone';
             tipIconCls = 'icon-ap';
+          } else if (cell.corridor) {
+            const isCorrConn = ZS.Game.isB1CorridorConnected ? ZS.Game.isB1CorridorConnected(tx, ty) : false;
+            tipText = `전술 복도 — ${isCorrConn ? '승강기 연결됨' : '승강기 미연결 (고립 복도)'}`;
+            tipKind = isCorrConn ? 'ok' : 'err';
+            tipIcon = 'b1-corridor';
+            tipIconCls = isCorrConn ? 'icon-heal' : 'icon-danger';
           } else if (cell.roomId != null && ug && ug.rooms[cell.roomId]) {
             const room = ug.rooms[cell.roomId];
             const rDef = ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(room.role) : null;
-            tipText = `${rDef ? rDef.name : room.role} (${room.tiles.length}칸) — ${room.connected ? '승강기 연결됨' : '출입문 미연결 (대기)'}`;
+            tipText = `${rDef ? rDef.name : room.role} (${room.tiles.length}칸) — ${room.connected ? '승강기 연결됨' : '복도·출입문 미연결 (대기)'}`;
             tipKind = room.connected ? 'ok' : 'err';
             tipIcon = (rDef && rDef.iconId) || 'b1-zone';
             tipIconCls = room.connected ? 'icon-heal' : 'icon-danger';
           } else if (cell.excavated) {
-            tipText = `굴착된 흙바닥 (${tx}, ${ty}) — 구역 지정 또는 복도 통행`;
+            tipText = `굴착된 흙바닥 — 미시공 터널 ([전술 복도] 또는 [방 구역] 지정 필요)`;
             tipKind = 'info';
             tipIcon = 'b1-zone';
             tipIconCls = 'icon-muted';
@@ -1377,10 +1400,10 @@ window.ZS = window.ZS || {};
     if (!cell) return;
 
     if (cell.elevator) {
-      const sum = ZS.Game.getB1Summary ? ZS.Game.getB1Summary() : { excavatedCount: 0, roomCount: 0, connectedRooms: 0 };
+      const sum = ZS.Game.getB1Summary ? ZS.Game.getB1Summary() : { excavatedCount: 0, corridorCount: 0, roomCount: 0, connectedRooms: 0 };
       const exitBtnHtml = `<button id="btn-exit-b1" class="detail-upgrade-btn b1-action-btn">${ozIcon('b1-elevator', 15, 'icon-ap')}<span>지상 본부로 복귀</span></button>`;
       setDetailHtml(
-        `${ozIcon('b1-elevator', 14, 'icon-ap')} <b>[지하 본부 화물 승강기 (11, 11)]</b> 보유 굴착력 ${Math.floor(st.digAp || 0)}/${st.digApCap || 24} AP · 굴착 ${sum.excavatedCount}칸 · 연결된 구역 ${sum.connectedRooms}/${sum.roomCount}`,
+        `${ozIcon('b1-elevator', 14, 'icon-ap')} <b>[지하 본부 화물 승강기 (11, 11)]</b> 보유 굴착력 ${Math.floor(st.digAp || 0)}/${st.digApCap || 24} AP · 굴착 ${sum.excavatedCount}칸 · 복도 ${sum.corridorCount || 0}칸 · 연결된 구역 ${sum.connectedRooms}/${sum.roomCount}`,
         exitBtnHtml
       );
       document.getElementById('btn-exit-b1')?.addEventListener('click', () => {
@@ -1398,7 +1421,7 @@ window.ZS = window.ZS || {};
       const roleTitle = rDef ? `${rDef.name} #${room.id}` : '지하 공용 공간';
       let statusHtml = `<span class="cost-chip free">활성 작동 중</span>`;
       if (status && !status.connected) {
-        statusHtml = `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>승강기 미연결 — 휴면</span></span>`;
+        statusHtml = `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>복도·출입문 미연결 — 대기</span></span>`;
       } else if (status && status.blackoutPaused) {
         statusHtml = `<span class="cost-chip short">${ozIcon('res-power', 13, 'icon-danger')}<span>야간 정전 — 가동 중단</span></span>`;
       } else if (status && status.diminished) {
@@ -1431,7 +1454,19 @@ window.ZS = window.ZS || {};
 
     if (cell.permanentCorridor) {
       setDetailHtml(
-        `${ozIcon('b1-zone', 14, 'icon-ap')} <b>[승강기 홀 공용 복도 (${tx}, ${ty})]</b> 영구 강철 그레이트 공용 복도입니다. 이 복도에서 방폭문으로 이어진 구역만 활성화됩니다.`
+        `${ozIcon('b1-zone', 14, 'icon-ap')} <b>[승강기 홀 공용 복도 (${tx}, ${ty})]</b> 영구 강철 그레이트 공용 복도입니다. 이 복도와 [전술 복도]·[방폭문]으로 이어진 방만 활성화됩니다.`
+      );
+      return;
+    }
+
+    if (cell.corridor) {
+      const isCorrConn = ZS.Game.isB1CorridorConnected ? ZS.Game.isB1CorridorConnected(tx, ty) : false;
+      const corrBadge = isCorrConn
+        ? `<span class="cost-chip free">승강기 복도 연결됨</span>`
+        : `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>승강기 미연결 — 고립 복도</span></span>`;
+      setDetailHtml(
+        `${ozIcon('b1-corridor', 14, isCorrConn ? 'icon-ap' : 'icon-danger')} <b>[전술 복도 (${tx}, ${ty})]</b> 강철 그레이트 복도입니다. 승강기 홀까지 끊김 없이 이어지고 방 경계에 [방폭문]을 달면 방이 활성화됩니다.`,
+        corrBadge
       );
       return;
     }
@@ -1442,7 +1477,7 @@ window.ZS = window.ZS || {};
       const gTiles = ZS.Game.getB1RoomGadgetTiles ? ZS.Game.getB1RoomGadgetTiles(room.id) : [];
       const statusBadge = room.connected
         ? `<span class="cost-chip free">승강기 연결 활성</span>`
-        : `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>출입문 미연결 — 대기</span></span>`;
+        : `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>복도·출입문 미연결 — 대기</span></span>`;
       const lockTxt = gTiles.length > 0 ? ` · 배치 가젯 ${gTiles.length}개(수정 잠금)` : '';
       setDetailHtml(
         `${ozIcon((rDef && rDef.iconId) || 'b1-zone', 14)} <b>[${escapeHtml((rDef && rDef.name) || room.role)} #${room.id}]</b> ${room.tiles.length}칸${lockTxt} — ${escapeHtml((rDef && rDef.desc) || '')}`,
@@ -1453,7 +1488,7 @@ window.ZS = window.ZS || {};
 
     if (cell.excavated) {
       setDetailHtml(
-        `${ozIcon('b1-zone', 14)} <b>[굴착된 흙바닥 (${tx}, ${ty})]</b> 자유 통행 복도입니다. 구역 지정 도구로 방을 구획해 콘크리트 바닥과 격벽을 생성할 수 있습니다.`
+        `${ozIcon('b1-zone', 14)} <b>[굴착된 흙바닥 (${tx}, ${ty})]</b> 미시공 터널입니다. [전술 복도]를 시공하고 [방폭문]을 달아야 방이 승강기와 연결됩니다.`
       );
       return;
     }
