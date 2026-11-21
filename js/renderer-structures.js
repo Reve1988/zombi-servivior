@@ -1246,7 +1246,7 @@ window.ZS = window.ZS || {};
 
   function drawHqContactShadow(ctx, tx, ty, lv, isSil, zScale) {
     if (isSil) return;
-    const pad = lv === 1 ? 0.08 : lv === 2 ? 0.06 : lv === 3 ? 0.05 : 0.04;
+    const pad = lv === 1 ? 0.08 : lv === 2 ? 0.06 : lv === 3 ? 0.05 : lv === 4 ? 0.04 : 0.03;
     drawIsoFootprintAO(ctx, tx + pad, ty + pad, 1.0 - pad * 2, 1.0 - pad * 2, 0.25, zScale);
   }
 
@@ -2342,8 +2342,8 @@ window.ZS = window.ZS || {};
       const aim = st.aimAngle != null ? st.aimAngle : 0.8;
 
       if (id === 'command_hq') {
-        const hqLv = Math.max(1, Math.min(4, st.level || state.hqLevel || 1));
-        const hqTopZ = [38, 34, 42, 52][hqLv - 1];
+        const hqLv = Math.max(1, Math.min(5, st.level || state.hqLevel || 1));
+        const hqTopZ = [38, 34, 42, 52, 60][hqLv - 1];
         const stamp = ensureStructureStamp(`hq|${hqLv}|${tintBucket}`, hqTopZ, tintBucket, isSil, (sctx) => {
           drawHqContactShadow(sctx, 0, 0, hqLv, isSil, 1.0);
           drawHqStaticBody(sctx, 0, 0, 0.5, hqLv, P, 1.0);
@@ -2580,7 +2580,7 @@ window.ZS = window.ZS || {};
 
     // Soft ground shadow (live fallback / HQ / animating / flashing / preview)
     if (id === 'command_hq') {
-      drawHqContactShadow(ctx, tx, ty, Math.max(1, Math.min(4, st.level || state.hqLevel || 1)), isSil, zScale);
+      drawHqContactShadow(ctx, tx, ty, Math.max(1, Math.min(5, st.level || state.hqLevel || 1)), isSil, zScale);
     } else if (id === 'barricade_wall') {
       const wMask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
       drawWallContactShadow(ctx, tx, ty, wMask, lv, isSil, zScale);
@@ -2902,36 +2902,95 @@ window.ZS = window.ZS || {};
       return;
     }
 
-    // Lv.4 이지스 코어 사령부: Brilliant warm-gold core pad (0px cyan!) + chamfered fortress base (82%) + dual golden light bands + Aegis radome + twin cannon turret
-    R.drawGroundGlowPad(ctx, tx, ty, 0.92, goldHex, 1.25, zScale);
-    const bz = zb + 0.9;
+    if (lv === 4) {
+      // Lv.4 이지스 코어 사령부: Brilliant warm-gold core pad (0px cyan!) + chamfered fortress base (82%) + dual golden light bands + Aegis radome + twin cannon turret
+      R.drawGroundGlowPad(ctx, tx, ty, 0.92, goldHex, 1.25, zScale);
+      const bz = zb + 0.9;
 
-    R.drawDetailedFrustum(ctx, tx + 0.09, ty + 0.09, bz, 0.82, 0.82, 9.2, 0.065, '#333C48', { bevel: true, groundCrease: true }, zScale);
-    R.drawIsoHazardBand(ctx, tx + 0.115, ty + 0.115, bz + 2.4, 0.77, 0.77, 2.0, '#FFC94A', '#202730', 6, zScale);
-    const bastions = [[0.08, 0.08], [0.76, 0.08], [0.08, 0.76], [0.76, 0.76]];
-    for (let i = 0; i < bastions.length; i++) {
-      R.drawDetailedIsoBox(ctx, tx + bastions[i][0], ty + bastions[i][1], bz, 0.16, 0.16, 7.2, '#262E38', { bevel: true }, zScale);
-      R.drawIsoCornerRivets(ctx, tx + bastions[i][0], ty + bastions[i][1], bz + 7.2, 0.16, 0.16, 0.035, 0.75, '#FFC94A', zScale);
+      R.drawDetailedFrustum(ctx, tx + 0.09, ty + 0.09, bz, 0.82, 0.82, 9.2, 0.065, '#333C48', { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoHazardBand(ctx, tx + 0.115, ty + 0.115, bz + 2.4, 0.77, 0.77, 2.0, '#FFC94A', '#202730', 6, zScale);
+      const bastions = [[0.08, 0.08], [0.76, 0.08], [0.08, 0.76], [0.76, 0.76]];
+      for (let i = 0; i < bastions.length; i++) {
+        R.drawDetailedIsoBox(ctx, tx + bastions[i][0], ty + bastions[i][1], bz, 0.16, 0.16, 7.2, '#262E38', { bevel: true }, zScale);
+        R.drawIsoCornerRivets(ctx, tx + bastions[i][0], ty + bastions[i][1], bz + 7.2, 0.16, 0.16, 0.035, 0.75, '#FFC94A', zScale);
+      }
+
+      // Lower citadel core + radiant golden energy band 1
+      R.drawDetailedIsoBox(ctx, tx + 0.17, ty + 0.17, bz + 9.2, 0.66, 0.66, 15.8, slate, { bevel: true }, zScale);
+      R.drawIsoFaceSeams(ctx, 'left', tx + 0.17, ty + 0.17, bz + 9.8, 0.66, 0.66, 14.8, 4, 'rgba(10, 14, 20, 0.45)', zScale);
+      R.drawIsoFaceSeams(ctx, 'right', tx + 0.17, ty + 0.17, bz + 9.8, 0.66, 0.66, 14.8, 4, 'rgba(10, 14, 20, 0.45)', zScale);
+      R.drawIsoBox(ctx, tx + 0.164, ty + 0.164, bz + 17.2, 0.672, 0.672, 3.0, goldHex, { emissive: true, noTop: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.162, ty + 0.162, bz + 18.0, 0.676, 0.676, 1.4, warmCore, { emissive: true, noTop: true }, zScale);
+
+      // Upper Aegis command crown + golden core band 2
+      R.drawDetailedFrustum(ctx, tx + 0.24, ty + 0.24, bz + 25.0, 0.52, 0.52, 8.2, 0.03, '#DCE6F0', { bevel: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.252, ty + 0.252, bz + 28.8, 0.496, 0.496, 2.2, warmCore, { emissive: true, noTop: true }, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.25, ty + 0.25, bz + 33.2, 0.50, 0.50, 1.4, gunmetal, { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.25, ty + 0.25, bz + 34.6, 0.50, 0.50, 0.045, 0.9, '#FFC94A', zScale);
+
+      // Phased-array Aegis radome + twin comm whip antennas
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, bz + 34.6, 0.21, 2.2, '#455260', { n: 14 }, zScale);
+      R.drawDome(ctx, tx + 0.50, ty + 0.50, bz + 36.8, 0.19, 8.2, '#EEF4F9', { n: 16 }, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.30, ty + 0.30, bz + 34.6), Iso.gridToScreen(tx + 0.30, ty + 0.30, bz + 44.0), '#DCE5EE', 1.25, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.70, ty + 0.30, bz + 34.6), Iso.gridToScreen(tx + 0.70, ty + 0.30, bz + 42.5), '#DCE5EE', 1.25, true, zScale);
+      return;
     }
 
-    // Lower citadel core + radiant golden energy band 1
-    R.drawDetailedIsoBox(ctx, tx + 0.17, ty + 0.17, bz + 9.2, 0.66, 0.66, 15.8, slate, { bevel: true }, zScale);
-    R.drawIsoFaceSeams(ctx, 'left', tx + 0.17, ty + 0.17, bz + 9.8, 0.66, 0.66, 14.8, 4, 'rgba(10, 14, 20, 0.45)', zScale);
-    R.drawIsoFaceSeams(ctx, 'right', tx + 0.17, ty + 0.17, bz + 9.8, 0.66, 0.66, 14.8, 4, 'rgba(10, 14, 20, 0.45)', zScale);
-    R.drawIsoBox(ctx, tx + 0.164, ty + 0.164, bz + 17.2, 0.672, 0.672, 3.0, goldHex, { emissive: true, noTop: true }, zScale);
-    R.drawIsoBox(ctx, tx + 0.162, ty + 0.162, bz + 18.0, 0.676, 0.676, 1.4, warmCore, { emissive: true, noTop: true }, zScale);
+    // Lv.5 오메가 시타델 사령부: Layered citadel armor plinth, angled corner buttresses, warm command slit windows, twin cyan rail-capacitor coils (Omega Railgun)
+    const pwrCyan = P.power || '#5EF2FF';
+    R.drawGroundGlowPad(ctx, tx, ty, 0.95, goldHex, 1.38, zScale);
+    const bz = zb + 0.9;
 
-    // Upper Aegis command crown + golden core band 2
-    R.drawDetailedFrustum(ctx, tx + 0.24, ty + 0.24, bz + 25.0, 0.52, 0.52, 8.2, 0.03, '#DCE6F0', { bevel: true }, zScale);
-    R.drawIsoBox(ctx, tx + 0.252, ty + 0.252, bz + 28.8, 0.496, 0.496, 2.2, warmCore, { emissive: true, noTop: true }, zScale);
-    R.drawDetailedIsoBox(ctx, tx + 0.25, ty + 0.25, bz + 33.2, 0.50, 0.50, 1.4, gunmetal, { bevel: true }, zScale);
-    R.drawIsoCornerRivets(ctx, tx + 0.25, ty + 0.25, bz + 34.6, 0.50, 0.50, 0.045, 0.9, '#FFC94A', zScale);
+    // 1. Layered citadel armor plinth (2-step frustum + hazard band)
+    R.drawDetailedFrustum(ctx, tx + 0.07, ty + 0.07, bz, 0.86, 0.86, 6.2, 0.055, '#262E38', { bevel: true, groundCrease: true }, zScale);
+    R.drawIsoHazardBand(ctx, tx + 0.095, ty + 0.095, bz + 1.8, 0.81, 0.81, 1.8, '#FFC94A', '#1B2430', 6, zScale);
+    R.drawDetailedFrustum(ctx, tx + 0.11, ty + 0.11, bz + 6.2, 0.78, 0.78, 4.8, 0.045, '#374250', { bevel: true }, zScale);
 
-    // Phased-array Aegis radome + twin comm whip antennas
-    R.drawCyl(ctx, tx + 0.50, ty + 0.50, bz + 34.6, 0.21, 2.2, '#455260', { n: 14 }, zScale);
-    R.drawDome(ctx, tx + 0.50, ty + 0.50, bz + 36.8, 0.19, 8.2, '#EEF4F9', { n: 16 }, zScale);
-    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.30, ty + 0.30, bz + 34.6), Iso.gridToScreen(tx + 0.30, ty + 0.30, bz + 44.0), '#DCE5EE', 1.25, true, zScale);
-    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.70, ty + 0.30, bz + 34.6), Iso.gridToScreen(tx + 0.70, ty + 0.30, bz + 42.5), '#DCE5EE', 1.25, true, zScale);
+    // 2. Angled corner buttresses (4 fortified piers + sloped armored caps)
+    const omegaButtresses = [[0.06, 0.06], [0.77, 0.06], [0.06, 0.77], [0.77, 0.77]];
+    for (let i = 0; i < omegaButtresses.length; i++) {
+      const bx = tx + omegaButtresses[i][0];
+      const by = ty + omegaButtresses[i][1];
+      R.drawDetailedIsoBox(ctx, bx, by, bz, 0.17, 0.17, 8.6, '#232B35', { bevel: true }, zScale);
+      R.drawDetailedFrustum(ctx, bx + 0.01, by + 0.01, bz + 8.6, 0.15, 0.15, 3.8, 0.04, '#465260', { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, bx + 0.01, by + 0.01, bz + 12.4, 0.15, 0.15, 0.032, 0.75, '#FFC94A', zScale);
+    }
+
+    // 3. Main citadel core + warm command slit windows & golden waist core
+    R.drawDetailedIsoBox(ctx, tx + 0.17, ty + 0.17, bz + 11.0, 0.66, 0.66, 17.4, '#4C5868', { bevel: true }, zScale);
+    R.drawIsoFaceSeams(ctx, 'left', tx + 0.17, ty + 0.17, bz + 11.6, 0.66, 0.66, 16.2, 4, 'rgba(10, 14, 20, 0.45)', zScale);
+    R.drawIsoFaceSeams(ctx, 'right', tx + 0.17, ty + 0.17, bz + 11.6, 0.66, 0.66, 16.2, 4, 'rgba(10, 14, 20, 0.45)', zScale);
+    // Warm amber citadel command slit windows (left & right faces)
+    R.drawIsoBox(ctx, tx + 0.24, ty + 0.832, bz + 14.0, 0.50, 0.015, 2.2, amberLight, { emissive: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.832, ty + 0.24, bz + 14.0, 0.015, 0.44, 2.2, amberLight, { emissive: true }, zScale);
+    // Golden command waist core band
+    R.drawIsoBox(ctx, tx + 0.164, ty + 0.164, bz + 19.6, 0.672, 0.672, 2.8, goldHex, { emissive: true, noTop: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.162, ty + 0.162, bz + 20.3, 0.676, 0.676, 1.3, warmCore, { emissive: true, noTop: true }, zScale);
+
+    // 4. Upper Omega command crown + warm bridge slit windows + heavy armor collar
+    R.drawDetailedFrustum(ctx, tx + 0.24, ty + 0.24, bz + 28.4, 0.52, 0.52, 10.0, 0.03, '#DCE6F0', { bevel: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.28, ty + 0.762, bz + 32.0, 0.42, 0.015, 2.3, warmCore, { emissive: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.762, ty + 0.28, bz + 32.0, 0.015, 0.38, 2.3, amberLight, { emissive: true }, zScale);
+    R.drawDetailedIsoBox(ctx, tx + 0.23, ty + 0.23, bz + 38.4, 0.54, 0.54, 1.8, gunmetal, { bevel: true }, zScale);
+    R.drawIsoCornerRivets(ctx, tx + 0.23, ty + 0.23, bz + 40.2, 0.54, 0.54, 0.045, 0.9, '#FFC94A', zScale);
+
+    // 5. Twin cyan rail-capacitor coils (Omega Railgun power bank)
+    const coils = [[0.23, 0.69], [0.69, 0.23]];
+    for (let i = 0; i < coils.length; i++) {
+      const cx = tx + coils[i][0];
+      const cy = ty + coils[i][1];
+      R.drawCyl(ctx, cx, cy, bz + 29.0, 0.085, 11.4, '#2B333D', { n: 10 }, zScale);
+      R.drawCyl(ctx, cx, cy, bz + 32.8, 0.095, 1.6, pwrCyan, { emissive: true, n: 10 }, zScale);
+      R.drawCyl(ctx, cx, cy, bz + 36.8, 0.095, 1.6, pwrCyan, { emissive: true, n: 10 }, zScale);
+      R.drawCyl(ctx, cx, cy, bz + 40.4, 0.070, 1.8, '#DCE6F0', { n: 10 }, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(cx, cy, bz + 42.6), 1.7, pwrCyan, true, zScale);
+    }
+
+    // 6. Central Omega railgun turret ring & armored dome cap
+    R.drawCyl(ctx, tx + 0.50, ty + 0.50, bz + 40.2, 0.22, 3.6, '#3B4552', { n: 14 }, zScale);
+    R.drawDome(ctx, tx + 0.50, ty + 0.50, bz + 43.8, 0.19, 6.2, '#E6EEF6', { n: 16 }, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.34, ty + 0.34, bz + 40.2), Iso.gridToScreen(tx + 0.34, ty + 0.34, bz + 50.8), '#DCE5EE', 1.35, true, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.66, ty + 0.34, bz + 40.2), Iso.gridToScreen(tx + 0.66, ty + 0.34, bz + 49.0), '#DCE5EE', 1.35, true, zScale);
   }
 
   function drawHqDynamicOverlay(ctx, tx, ty, zb, lv, aim, timeSec, P, zScale) {
@@ -2974,15 +3033,26 @@ window.ZS = window.ZS || {};
       return;
     }
 
-    // Lv.4 Aegis twin heavy cannon barrels + pulsing golden apex core beacon
-    drawHqRoofBarrels(ctx, tx + 0.50, ty + 0.50, bz + 39.8, aim, 0.48, 2, 3.3, '#1F242B', zScale);
-    const pulseR = 2.6 + 0.55 * Math.sin(timeSec * 5.5);
-    R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, bz + 46.2), pulseR, warmCore, true, zScale);
+    if (lv === 4) {
+      // Lv.4 Aegis twin heavy cannon barrels + pulsing golden apex core beacon
+      drawHqRoofBarrels(ctx, tx + 0.50, ty + 0.50, bz + 39.8, aim, 0.48, 2, 3.3, '#1F242B', zScale);
+      const pulseR = 2.6 + 0.55 * Math.sin(timeSec * 5.5);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, bz + 46.2), pulseR, warmCore, true, zScale);
+      return;
+    }
+
+    // Lv.5 Omega rotating twin rail-plasma turret + glowing cyan apex capacitor beacon
+    const pwrCyan = P.power || '#5EF2FF';
+    drawHqRoofBarrels(ctx, tx + 0.50, ty + 0.50, bz + 46.0, aim, 0.56, 2, 3.5, '#1F242B', zScale);
+    drawHqRoofBarrels(ctx, tx + 0.50, ty + 0.50, bz + 46.0, aim, 0.53, 2, 1.35, pwrCyan, zScale);
+    const pulseR = 2.8 + 0.6 * Math.sin(timeSec * 6.0);
+    R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, bz + 53.6), pulseR, pwrCyan, true, zScale);
+    R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, bz + 53.6), 1.4, '#FFFFFF', true, zScale);
   }
 
   function drawHqByLevel(ctx, st, tx, ty, state, timeSec, zScale) {
     const P = ZS.DATA.PALETTE;
-    const lv = Math.max(1, Math.min(4, st.level || state.hqLevel || 1));
+    const lv = Math.max(1, Math.min(5, st.level || state.hqLevel || 1));
     const aim = st.aimAngle != null ? st.aimAngle : 0.8;
 
     // 1.2s Upgrade rise-up animation: dust (1.2->0.8), rise-up ease-out (0.8->0.3), turret mount flash (0.3->0.15)
