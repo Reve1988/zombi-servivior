@@ -151,7 +151,26 @@ ZS.DATA = (function () {
     milSolarGrid: '#89A1B8',
     milSolarGlint: '#B8D0E6',
     hqAmberCore: '#FFF3D6',
-    hqGoldTrim: '#E2A83B'
+    hqGoldTrim: '#E2A83B',
+
+    // 8. Procedural Terrain Tokens (#67 — zero #5EF2FF cyan!)
+    rockBase: '#5B646F',
+    rockDark: '#3D444D',
+    rockMoss: '#5D7455',
+    rockPeakBase: '#4B525B',
+    rockPeakDark: '#2F353D',
+    rockPeakCap: '#6E7680',
+    plateauCliffSlate: '#424A56',
+    plateauCliffOchre: '#8E6A42',
+    plateauCliffSoil: '#473628',
+    plateauTopA: '#5D775A',
+    plateauTopB: '#577054',
+    plateauRimSoft: 'rgba(176, 196, 152, 0.28)',
+    rampStone: '#7E786C',
+    rampCurb: '#535B65',
+    rampEarth: '#6B665D',
+    rampEarthDark: '#534E46',
+    rampFlagstone: '#7E786E'
   };
 
   const WALL_TIERS = {
@@ -161,10 +180,10 @@ ZS.DATA = (function () {
   };
 
   const SOLAR_TIERS = {
-    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 38, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
-    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 75, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
-    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 135, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
-    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 220, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
+    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 28, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
+    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 56, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
+    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 100, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
+    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 165, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
   };
 
   const WIND_TIERS = {
@@ -175,10 +194,10 @@ ZS.DATA = (function () {
   };
 
   const BATTERY_TIERS = {
-    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 70, dayCharge: 6, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
-    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 155, dayCharge: 14, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
-    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 290, dayCharge: 26, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
-    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 480, dayCharge: 42, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
+    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 60, dayCharge: 4, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
+    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 135, dayCharge: 10, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
+    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 250, dayCharge: 18, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
+    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 410, dayCharge: 30, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
   };
 
   const BARRACKS_TIERS = {
@@ -218,23 +237,82 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.6.0',
-  GRID_SIZE: 22,
-  HQ_POS: { x: 10, y: 10 },
+  VERSION: 'v0.7.0',
+  GRID_SIZE: 26,
+  HQ_POS: { x: 13, y: 13 },
+  PLATEAU_ELEV_Z: 10,
+  RAMP_ELEV_Z: 5,
+  ROCK_TOP_Z: 16,
+  ROCK_PEAK_TOP_Z: 33,
+  WIND_ZONE: {
+    outerMult: 1.40,
+    coreMult: 1.70,
+    minTiles: 10,
+    maxTiles: 16
+  },
+  PLATEAU_BONUS: {
+    rangeAdd: 1.0,
+    mountCap: 1.25,
+    critAdd: 0.08,
+    lightAdd: 1.0,
+    auraAdd: 0.5
+  },
+  RAMP_SPEED: {
+    uphill: 0.70,
+    downhill: 1.25
+  },
+  TERRAIN_TYPES: {
+    rock: {
+      id: 'rock',
+      name: '기슭 암석 (바위)',
+      elev: 0,
+      topZ: 16,
+      desc: '이동 및 건설 불가. 직사·곡사 탄환은 상공으로 통과하며 인접 성벽·게이트와 자동 연결됩니다.'
+    },
+    rock_peak: {
+      id: 'rock_peak',
+      name: '산맥 주봉',
+      elev: 0,
+      topZ: 33,
+      desc: '높게 솟은 산맥 봉우리. 이동·건설 및 직사 탄환·산성 침을 가로막지만, 다연장 로켓 포대·EMP·폭격은 산 너머로 통과합니다.'
+    },
+    plateau: {
+      id: 'plateau',
+      name: '고지대 암반',
+      elev: 10,
+      desc: '고도 +10. 초소·포탑 사거리 +1.0(성벽 거치 합산 최대 +1.25)·치명 +8%p, 조명 반경 +1.0·오라 +0.5.'
+    },
+    ramp: {
+      id: 'ramp',
+      name: '경사 언덕',
+      elev: 5,
+      desc: '고지대 연결 경사로. 오르막 이속 -30%·내리막 +25%. 스파이크 트랩만 설치 가능.'
+    },
+    wind: {
+      id: 'wind',
+      name: '강풍 지대',
+      elev: 0,
+      tiers: {
+        1: { name: '강풍 지대 (+40%)', mult: 1.40 },
+        2: { name: '돌풍 핵심 지대 (+70%)', mult: 1.70 }
+      },
+      desc: '산맥 기슭을 따라 형성되는 자연 바람길입니다. 평소에는 보이지 않으며 [강풍 레이어 V]를 켜서 위치를 확인할 수 있습니다. 풍력 터빈 설치 시 주·야간 발전량이 +40%(주변부) / +70%(중심부) 증가합니다.'
+    }
+  },
   PALETTE,
 
   INITIAL_RESOURCES: {
-    wood: 150,
-    scrap: 130,
-    coin: 95
+    wood: 100,
+    scrap: 95,
+    coin: 60
   },
 
   HQ_STATS: {
     id: 'command_hq',
     name: '전술 지휘 본부',
     maxHp: 800,
-    basePowerCap: 85,
-    baseDayCharge: 42,
+    basePowerCap: 70,
+    baseDayCharge: 32,
     basePopCap: 2,
     startingAgents: 2
   },
@@ -245,8 +323,8 @@ ZS.DATA = (function () {
       name: '임시 지휘소',
       cost: null,
       maxHp: 800,
-      basePowerCap: 85,
-      baseDayCharge: 42,
+      basePowerCap: 70,
+      baseDayCharge: 32,
       basePopCap: 2,
       structUpgradeCap: 1,
       maxZ: 36,
@@ -258,8 +336,8 @@ ZS.DATA = (function () {
       name: '전술 작전 본부',
       cost: { wood: 90, scrap: 70, coin: 45 },
       maxHp: 1150,
-      basePowerCap: 115,
-      baseDayCharge: 55,
+      basePowerCap: 95,
+      baseDayCharge: 42,
       basePopCap: 3,
       structUpgradeCap: 2,
       maxZ: 30,
@@ -281,8 +359,8 @@ ZS.DATA = (function () {
       name: '통합 요새 사령부',
       cost: { wood: 170, scrap: 140, coin: 95 },
       maxHp: 1600,
-      basePowerCap: 150,
-      baseDayCharge: 72,
+      basePowerCap: 125,
+      baseDayCharge: 55,
       basePopCap: 4,
       structUpgradeCap: 3,
       maxZ: 38,
@@ -304,8 +382,8 @@ ZS.DATA = (function () {
       name: '이지스 코어 사령부',
       cost: { wood: 280, scrap: 240, coin: 170 },
       maxHp: 2200,
-      basePowerCap: 200,
-      baseDayCharge: 95,
+      basePowerCap: 165,
+      baseDayCharge: 72,
       basePopCap: 5,
       structUpgradeCap: 3,
       maxZ: 48,
@@ -325,14 +403,14 @@ ZS.DATA = (function () {
   ],
 
   COZY_TIERS: [
-    { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.10 },
-    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.08, xpBonus: 0.10, freeRepair: 0.18 },
-    { level: 3, min: 65,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.26 },
-    { level: 4, min: 130, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.34 },
-    { level: 5, min: 225, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.42 },
-    { level: 6, min: 340, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.50 },
-    { level: 7, min: 480, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.58 },
-    { level: 8, min: 640, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.65 }
+    { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.06 },
+    { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.08, xpBonus: 0.10, freeRepair: 0.12 },
+    { level: 3, min: 65,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.18 },
+    { level: 4, min: 130, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.24 },
+    { level: 5, min: 225, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.30 },
+    { level: 6, min: 340, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.36 },
+    { level: 7, min: 480, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.42 },
+    { level: 8, min: 640, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.48 }
   ],
 
   COZY_FLOOR_CAP: 60,
@@ -357,8 +435,8 @@ ZS.DATA = (function () {
     rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
-    vulcan_turret: '초전도 급탄 (사격 전력 0.24 절감 · 치명타 +12%p)',
-    missile_pod: '고폭 확산탄 (폭발 반경 1.75 확대)',
+    vulcan_turret: '초전도 급탄 (사격 전력 0.28 절감 · 치명타 +12%p)',
+    missile_pod: '6연장 융단 포격 (1회 6발 연속 포격 · 광역 제압)',
     emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
 
@@ -540,8 +618,8 @@ ZS.DATA = (function () {
       reqHqLevel: 2,
       cost: { wood: 8, scrap: 36 },
       requiresPower: true,
-      powerIdle: 0.55,
-      powerShot: 0.38,
+      powerIdle: 0.70,
+      powerShot: 0.44,
       maxHp: 240,
       range: 4.6,
       damage: 13,
@@ -553,22 +631,25 @@ ZS.DATA = (function () {
     },
     missile_pod: {
       id: 'missile_pod',
-      name: '다연장 유탄 포드',
+      name: '다연장 로켓 포대',
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
       reqHqLevel: 3,
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
-      powerIdle: 0.85,
-      powerShot: 1.9,
+      powerIdle: 1.05,
+      powerShot: 2.4,
       maxHp: 260,
-      range: 5.5,
-      damage: 48,
-      splashRadius: 1.35,
-      fireRate: 0.78,
-      projType: 'missile',
-      desc: '[전력 소모] 몰려오는 좀비 무리에 고폭 마이크로 유탄을 발사해 광역 피해를 입힙니다.'
+      minRange: 2.2,
+      range: 8.0,
+      damage: 24,
+      salvoCount: 2,
+      salvoScatter: 0.25,
+      splashRadius: 1.20,
+      fireRate: 0.48,
+      projType: 'rocket',
+      desc: '[전력 소모 · 다연장 곡사] 산맥 너머 적군에 고각 로켓을 연속 일제 발사(2→3→6발)해 광역 제압합니다. (최소 사거리 2.2 · 정전 시 정지)'
     },
     emp_coil: {
       id: 'emp_coil',
@@ -579,8 +660,8 @@ ZS.DATA = (function () {
       reqHqLevel: 4,
       cost: { wood: 10, scrap: 52, coin: 15 },
       requiresPower: true,
-      powerIdle: 1.0,
-      powerShot: 2.3,
+      powerIdle: 1.25,
+      powerShot: 2.7,
       maxHp: 235,
       range: 3.8,
       damage: 30,
@@ -601,12 +682,12 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 10, scrap: 20 },
       maxHp: 135,
-      dayCharge: 38,
+      dayCharge: 28,
       nightGen: 0,
       powerCap: 15,
       cozy: 1,
       cozyGroup: 'solar_t1',
-      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+220)까지 진화합니다.'
+      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+165)까지 진화합니다.'
     },
     wind_turbine: {
       id: 'wind_turbine',
@@ -622,7 +703,7 @@ ZS.DATA = (function () {
       powerCap: 10,
       cozy: 1,
       cozyGroup: 'wind_t1',
-      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다.'
+      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다. [강풍 레이어 V]로 산맥 주변의 강풍(+40%)·돌풍(+70%) 지대를 찾아 배치할 수 있습니다.'
     },
     battery_bank: {
       id: 'battery_bank',
@@ -633,12 +714,12 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 6, scrap: 18 },
       maxHp: 165,
-      dayCharge: 6,
+      dayCharge: 4,
       nightGen: 0,
-      powerCap: 70,
+      powerCap: 60,
       cozy: 1,
       cozyGroup: 'battery_t1',
-      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+480)까지 진화합니다.'
+      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+410)까지 진화합니다.'
     },
     field_tent: {
       id: 'field_tent',
@@ -697,7 +778,7 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 6, scrap: 16 },
       requiresPower: true,
-      powerIdle: 0.4,
+      powerIdle: 0.55,
       maxHp: 140,
       cozy: 7,
       cozyGroup: 'decor_flood',
@@ -792,7 +873,7 @@ ZS.DATA = (function () {
     walker: {
       id: 'walker',
       name: '감염 보행자',
-      hp: 58,
+      hp: 64,
       speed: 1.05,
       damage: 14,
       attackRate: 1.0,
@@ -823,7 +904,7 @@ ZS.DATA = (function () {
     brute: {
       id: 'brute',
       name: '방탄복 저거너트',
-      hp: 215,
+      hp: 245,
       speed: 0.68,
       damage: 34,
       attackRate: 0.85,
@@ -899,9 +980,9 @@ ZS.DATA = (function () {
     boss: {
       id: 'boss',
       name: '알파 타이탄 변이체',
-      hp: 860,
-      speed: 0.56,
-      damage: 58,
+      hp: 1180,
+      speed: 0.64,
+      damage: 68,
       attackRate: 0.8,
       woodDrop: [10, 16],
       scrapDrop: [30, 42],
@@ -1026,6 +1107,120 @@ ZS.DATA = (function () {
       coinPerWave: 4,
       desc: '다음 1회 야간 웨이브 동안 모든 성벽·게이트·전초기지 피격 피해 -20% 및 근접 반사 +15%p (새벽 정산 시 자동 해제).'
     }
-  ]
+  ],
+
+  DIVISION_ORDER: ['mobile_corps', 'iron_engineers', 'nightwatch', 'arc_tech'],
+
+  DIVISIONS: {
+    mobile_corps: {
+      id: 'mobile_corps',
+      name: '기동방위대',
+      shortName: '기동방위대',
+      subtitle: '표준 기동 전개 교리',
+      iconId: 'div-mobile',
+      accentColor: '#FFC94A',
+      unlockedByDefault: true,
+      unlockCondition: null,
+      unlockHint: '기본 해금 교리',
+      hqCostMult: 0.85,
+      badgeTag: '본부 -15%',
+      pros: [
+        '본부(HQ) 증축 비용(목재·고철·코인) -15%'
+      ],
+      cons: [
+        '패널티 없음 (표준 올라운더)'
+      ],
+      hasPenalty: false
+    },
+    iron_engineers: {
+      id: 'iron_engineers',
+      name: '철벽 공병단',
+      shortName: '철벽 공병단',
+      subtitle: '축성·방벽·공병 특화 교리',
+      iconId: 'div-iron',
+      accentColor: '#4ADE80',
+      unlockedByDefault: true,
+      unlockCondition: null,
+      unlockHint: '기본 해금 교리',
+      startingVouchers: { razor_pad: 3 },
+      fortHpMult: 1.35,
+      thornsMult: 1.5,
+      trapDpsMult: 1.5,
+      repairMaxCd: 12,
+      rangeMult: 0.85,
+      badgeTag: '축성 +35% · 수리 12s',
+      pros: [
+        '시작 시 강철 스파이크 트랩 보급권 ×3 지급',
+        '성벽·통문·스파이크 트랩 최대 내구도 +35%',
+        '성벽·통문 반사 피해 & 트랩 지속피해 +50%',
+        '긴급 나노 수리 드론 대기시간 18초 → 12초'
+      ],
+      cons: [
+        '모든 요원 초소 및 자동 포탑 사거리 -15%'
+      ],
+      hasPenalty: true
+    },
+    nightwatch: {
+      id: 'nightwatch',
+      name: '나이트워치 유격대',
+      shortName: '나이트워치',
+      subtitle: '야간 정전 유격·정예 요원 교리',
+      iconId: 'div-nightwatch',
+      accentColor: '#E2E8F0',
+      unlockedByDefault: false,
+      unlockCondition: 'survive_blackout',
+      unlockHint: '블랙아웃이 발생한 야간 웨이브 방어에 1회 생존하면 해금',
+      startingAgentsBonus: 2,
+      basePopCapBonus: 2,
+      startingVouchers: { rifle_bunker: 1 },
+      voucherRank1: { rifle_bunker: 1 },
+      mannedXpMult: 2.0,
+      blackoutMannedFireRateMult: 1.40,
+      blackoutMannedCritAdd: 0.20,
+      solarBatteryMult: 0.60,
+      turretCostMult: 1.30,
+      badgeTag: '숙련 ×2 · 정전 유격',
+      pros: [
+        '시작 가용 요원 +2명 & 본부 기본 수용량 +2',
+        '소총 벙커 보급권 ×1 (첫 보급 배치 숙련 Rank 1)',
+        '요원 초소 전투 숙련 XP 획득량 2배',
+        '정전(블랙아웃) 중 요원 초소 연사 +40% · 치명 +20%p'
+      ],
+      cons: [
+        '태양광·배터리 주간 충전량 및 저장 용량 -40%',
+        '무인 자동 포탑 건설·업그레이드 비용 +30%'
+      ],
+      hasPenalty: true
+    },
+    arc_tech: {
+      id: 'arc_tech',
+      name: '아크 테크놀로지',
+      shortName: '아크 테크',
+      subtitle: '고전압 전력망·오버드라이브 교리',
+      iconId: 'div-arc',
+      accentColor: '#5EF2FF',
+      isElectricDivision: true,
+      unlockedByDefault: false,
+      unlockCondition: 'reach_wave_15',
+      unlockHint: 'WAVE 15에 도달하면 영구 해금',
+      startingVouchers: { wind_turbine: 1, battery_bank: 1 },
+      overdriveThreshold: 0.70,
+      overdriveTurretFireRateMult: 1.25,
+      overdriveFloodlightMult: 1.25,
+      overdriveEmpDurationMult: 0.35,
+      fieldTentPopCapMult: 0.65,
+      badgeTag: 'ARC ≥70%',
+      pros: [
+        '시작 시 풍력 터빈 보급권 ×1 + 배터리 보급권 ×1 지급',
+        '전력 ≥70% 유지 시 자동 포탑 연사력 +25%',
+        '전력 ≥70% 유지 시 LED 투광등 조명·오라 반경 +25%',
+        '전력 ≥70% 유지 시 전기 시설 EMP 기절 시간 -65%'
+      ],
+      cons: [
+        '모든 티어 야전 숙소 요원 수용량 -35%'
+      ],
+      hasPenalty: true
+    }
+  }
   };
 })();

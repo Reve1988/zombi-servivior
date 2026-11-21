@@ -63,13 +63,50 @@ window.ZS = window.ZS || {};
     return !!(def && (def.subType === 'wall' || def.subType === 'gate'));
   }
 
-  function getWallConnectMask(structGrid, tx, ty) {
+  function getTerrainStepElev(terrainGrid, tx, ty) {
+    const t = terrainGrid && terrainGrid[ty] && terrainGrid[ty][tx];
+    if (!t) return 0;
+    if (t.kind === 'plateau') return 10;
+    if (t.kind === 'ramp') return 5;
+    return 0;
+  }
+
+  function shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, nx, ny) {
+    const tGrid = terrainGrid !== undefined ? terrainGrid : (ZS.Game && ZS.Game.state && ZS.Game.state.terrainGrid);
+    const N = (ZS.DATA && ZS.DATA.GRID_SIZE) || (structGrid && structGrid.length) || 26;
+    if (nx < 0 || ny < 0 || nx >= N || ny >= N) return false;
+    const nbT = tGrid && tGrid[ny] && tGrid[ny][nx];
+    if (nbT && nbT.kind === 'rock') return true;
+    if (tGrid) {
+      const myT = tGrid[ty] && tGrid[ty][tx];
+      const myElev = getTerrainStepElev(tGrid, tx, ty);
+      const nbElev = getTerrainStepElev(tGrid, nx, ny);
+      if (myElev !== nbElev) {
+        const dx = nx - tx;
+        const dy = ny - ty;
+        if (nbT && nbT.kind === 'ramp' && nbT.rampDir) {
+          if ((dx === nbT.rampDir.dx && dy === nbT.rampDir.dy) || (dx === -nbT.rampDir.dx && dy === -nbT.rampDir.dy)) {
+            return false;
+          }
+        }
+        if (myT && myT.kind === 'ramp' && myT.rampDir) {
+          if ((dx === myT.rampDir.dx && dy === myT.rampDir.dy) || (dx === -myT.rampDir.dx && dy === -myT.rampDir.dy)) {
+            return false;
+          }
+        }
+        return true;
+      }
+    }
+    return isWallConnectableCell(structGrid, nx, ny);
+  }
+
+  function getWallConnectMask(structGrid, tx, ty, terrainGrid) {
     if (!structGrid) return 0;
     return (
-      (isWallConnectableCell(structGrid, tx, ty - 1) ? 1 : 0) |
-      (isWallConnectableCell(structGrid, tx + 1, ty) ? 2 : 0) |
-      (isWallConnectableCell(structGrid, tx, ty + 1) ? 4 : 0) |
-      (isWallConnectableCell(structGrid, tx - 1, ty) ? 8 : 0)
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx, ty - 1) ? 1 : 0) |
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx + 1, ty) ? 2 : 0) |
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx, ty + 1) ? 4 : 0) |
+      (shouldWallConnectNeighbor(structGrid, terrainGrid, tx, ty, tx - 1, ty) ? 8 : 0)
     );
   }
 
@@ -1838,78 +1875,144 @@ window.ZS = window.ZS || {};
 
       case 'missile_pod': {
         const gunmetal = P.milGunmetal || '#3B4552';
-        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.4, 0.34, 6.4, gunmetal, { n: 8 }, zScale);
-        R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 5.2, 0.345, isUnpowered, zScale);
-        if (lv >= 2) {
-          R.drawCyl(ctx, tx + 0.5, ty + 0.5, 6.8, 0.29, 1.8, steelCol, { n: 8 }, zScale);
-        }
-        const podCol = isUnpowered ? '#4F5750' : '#5F7055';
-        const lidCol = lv >= 3 ? maxAccent : isUnpowered ? '#5D665E' : '#738568';
-        const x0 = tx + 0.22, x1 = tx + 0.78, y0 = ty + 0.21, y1 = ty + 0.75;
-        const zB0 = lv >= 2 ? 8.4 : 7.0;
-        const bA = Iso.gridToScreen(x0, y0, zB0), bB = Iso.gridToScreen(x1, y0, zB0);
-        const bC = Iso.gridToScreen(x1, y1, zB0 + 3.6), bD = Iso.gridToScreen(x0, y1, zB0 + 3.6);
-        const tA = Iso.gridToScreen(x0, y0, zB0 + 9.2), tB = Iso.gridToScreen(x1, y0, zB0 + 9.2);
-        const tC = Iso.gridToScreen(x1, y1, zB0 + 13.4), tD = Iso.gridToScreen(x0, y1, zB0 + 13.4);
-        R.drawPolyFace(ctx, [tD, tC, bC, bD], podCol, 0.82, false, true, zScale);
-        R.drawPolyFace(ctx, [tC, tB, bB, bC], podCol, 0.66, false, true, zScale);
-        R.drawPolyFace(ctx, [tA, tB, tC, tD], lidCol, 1.0, false, true, zScale);
+        const slate = P.milSlate || '#525E6B';
+        // Heavy octagonal turntable base + power indicator ring
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.4, 0.36, 6.2, gunmetal, { n: 8 }, zScale);
+        R.drawPowerStripCyl(ctx, tx + 0.5, ty + 0.5, 5.0, 0.365, isUnpowered, zScale);
+        R.drawCyl(ctx, tx + 0.5, ty + 0.5, 6.6, lv >= 2 ? 0.30 : 0.27, 2.0, slate, { n: 8 }, zScale);
 
-        // Pod lid seam, corner rivets & right-side cooling louvers
+        const zB0 = lv >= 2 ? 7.8 : 6.8;
+        const hw = lv >= 3 ? 0.28 : 0.25;
+        const x0 = tx + 0.5 - hw;
+        const x1 = tx + 0.5 + hw;
+
+        // Twin hydraulic elevation struts supporting the pitched MLRS rack
+        R.drawIsoLine(
+          ctx,
+          Iso.gridToScreen(x0 + 0.08, ty + 0.40, zB0 + 0.4),
+          Iso.gridToScreen(x0 + 0.08, ty + 0.56, zB0 + 7.6),
+          '#8A99A8',
+          1.7,
+          true,
+          zScale
+        );
+        R.drawIsoLine(
+          ctx,
+          Iso.gridToScreen(x1 - 0.08, ty + 0.40, zB0 + 0.4),
+          Iso.gridToScreen(x1 - 0.08, ty + 0.56, zB0 + 7.6),
+          '#8A99A8',
+          1.7,
+          true,
+          zScale
+        );
+
+        // ~38-degree elevated armored MLRS launch pod prism
+        const yRB = ty + 0.26;
+        const zRB = zB0 + 1.2;
+        const yFB = ty + (lv >= 3 ? 0.72 : 0.68);
+        const zFB = zB0 + (lv >= 3 ? 12.6 : 11.2);
+        const yFT = ty + (lv >= 3 ? 0.53 : 0.51);
+        const zFT = zB0 + (lv >= 3 ? 21.8 : 19.6);
+        const yRT = ty + 0.11;
+        const zRT = zB0 + (lv >= 3 ? 10.4 : 9.6);
+
+        const rb0 = Iso.gridToScreen(x0, yRB, zRB);
+        const rb1 = Iso.gridToScreen(x1, yRB, zRB);
+        const fb0 = Iso.gridToScreen(x0, yFB, zFB);
+        const fb1 = Iso.gridToScreen(x1, yFB, zFB);
+        const ft0 = Iso.gridToScreen(x0, yFT, zFT);
+        const ft1 = Iso.gridToScreen(x1, yFT, zFT);
+        const rt0 = Iso.gridToScreen(x0, yRT, zRT);
+        const rt1 = Iso.gridToScreen(x1, yRT, zRT);
+
+        const podCol = isUnpowered ? '#4A524C' : '#586B50';
+        const lidCol = lv >= 3 ? maxAccent : isUnpowered ? '#5A635B' : '#6F8464';
+        const muzzlePlateCol = isUnpowered ? '#2F363D' : '#353F4B';
+
+        // Back-to-front visible faces: Top armor hood -> Right flank -> Front cellular muzzle face
+        R.drawPolyFace(ctx, [rt0, rt1, ft1, ft0], lidCol, 1.0, false, true, zScale);
+        R.drawPolyFace(ctx, [fb1, rb1, rt1, ft1], podCol, 0.66, false, true, zScale);
+        R.drawPolyFace(ctx, [fb0, fb1, ft1, ft0], muzzlePlateCol, 0.86, false, true, zScale);
+
         if (!window.ZS_SILHOUETTE_MODE && Iso.getRenderModifiers().flash <= 0.01) {
-          const midF = Iso.gridToScreen((x0 + x1) * 0.5, y1, zB0 + 13.4);
-          const midB = Iso.gridToScreen((x0 + x1) * 0.5, y0, zB0 + 9.2);
-          ctx.strokeStyle = 'rgba(12, 18, 24, 0.34)';
-          ctx.lineWidth = Math.max(0.6, 0.75 * zScale);
+          // Hood center spine seam & rivets
+          const midRear = Iso.gridToScreen(tx + 0.5, yRT + 0.03, zRT + 0.4);
+          const midFront = Iso.gridToScreen(tx + 0.5, yFT - 0.03, zFT - 0.3);
+          ctx.strokeStyle = 'rgba(12, 18, 24, 0.36)';
+          ctx.lineWidth = Math.max(0.65, 0.8 * zScale);
           ctx.beginPath();
-          ctx.moveTo(midB.x, midB.y);
-          ctx.lineTo(midF.x, midF.y);
+          ctx.moveTo(midRear.x, midRear.y);
+          ctx.lineTo(midFront.x, midFront.y);
           ctx.stroke();
 
-          // Corner rivets on slanted armor lid
-          const rPts = [
-            Iso.gridToScreen(x0 + 0.05, y0 + 0.05, zB0 + 9.6),
-            Iso.gridToScreen(x1 - 0.05, y0 + 0.05, zB0 + 9.6),
-            Iso.gridToScreen(x1 - 0.05, y1 - 0.05, zB0 + 13.0),
-            Iso.gridToScreen(x0 + 0.05, y1 - 0.05, zB0 + 13.0)
-          ];
-          ctx.fillStyle = Iso.resolveFaceColor('#DCE5EE', 1.0, false, 0) || '#DCE5EE';
-          for (let i = 0; i < 4; i++) {
-            ctx.beginPath();
-            ctx.arc(rPts[i].x, rPts[i].y, 0.75 * zScale, 0, Math.PI * 2);
-            ctx.fill();
-          }
-
-          // Side louver ribs on right flank
-          ctx.strokeStyle = 'rgba(12, 18, 24, 0.52)';
-          ctx.lineWidth = Math.max(0.7, 0.9 * zScale);
+          // Cooling slats along right flank of MLRS pod
+          ctx.strokeStyle = 'rgba(12, 18, 24, 0.55)';
+          ctx.lineWidth = Math.max(0.75, 0.95 * zScale);
           ctx.beginPath();
-          for (let l = 0; l < 3; l++) {
-            const zOff = zB0 + 5.2 + l * 1.6;
-            const p0 = Iso.gridToScreen(x1, y0 + 0.12, zOff);
-            const p1 = Iso.gridToScreen(x1, y1 - 0.12, zOff + 2.2);
+          for (let l = 1; l <= 3; l++) {
+            const u = l * 0.25;
+            const ay = yRB + (yFB - yRB) * u;
+            const az = zRB + (zFB - zRB) * u + 1.4;
+            const by = yRT + (yFT - yRT) * u;
+            const bz = zRT + (zFT - zRT) * u - 1.2;
+            const p0 = Iso.gridToScreen(x1 + 0.004, ay, az);
+            const p1 = Iso.gridToScreen(x1 + 0.004, by, bz);
             ctx.moveTo(p0.x, p0.y);
             ctx.lineTo(p1.x, p1.y);
           }
           ctx.stroke();
+
+          // Warning hazard accent stripe on Lv.3 pod shoulder
+          if (lv >= 3) {
+            R.drawIsoLine(
+              ctx,
+              Iso.gridToScreen(x1 + 0.005, yRB + 0.08, zRB + 2.4),
+              Iso.gridToScreen(x1 + 0.005, yFB - 0.06, zFB - 1.8),
+              maxAccent,
+              1.6,
+              false,
+              zScale
+            );
+          }
         }
 
-        // 2x2 recessed rocket launch tubes with steel rims
-        const tubeXs = [0.36, 0.62];
-        const tubeZs = [zB0 + 6.2, zB0 + 10.4];
-        for (let ix = 0; ix < tubeXs.length; ix++) {
-          for (let iz = 0; iz < tubeZs.length; iz++) {
-            const c = Iso.gridToScreen(tx + tubeXs[ix], y1 + 0.006, tubeZs[iz]);
+        // Cellular multi-tube rocket launcher matrix matching Lv.1 (2 tubes) -> Lv.2 (3 tubes) -> Lv.3 (6 tubes)
+        const cols = lv >= 2 ? 3 : 2;
+        const rows = lv >= 3 ? 2 : 1;
+        const cellR = lv >= 3 ? 2.40 : lv === 2 ? 2.75 : 3.15;
+        const bezelCol = Iso.resolveFaceColor('#5A6775', 0.9, false, 0) || '#5A6775';
+        const boreCol = Iso.resolveFaceColor('#141A20', 1.0, false, 0) || '#141A20';
+        for (let rIdx = 0; rIdx < rows; rIdx++) {
+          const v = rows === 1 ? 0.51 : 0.28 + rIdx * 0.44;
+          for (let cIdx = 0; cIdx < cols; cIdx++) {
+            const u = 0.16 + ((cIdx + 0.5) / cols) * 0.68;
+            const gxTube = x0 + (x1 - x0) * u;
+            const gyTube = yFB + (yFT - yFB) * v + 0.008;
+            const gzTube = zFB + (zFT - zFB) * v;
+            const c = Iso.gridToScreen(gxTube, gyTube, gzTube);
             ctx.beginPath();
-            ctx.ellipse(c.x, c.y, 3.4 * zScale, 3.0 * zScale, 0, 0, Math.PI * 2);
-            ctx.fillStyle = Iso.resolveFaceColor('#3B4552', 0.85, false, 0);
+            ctx.ellipse(c.x, c.y, cellR * zScale, cellR * 0.86 * zScale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = bezelCol;
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(c.x, c.y, 2.5 * zScale, 2.2 * zScale, 0, 0, Math.PI * 2);
-            ctx.fillStyle = Iso.resolveFaceColor('#1A2018', 1.0, false, 0);
+            ctx.ellipse(c.x, c.y, (cellR - 0.7) * zScale, (cellR - 0.7) * 0.86 * zScale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = boreCol;
             ctx.fill();
-            R.drawIsoDot(ctx, c, 1.25, isUnpowered ? '#5A3A32' : '#E0603A', !isUnpowered, zScale);
+            R.drawIsoDot(
+              ctx,
+              c,
+              Math.max(0.85, cellR * 0.44),
+              isUnpowered ? '#5A3A32' : lv >= 3 ? '#FF6B4A' : '#FF8A3D',
+              !isUnpowered,
+              zScale
+            );
           }
+        }
+
+        // Lv.2+ ballistic rangefinder optics dome mounted atop rear hood
+        if (lv >= 2) {
+          R.drawCyl(ctx, x0 + 0.11, yFT - 0.06, zFT - 0.2, 0.08, 2.2, gunmetal, { n: 8 }, zScale);
+          R.drawIsoDot(ctx, Iso.gridToScreen(x0 + 0.11, yFT - 0.06, zFT + 2.2), 1.35, isUnpowered ? P.powerDim : '#FFC94A', !isUnpowered, zScale);
         }
         break;
       }
@@ -2371,7 +2474,9 @@ window.ZS = window.ZS || {};
           drawWindTurbineStatic(sctx, 0, 0, lv, P, 1.0);
         });
         blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
-        drawWindTurbineRotors(ctx, tx, ty, lv, timeSec * 2.6 + (tx + ty), P, zScale);
+        const wCell = state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx];
+        const rotorSpeed = wCell && wCell.kind === 'wind' ? (wCell.tier === 2 ? 3.8 : 3.25) : 2.6;
+        drawWindTurbineRotors(ctx, tx, ty, lv, timeSec * rotorSpeed + (tx + ty), P, zScale);
         return;
       }
 
@@ -2604,7 +2709,9 @@ window.ZS = window.ZS || {};
       }
 
       case 'wind_turbine': {
-        const bladeAngle = st.isPreview ? 0.45 + (tx + ty) * 0.4 : timeSec * 2.6 + (tx + ty);
+        const wCell = state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx];
+        const rotorSpeed = wCell && wCell.kind === 'wind' ? (wCell.tier === 2 ? 3.8 : 3.25) : 2.6;
+        const bladeAngle = st.isPreview ? 0.45 + (tx + ty) * 0.4 : timeSec * rotorSpeed + (tx + ty);
         drawWindTurbineStatic(ctx, tx, ty, lv, P, zScale);
         drawWindTurbineRotors(ctx, tx, ty, lv, bladeAngle, P, zScale);
         break;
@@ -2638,7 +2745,9 @@ window.ZS = window.ZS || {};
       }
 
       default: {
-        const defaultSolarOff = id === 'solar_array' ? !!(state.isNight || !powered || (st.empStunTimer || 0) > 0) : !powered;
+        const defaultSolarOff = id === 'solar_array'
+          ? !!(state.isNight || !powered || (st.empStunTimer || 0) > 0)
+          : !powered;
         drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, defaultSolarOff, P, steelCol, maxAccent, zScale);
         break;
       }

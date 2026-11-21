@@ -78,6 +78,43 @@ window.ZS = window.ZS || {};
     return null;
   }
 
+  function scaleCostObj(cost, mult) {
+    if (!cost) return null;
+    const out = {};
+    const m = mult != null ? mult : 1.0;
+    if (cost.wood) out.wood = m === 1.0 ? cost.wood : Math.max(1, Math.round(cost.wood * m));
+    if (cost.scrap) out.scrap = m === 1.0 ? cost.scrap : Math.max(1, Math.round(cost.scrap * m));
+    if (cost.coin) out.coin = m === 1.0 ? cost.coin : Math.max(1, Math.round(cost.coin * m));
+    return out;
+  }
+
+  function getEffectiveHqUpgradeCost(targetLevel) {
+    const lv = targetLevel || ((state.hqLevel || 1) + 1);
+    const info = G.getHqLevelInfo(lv);
+    if (!info || !info.cost) return null;
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const mult = (div && div.hqCostMult) || 1.0;
+    return scaleCostObj(info.cost, mult);
+  }
+
+  function getEffectiveBuildCost(rawItemId) {
+    const itemId = rawItemId === 'shelter_pod' ? 'field_tent' : rawItemId;
+    const def = DATA.ITEMS[itemId];
+    if (!def || !def.cost) return {};
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const mult = (def.subType === 'turret' && div && div.turretCostMult) ? div.turretCostMult : 1.0;
+    return scaleCostObj(def.cost, mult) || {};
+  }
+
+  function getEffectiveUpgradeCost(defOrId, fromLevel) {
+    const def = typeof defOrId === 'string' ? DATA.ITEMS[defOrId] : defOrId;
+    const baseCost = getUpgradeCost(def, fromLevel);
+    if (!baseCost) return null;
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const mult = (def && def.subType === 'turret' && div && div.turretCostMult) ? div.turretCostMult : 1.0;
+    return scaleCostObj(baseCost, mult);
+  }
+
   function getStructureDisplayName(st) {
     if (!st) return '';
     if (st.id === 'command_hq') return DATA.HQ_STATS.name;
@@ -101,6 +138,7 @@ window.ZS = window.ZS || {};
     let dmgScale = 1.0;
     let rateScale = 1.0;
     let rangeAdd = 0;
+    let minRange = def.minRange || 0;
     let critAdd = 0;
     let powerIdle = def.powerIdle || 0;
     let powerShot = def.powerShot || 0;
@@ -130,6 +168,8 @@ window.ZS = window.ZS || {};
     let pierceCount = 1;
     let burstSecondMult = 0;
     let splashRadius = def.splashRadius || 0;
+    let salvoCount = def.salvoCount || 1;
+    let salvoScatter = def.salvoScatter || 0;
     let chainCount = def.chainCount || 3;
     let slowDuration = def.slowDuration || 1.5;
 
@@ -209,6 +249,31 @@ window.ZS = window.ZS || {};
           pierceCount = 2;
         }
       }
+    } else if (def.id === 'missile_pod') {
+      if (lv === 1) {
+        salvoCount = 2;
+        salvoScatter = 0.25;
+        powerShot = 2.4;
+        splashRadius = 1.20;
+      } else if (lv === 2) {
+        dmgScale = 26 / 24;
+        rateScale = 1.0;
+        hpScale = 1.25;
+        powerIdle = +(powerIdle * 1.15).toFixed(2);
+        powerShot = 3.1;
+        salvoCount = 3;
+        salvoScatter = 0.50;
+        splashRadius = 1.20;
+      } else if (lv === 3) {
+        dmgScale = 28 / 24;
+        rateScale = 1.0;
+        hpScale = 1.55;
+        powerIdle = +(powerIdle * 1.30).toFixed(2);
+        powerShot = 4.0;
+        salvoCount = 6;
+        salvoScatter = 0.80;
+        splashRadius = 1.20;
+      }
     } else if (def.subType === 'turret') {
       if (lv === 2) {
         dmgScale = 1.30;
@@ -221,10 +286,8 @@ window.ZS = window.ZS || {};
         hpScale = 1.55;
         powerIdle = +(powerIdle * 1.30).toFixed(2);
         if (def.id === 'vulcan_turret') {
-          powerShot = 0.24;
+          powerShot = 0.28;
           critAdd = 0.12;
-        } else if (def.id === 'missile_pod') {
-          splashRadius = 1.75;
         } else if (def.id === 'emp_coil') {
           chainCount = 5;
           slowDuration = 2.4;
@@ -243,12 +306,12 @@ window.ZS = window.ZS || {};
     } else if (def.id === 'battery_bank') {
       if (lv === 2) {
         hpScale = 1.25;
-        powerCap = 145;
-        dayCharge = 18;
+        powerCap = 135;
+        dayCharge = 10;
       } else if (lv === 3) {
         hpScale = 1.55;
-        powerCap = 205;
-        dayCharge = 28;
+        powerCap = 250;
+        dayCharge = 18;
       }
     } else if (def.id === 'field_tent') {
       if (lv === 2) {
@@ -272,13 +335,30 @@ window.ZS = window.ZS || {};
       }
     }
 
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    let rawBaseMaxHp = exactMaxHp !== null ? exactMaxHp : Math.round((def.maxHp || 100) * hpScale);
+    if (
+      div &&
+      div.fortHpMult &&
+      (def.id === 'barricade_wall' || def.id === 'tactical_gate' || def.id === 'razor_pad')
+    ) {
+      rawBaseMaxHp = Math.round(rawBaseMaxHp * div.fortHpMult);
+    }
+    if (div && div.trapDpsMult && def.id === 'razor_pad' && trapDps > 0) {
+      trapDps = +(trapDps * div.trapDpsMult).toFixed(2);
+    }
+    if (div && div.fieldTentPopCapMult && def.id === 'field_tent' && popCap > 0) {
+      popCap = Math.max(1, Math.round(popCap * div.fieldTentPopCapMult));
+    }
+
     return {
       level: lv,
       levelName,
-      baseMaxHp: exactMaxHp !== null ? exactMaxHp : Math.round((def.maxHp || 100) * hpScale),
+      baseMaxHp: rawBaseMaxHp,
       dmgScale,
       rateScale,
       rangeAdd,
+      minRange,
       critAdd,
       powerIdle,
       powerShot,
@@ -308,20 +388,53 @@ window.ZS = window.ZS || {};
       pierceCount,
       burstSecondMult,
       splashRadius,
+      salvoCount,
+      salvoScatter,
       chainCount,
       slowDuration,
       perkLabel: !isTierEvo && lv >= 3 && DATA.LV3_PERK_LABELS ? DATA.LV3_PERK_LABELS[def.id] || null : null
     };
   }
 
+  function getTerrainPowerStats(defId, prof, tx, ty) {
+    let powerCap = (prof && prof.powerCap) || 0;
+    let dayCharge = (prof && prof.dayCharge) || 0;
+    let nightGen = (prof && prof.nightGen) || 0;
+    const terrain = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+    const onWind = !!(terrain && terrain.kind === 'wind');
+    const windTier = onWind ? (terrain.tier || 1) : 0;
+    const wzCfg = DATA.WIND_ZONE || {};
+    const windMult = onWind
+      ? (terrain.windMult || (windTier === 2 ? (wzCfg.coreMult || 1.70) : (wzCfg.outerMult || 1.40)))
+      : 1.0;
+    if (onWind && defId === 'wind_turbine') {
+      dayCharge = +(dayCharge * windMult).toFixed(2);
+      nightGen = +(nightGen * windMult).toFixed(3);
+    }
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    if (div && div.solarBatteryMult && (defId === 'solar_array' || defId === 'battery_bank')) {
+      powerCap = Math.round(powerCap * div.solarBatteryMult);
+      dayCharge = +(dayCharge * div.solarBatteryMult).toFixed(2);
+    }
+    return {
+      powerCap,
+      dayCharge,
+      nightGen,
+      onWind,
+      windTier,
+      windMult
+    };
+  }
+
   function recalculateBaseStats(silentTierUp) {
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
     const prevTierLevel = state.cozyTier ? state.cozyTier.level : 1;
     let powerCap = hqInfo.basePowerCap;
     let dayCharge = hqInfo.baseDayCharge;
     let nightGen = 0;
     let nightIdleDrain = 0;
-    let popCap = hqInfo.basePopCap + (state.debugBonusPopCap || 0);
+    let popCap = hqInfo.basePopCap + ((div && div.basePopCapBonus) || 0) + (state.debugBonusPopCap || 0);
     let popUsed = 0;
     let floorRaw = 0;
     let synergyScore = 0;
@@ -363,9 +476,10 @@ window.ZS = window.ZS || {};
             targetSt.hp = Math.min(targetMax, Math.max(1, Math.round(targetMax * ratio)));
           }
 
-          if (prof.powerCap) powerCap += prof.powerCap;
-          if (prof.dayCharge) dayCharge += prof.dayCharge;
-          if (prof.nightGen) nightGen += prof.nightGen;
+          const pStats = getTerrainPowerStats(targetSt.id, prof, x, y);
+          if (pStats.powerCap) powerCap += pStats.powerCap;
+          if (pStats.dayCharge) dayCharge += pStats.dayCharge;
+          if (pStats.nightGen) nightGen += pStats.nightGen;
           if (def.requiresPower && prof.powerIdle) nightIdleDrain += prof.powerIdle;
           if (prof.popCap) popCap += prof.popCap;
           if (prof.popUse) popUsed += prof.popUse;
@@ -417,7 +531,7 @@ window.ZS = window.ZS || {};
     }
 
     state.powerCap = powerCap;
-    state.dayCharge = dayCharge;
+    state.dayCharge = +dayCharge.toFixed(2);
     state.nightGen = +nightGen.toFixed(3);
     state.nightIdleDrain = nightIdleDrain;
     state.popCap = popCap;
@@ -531,10 +645,15 @@ window.ZS = window.ZS || {};
     }
 
     const powered = !state.isNight || !state.blackoutActive;
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const arcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
     const auraCounts = {};
+    const terrain = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+    const onPlateau = !!(terrain && terrain.kind === 'plateau');
+    const pBonus = DATA.PLATEAU_BONUS || {};
 
     // Scan aura providers (ground structures and wall-mounted units) with same-ID stacking cap: 1st 100%, 2nd 50%, 3rd+ 0%
-    const applyAuraFrom = (provider, providerMounted, dist) => {
+    const applyAuraFrom = (provider, providerMounted, px, py, dist) => {
       if (!provider || provider.id === 'command_hq') return;
       const oDef = DATA.ITEMS[provider.id];
       if (!oDef || !oDef.aura) return;
@@ -542,7 +661,15 @@ window.ZS = window.ZS || {};
 
       const oProf = getStructLevelProfile(oDef, provider.level || 1);
       const baseAuraR = oProf.auraRadius || oDef.aura.radius || 0;
-      const auraRadius = baseAuraR + (providerMounted && oDef.id === 'led_floodlight' ? 0.4 : 0);
+      const pTerrain = G.getTerrainAt ? G.getTerrainAt(px, py) : null;
+      const pOnPlateau = !!(pTerrain && pTerrain.kind === 'plateau');
+      let auraRadius =
+        baseAuraR +
+        (providerMounted && oDef.id === 'led_floodlight' ? 0.4 : 0) +
+        (pOnPlateau && baseAuraR > 0 ? (pBonus.auraAdd != null ? pBonus.auraAdd : 0.5) : 0);
+      if (arcOverdrive && oDef.id === 'led_floodlight' && auraRadius > 0) {
+        auraRadius *= (div && div.overdriveFloodlightMult) || 1.25;
+      }
       if (dist <= auraRadius + 0.05) {
         const hasCombatAura = !!(oDef.aura.mannedDmg || oDef.aura.fireRate || oDef.aura.rangeMult || oDef.aura.critChance);
         if (!hasCombatAura) return;
@@ -571,30 +698,71 @@ window.ZS = window.ZS || {};
         const other = state.structGrid[y][x];
         if (!other) continue;
         const dist = Math.hypot(tx - x, ty - y);
-        applyAuraFrom(other, false, dist);
+        applyAuraFrom(other, false, x, y, dist);
         if (other.mounted) {
-          applyAuraFrom(other.mounted, true, dist);
+          applyAuraFrom(other.mounted, true, x, y, dist);
         }
       }
+    }
+
+    const isCombatUnit = def.subType === 'manned' || def.subType === 'turret';
+    if (onPlateau && isCombatUnit) {
+      critChance += pBonus.critAdd != null ? pBonus.critAdd : 0.08;
+    }
+    if (isCombatUnit && div && div.rangeMult) {
+      rangeMult *= div.rangeMult;
+    }
+    if (div && div.id === 'nightwatch' && state.blackoutActive && def.subType === 'manned') {
+      rateMult *= (div.blackoutMannedFireRateMult || 1.40);
+      critChance += (div.blackoutMannedCritAdd != null ? div.blackoutMannedCritAdd : 0.20);
+    }
+    if (arcOverdrive && def.subType === 'turret') {
+      rateMult *= (div && div.overdriveTurretFireRateMult) || 1.25;
     }
 
     const baseDmg = (def.damage || 0) * prof.dmgScale;
     const baseRate = (def.fireRate || 0) * prof.rateScale;
     const mountRangeBonus = onWall && def.range ? 0.5 : 0;
-    const baseRange = (def.range || 0) + prof.rangeAdd + rankInfo.rangeAdd + mountRangeBonus;
+    const plateauRangeBonus = onPlateau && isCombatUnit && def.range ? (pBonus.rangeAdd != null ? pBonus.rangeAdd : 1.0) : 0;
+    const elevRangeCap = pBonus.mountCap != null ? pBonus.mountCap : 1.25;
+    const combinedElevRangeBonus =
+      mountRangeBonus > 0 && plateauRangeBonus > 0
+        ? Math.min(elevRangeCap, mountRangeBonus + plateauRangeBonus)
+        : mountRangeBonus + plateauRangeBonus;
+    const baseRange = (def.range || 0) + prof.rangeAdd + rankInfo.rangeAdd + combinedElevRangeBonus;
+
     const baseLightR = prof.lightRadius !== undefined ? prof.lightRadius : (def.lightRadius || 0);
-    const lightRadius = baseLightR + (onWall && def.id === 'led_floodlight' ? 0.6 : 0);
+    let lightRadius =
+      baseLightR > 0
+        ? baseLightR +
+          (onWall && def.id === 'led_floodlight' ? 0.6 : 0) +
+          (onPlateau ? (pBonus.lightAdd != null ? pBonus.lightAdd : 1.0) : 0)
+        : 0;
     const lightColor = prof.lightColor || def.lightColor || null;
-    const auraRadius = def.aura ? (prof.auraRadius || def.aura.radius) + (onWall && def.id === 'led_floodlight' ? 0.4 : 0) : 0;
+    const baseSelfAuraR = def.aura ? (prof.auraRadius || def.aura.radius || 0) : 0;
+    let auraRadius =
+      baseSelfAuraR > 0
+        ? baseSelfAuraR +
+          (onWall && def.id === 'led_floodlight' ? 0.4 : 0) +
+          (onPlateau ? (pBonus.auraAdd != null ? pBonus.auraAdd : 0.5) : 0)
+        : 0;
+    if (arcOverdrive && def.id === 'led_floodlight') {
+      const flMult = (div && div.overdriveFloodlightMult) || 1.25;
+      if (lightRadius > 0) lightRadius = +(lightRadius * flMult).toFixed(3);
+      if (auraRadius > 0) auraRadius = +(auraRadius * flMult).toFixed(3);
+    }
 
     return {
       level: lv,
       rank,
       rankInfo,
       isMounted: onWall,
+      onPlateau,
+      elevRangeBonus: combinedElevRangeBonus,
       damage: baseDmg * dmgMult,
       fireRate: baseRate * rateMult,
       range: baseRange * rangeMult,
+      minRange: prof.minRange || def.minRange || 0,
       lightRadius,
       lightColor,
       auraRadius,
@@ -607,6 +775,8 @@ window.ZS = window.ZS || {};
       pierceCount: prof.pierceCount,
       burstSecondMult: prof.burstSecondMult,
       splashRadius: prof.splashRadius,
+      salvoCount: prof.salvoCount || def.salvoCount || 1,
+      salvoScatter: prof.salvoScatter != null ? prof.salvoScatter : (def.salvoScatter || 0),
       chainCount: prof.chainCount,
       slowDuration: prof.slowDuration,
       perkLabel: prof.perkLabel,
@@ -685,15 +855,17 @@ window.ZS = window.ZS || {};
       return { ok: false, reason: '이미 최고 지휘 본부 등급(Lv.4)에 도달했습니다.' };
     }
     const nextInfo = G.getHqLevelInfo(state.hqLevel + 1);
-    if (!canAffordCost(nextInfo.cost)) {
-      const c = nextInfo.cost || {};
+    const effCost = getEffectiveHqUpgradeCost(nextInfo.level);
+    if (!canAffordCost(effCost)) {
+      const c = effCost || {};
       return {
         ok: false,
         reason: `증축 자원이 부족합니다. (필요: 목재 ${c.wood || 0} · 고철 ${c.scrap || 0} · 코인 ${c.coin || 0})`,
-        nextInfo
+        nextInfo,
+        cost: effCost
       };
     }
-    return { ok: true, nextInfo };
+    return { ok: true, nextInfo, cost: effCost };
   }
 
   function upgradeHq() {
@@ -706,7 +878,7 @@ window.ZS = window.ZS || {};
 
     const prevInfo = G.getHqLevelInfo(state.hqLevel);
     const nextInfo = check.nextInfo;
-    payCost(nextInfo.cost);
+    payCost(check.cost || getEffectiveHqUpgradeCost(nextInfo.level));
 
     state.hqLevel = nextInfo.level;
     const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
@@ -770,6 +942,19 @@ window.ZS = window.ZS || {};
       return { ok: false, reason: '외곽 좀비 진입 구역에는 건물을 지을 수 없습니다.' };
     }
 
+    const terrain = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+    if (terrain && terrain.kind === 'rock') {
+      return { ok: false, reason: '자연 암석(바위) 지형에는 설치할 수 없습니다.' };
+    }
+    if (terrain && terrain.kind === 'ramp') {
+      if (def.layer === 'floor') {
+        return { ok: false, reason: '경사 언덕 지형에는 바닥재를 시공할 수 없습니다.' };
+      }
+      if (itemId !== 'razor_pad') {
+        return { ok: false, reason: '경사 언덕에는 스파이크 트랩만 설치할 수 있습니다.' };
+      }
+    }
+
     if (def.unlockedByBoss && !state.bossDefeated) {
       return { ok: false, reason: '웨이브 5 보스 변이체를 처치하면 해금됩니다!' };
     }
@@ -821,10 +1006,11 @@ window.ZS = window.ZS || {};
           };
         }
         autoUnderlay = true;
-        const wallLv2Up = getUpgradeCost(def, 1) || { wood: 4, scrap: 10, coin: 0 };
+        const wallBaseCost = getEffectiveBuildCost(itemId);
+        const wallLv2Up = getEffectiveUpgradeCost(def, 1) || { wood: 4, scrap: 10, coin: 0 };
         underlayCost = {
-          wood: (hasVoucher ? 0 : (def.cost.wood || 6)) + (wallLv2Up.wood || 0),
-          scrap: (hasVoucher ? 0 : (def.cost.scrap || 2)) + (wallLv2Up.scrap || 0),
+          wood: (hasVoucher ? 0 : (wallBaseCost.wood || 6)) + (wallLv2Up.wood || 0),
+          scrap: (hasVoucher ? 0 : (wallBaseCost.scrap || 2)) + (wallLv2Up.scrap || 0),
           coin: wallLv2Up.coin || 0
         };
       } else if (existing.id === 'barricade_wall' || existing.id === 'tactical_gate') {
@@ -851,7 +1037,7 @@ window.ZS = window.ZS || {};
           underlayCost
         };
       }
-    } else if (!hasVoucher && !canAffordCost(def.cost)) {
+    } else if (!hasVoucher && !canAffordCost(getEffectiveBuildCost(itemId))) {
       return { ok: false, reason: '건설 자원이 부족합니다.' };
     }
 
@@ -870,13 +1056,14 @@ window.ZS = window.ZS || {};
     // Fallback reconstruction for legacy saves without st.invested
     const total = { wood: 0, scrap: 0, coin: 0 };
     if (!st.usedVoucher && def.cost) {
-      total.wood += def.cost.wood || 0;
-      total.scrap += def.cost.scrap || 0;
-      total.coin += def.cost.coin || 0;
+      const effBase = getEffectiveBuildCost(def.id);
+      total.wood += effBase.wood || 0;
+      total.scrap += effBase.scrap || 0;
+      total.coin += effBase.coin || 0;
     }
     const lv = st.level || 1;
     for (let k = 1; k < lv; k++) {
-      const up = getUpgradeCost(def, k);
+      const up = getEffectiveUpgradeCost(def, k);
       if (up) {
         total.wood += up.wood || 0;
         total.scrap += up.scrap || 0;
@@ -909,7 +1096,7 @@ window.ZS = window.ZS || {};
     const capLv = isTierEvo
       ? Math.min(maxLv, state.hqLevel || 1)
       : Math.min(3, G.getHqLevelInfo(state.hqLevel).structUpgradeCap || state.hqLevel || 1);
-    const cost = getUpgradeCost(def, curLv);
+    const cost = getEffectiveUpgradeCost(def, curLv);
     const curProf = getStructLevelProfile(def, curLv);
     const nextProf = getStructLevelProfile(def, nextLv);
     if (nextLv > capLv) {
@@ -963,14 +1150,14 @@ window.ZS = window.ZS || {};
 
     st.level = check.nextLv;
     if (!st.invested) {
-      const base = st.usedVoucher ? {} : (def.cost || {});
+      const base = st.usedVoucher ? {} : (getEffectiveBuildCost(def.id) || {});
       st.invested = {
         wood: base.wood || 0,
         scrap: base.scrap || 0,
         coin: base.coin || 0
       };
       for (let k = 1; k < check.nextLv - 1; k++) {
-        const prevUp = getUpgradeCost(def, k);
+        const prevUp = getEffectiveUpgradeCost(def, k);
         if (prevUp) {
           st.invested.wood += prevUp.wood || 0;
           st.invested.scrap += prevUp.scrap || 0;
@@ -1021,7 +1208,8 @@ window.ZS = window.ZS || {};
         tierSub = '근접 피격 35% 반사 및 상부 거치 유지가 활성화되었습니다.';
       } else if (def.subType === 'power') {
         const pProf = getStructLevelProfile(def, st.level);
-        tierSub = `주간 +${pProf.dayCharge} · 야간 +${(pProf.nightGen || 0).toFixed(2)}/s · 용량 +${pProf.powerCap}`;
+        const pStats = getTerrainPowerStats(def.id, pProf, tx, ty);
+        tierSub = `주간 +${Math.round(pStats.dayCharge)} · 야간 +${(pStats.nightGen || 0).toFixed(2)}/s · 용량 +${pStats.powerCap}`;
       } else if (def.subType === 'housing') {
         const hProf = getStructLevelProfile(def, st.level);
         tierSub = `요원 수용 +${hProf.popCap}명 · 안락함 +${hProf.cozy}`;
@@ -1119,7 +1307,16 @@ window.ZS = window.ZS || {};
       state.freeVouchers[itemId] -= 1;
       usedVoucher = true;
     } else {
-      payCost(def.cost);
+      payCost(getEffectiveBuildCost(itemId));
+    }
+
+    let spawnXp = 0;
+    let spawnRank = 0;
+    if (usedVoucher && state.divisionRank1Vouchers && (state.divisionRank1Vouchers[itemId] || 0) > 0) {
+      state.divisionRank1Vouchers[itemId] -= 1;
+      const rank1Info = DATA.VETERANCY_RANKS && DATA.VETERANCY_RANKS[1];
+      spawnXp = (rank1Info && rank1Info.minXp) || 12;
+      spawnRank = G.computeRankFromXp(spawnXp);
     }
 
     const spawnProf = def.layer === 'struct' ? getStructLevelProfile(def, spawnLevel) : null;
@@ -1133,10 +1330,11 @@ window.ZS = window.ZS || {};
       const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
       const profLv2 = getStructLevelProfile(def, 2);
       const wallMaxHp = Math.round(profLv2.baseMaxHp * hpMult);
-      const wallLv2Up = getUpgradeCost(def, 1) || { wood: 4, scrap: 10, coin: 0 };
+      const wallBaseCost = getEffectiveBuildCost(itemId);
+      const wallLv2Up = getEffectiveUpgradeCost(def, 1) || { wood: 4, scrap: 10, coin: 0 };
       const wallInvested = {
-        wood: (usedVoucher ? 0 : (def.cost.wood || 6)) + (wallLv2Up.wood || 0),
-        scrap: (usedVoucher ? 0 : (def.cost.scrap || 2)) + (wallLv2Up.scrap || 0),
+        wood: (usedVoucher ? 0 : (wallBaseCost.wood || 6)) + (wallLv2Up.wood || 0),
+        scrap: (usedVoucher ? 0 : (wallBaseCost.scrap || 2)) + (wallLv2Up.scrap || 0),
         coin: wallLv2Up.coin || 0
       };
       existing.buildAnimTimer = 0.24;
@@ -1169,14 +1367,15 @@ window.ZS = window.ZS || {};
       const fid = state.floorGrid[ty][tx];
       const fDef = fid ? DATA.ITEMS[fid] : null;
       const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
-      const maxHp = Math.round(def.maxHp * hpMult);
-      const baseCost = usedVoucher ? {} : (def.cost || {});
+      const baseMaxHp = spawnProf ? spawnProf.baseMaxHp : def.maxHp;
+      const maxHp = Math.round(baseMaxHp * hpMult);
+      const baseCost = usedVoucher ? {} : (getEffectiveBuildCost(itemId) || {});
       existing.mounted = {
         uid: G.nextStructUid++,
         id: itemId,
         level: 1,
-        xp: 0,
-        rank: 0,
+        xp: spawnXp,
+        rank: spawnRank,
         kills: 0,
         usedVoucher,
         invested: {
@@ -1198,13 +1397,13 @@ window.ZS = window.ZS || {};
       const hpMult = 1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0);
       const baseMaxHp = spawnProf ? spawnProf.baseMaxHp : def.maxHp;
       const maxHp = Math.round(baseMaxHp * hpMult);
-      const baseCost = usedVoucher ? {} : (def.cost || {});
+      const baseCost = usedVoucher ? {} : (getEffectiveBuildCost(itemId) || {});
       state.structGrid[ty][tx] = {
         uid: G.nextStructUid++,
         id: itemId,
         level: spawnLevel,
-        xp: 0,
-        rank: 0,
+        xp: spawnXp,
+        rank: spawnRank,
         kills: 0,
         usedVoucher,
         invested: {
@@ -1226,7 +1425,8 @@ window.ZS = window.ZS || {};
     // Immediate battery cap increase feels nice if building battery/solar/wind on day 1
     const prevCap = state.powerCap;
     recalculateBaseStats();
-    const placedDayCharge = spawnProf ? spawnProf.dayCharge : (def.dayCharge || 0);
+    const placedPwr = spawnProf ? getTerrainPowerStats(itemId, spawnProf, tx, ty) : { dayCharge: def.dayCharge || 0 };
+    const placedDayCharge = placedPwr.dayCharge || 0;
     if (placedDayCharge && state.wave === 1) {
       state.power = Math.min(state.powerCap, state.power + Math.round(placedDayCharge * 0.5));
     } else if (state.powerCap > prevCap && def.id === 'battery_bank') {
@@ -1254,6 +1454,17 @@ window.ZS = window.ZS || {};
 
     const moving = src.mounted ? src.mounted : src;
     const movingDef = DATA.ITEMS[moving.id];
+    const destTerrain = G.getTerrainAt ? G.getTerrainAt(toX, toY) : null;
+    if (destTerrain && destTerrain.kind === 'rock') {
+      ZS.Audio.playError();
+      G.banner('이동 불가', '자연 암석(바위) 지형에는 설치할 수 없습니다.', 'warn');
+      return false;
+    }
+    if (destTerrain && destTerrain.kind === 'ramp' && moving.id !== 'razor_pad') {
+      ZS.Audio.playError();
+      G.banner('이동 불가', '경사 언덕에는 스파이크 트랩만 설치할 수 있습니다.', 'warn');
+      return false;
+    }
     const dest = state.structGrid[toY][toX];
 
     if (dest) {
@@ -1679,6 +1890,7 @@ window.ZS = window.ZS || {};
       if (offer.give.scrap) state.scrap += offer.give.scrap;
     } else if (offer.type === 'power_boost') {
       state.power = Math.min(Math.round(state.powerCap * 1.35), state.power + offer.amount);
+      if (G.invalidateStatsCache) G.invalidateStatsCache();
     } else if (offer.type === 'free_item') {
       const vKey = offer.voucherKey || (offer.id === 'crate_pod' ? 'shelter_pod' : offer.itemId);
       state.freeVouchers[vKey] = (state.freeVouchers[vKey] || 0) + 1;
@@ -1697,8 +1909,12 @@ window.ZS = window.ZS || {};
     getStructMaxTier,
     isUpgradeableDef,
     getUpgradeCost,
+    getEffectiveHqUpgradeCost,
+    getEffectiveBuildCost,
+    getEffectiveUpgradeCost,
     getStructureDisplayName,
     getStructLevelProfile,
+    getTerrainPowerStats,
     recalculateBaseStats,
     getPlacementCozyPreview,
     computeStructureEffectiveStatsUncached,

@@ -18,8 +18,8 @@ window.ZS = window.ZS || {};
 
   function scaleWaveDrop(rawAmount, waveNum, isBoss) {
     const w = waveNum || 1;
-    if (w < 15 || rawAmount <= 0) return rawAmount;
-    const baseScale = Math.max(0.35, 1 / (1 + (w - 14) * 0.075));
+    if (w < 10 || rawAmount <= 0) return rawAmount;
+    const baseScale = Math.max(0.35, 1 / (1 + (w - 9) * 0.08));
     const scale = isBoss ? Math.max(0.70, baseScale) : baseScale;
     const exact = rawAmount * scale;
     const whole = Math.floor(exact);
@@ -68,6 +68,9 @@ window.ZS = window.ZS || {};
       }
       if (def.isBoss) {
         state.bossDefeated = true;
+        if (G.recordDivisionProgress) {
+          G.recordDivisionProgress(state.divisionId, state.wave, state.wave >= 20);
+        }
         if (woodGain > 0) {
           addFloatingText(z.x - 0.32, z.y, 22, `+${woodGain}`, DATA.PALETTE.resWood, 13, DATA.PALETTE.outlineDark);
         }
@@ -97,15 +100,23 @@ window.ZS = window.ZS || {};
       const st = state.structGrid[cy] && state.structGrid[cy][cx];
       if (st) {
         if (st.id === 'command_hq') {
-          if (Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles) {
+          if (
+            Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles &&
+            (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, hqCx, hqCy))
+          ) {
             return { tx: cx, ty: cy, gx: hqCx, gy: hqCy };
           }
           break;
         }
         const def = DATA.ITEMS[st.id];
         if (!(def && def.passable)) {
-          if (Math.hypot(cx + 0.5 - z.x, cy + 0.5 - z.y) <= rangeTiles) {
-            return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          const candGx = cx + 0.5;
+          const candGy = cy + 0.5;
+          if (
+            Math.hypot(candGx - z.x, candGy - z.y) <= rangeTiles &&
+            (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, candGx, candGy))
+          ) {
+            return { tx: cx, ty: cy, gx: candGx, gy: candGy };
           }
           break;
         }
@@ -118,7 +129,11 @@ window.ZS = window.ZS || {};
       if (visited.has(key) || cx < 0 || cy < 0 || cx >= N || cy >= N) break;
       visited.add(key);
     }
-    if (Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x]) {
+    if (
+      Math.hypot(hqCx - z.x, hqCy - z.y) <= rangeTiles &&
+      state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x] &&
+      (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, hqCx, hqCy))
+    ) {
       return { tx: DATA.HQ_POS.x, ty: DATA.HQ_POS.y, gx: hqCx, gy: hqCy };
     }
     let best = null;
@@ -133,10 +148,12 @@ window.ZS = window.ZS || {};
         if (!st || st.id === 'command_hq') continue;
         const def = DATA.ITEMS[st.id];
         if (def && def.passable) continue;
-        const d = Math.hypot(sx + 0.5 - z.x, sy + 0.5 - z.y);
-        if (d <= rangeTiles && d < bestD) {
+        const candGx = sx + 0.5;
+        const candGy = sy + 0.5;
+        const d = Math.hypot(candGx - z.x, candGy - z.y);
+        if (d <= rangeTiles && d < bestD && (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(z.x, z.y, candGx, candGy))) {
           bestD = d;
-          best = { tx: sx, ty: sy, gx: sx + 0.5, gy: sy + 0.5 };
+          best = { tx: sx, ty: sy, gx: candGx, gy: candGy };
         }
       }
     }
@@ -144,17 +161,31 @@ window.ZS = window.ZS || {};
   }
 
   function findBossChargeTarget(z, tx, ty) {
+    const startT = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+    if (startT && (startT.kind === 'rock' || startT.kind === 'ramp')) return null;
+    const startElev = startT && startT.kind === 'plateau' ? 10 : 0;
+
     let cx = tx;
     let cy = ty;
     const visited = new Set([`${cx},${cy}`]);
     for (let stepIdx = 0; stepIdx < 6; stepIdx++) {
       const nextStep = state.flow && state.flow.next[cy] && state.flow.next[cy][cx];
       if (!nextStep) break;
+      const prevX = cx;
+      const prevY = cy;
       cx += nextStep.dx;
       cy += nextStep.dy;
       const key = `${cx},${cy}`;
       if (visited.has(key) || cx < 0 || cy < 0 || cx >= N || cy >= N) break;
       visited.add(key);
+
+      if (ZS.Pathfinding && ZS.Pathfinding.canTraverseTerrainStep && !ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, prevX, prevY, cx, cy)) {
+        break;
+      }
+      const cT = G.getTerrainAt ? G.getTerrainAt(cx, cy) : null;
+      if (cT && (cT.kind === 'rock' || cT.kind === 'ramp')) break;
+      const cElev = cT && cT.kind === 'plateau' ? 10 : 0;
+      if (cElev !== startElev) break;
 
       const st = state.structGrid[cy] && state.structGrid[cy][cx];
       if (!st) continue;
@@ -165,7 +196,22 @@ window.ZS = window.ZS || {};
       if (def && (def.subType === 'wall' || def.subType === 'gate')) {
         const dist = Math.hypot(cx + 0.5 - z.x, cy + 0.5 - z.y);
         if (dist >= 1.2 && dist <= 3.4) {
-          return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          // Verify straight-line samples have clear non-rock, identical-elevation terrain
+          let lineClear = true;
+          for (let s = 1; s <= 6; s++) {
+            const u = s / 7;
+            const sx = Math.floor(z.x + (cx + 0.5 - z.x) * u);
+            const sy = Math.floor(z.y + (cy + 0.5 - z.y) * u);
+            const sT = G.getTerrainAt ? G.getTerrainAt(sx, sy) : null;
+            const sElev = sT && sT.kind === 'plateau' ? 10 : 0;
+            if ((sT && (sT.kind === 'rock' || sT.kind === 'ramp')) || sElev !== startElev) {
+              lineClear = false;
+              break;
+            }
+          }
+          if (lineClear) {
+            return { tx: cx, ty: cy, gx: cx + 0.5, gy: cy + 0.5 };
+          }
         }
       }
       break;
@@ -272,8 +318,18 @@ window.ZS = window.ZS || {};
             z.atkCooldown = 1 / z.attackRate;
             continue;
           } else {
-            z.x += (dx / dist) * dashStep;
-            z.y += (dy / dist) * dashStep;
+            const curTx = Math.max(0, Math.min(N - 1, Math.floor(z.x)));
+            const curTy = Math.max(0, Math.min(N - 1, Math.floor(z.y)));
+            const nx = z.x + (dx / dist) * dashStep;
+            const ny = z.y + (dy / dist) * dashStep;
+            const ntx = Math.max(0, Math.min(N - 1, Math.floor(nx)));
+            const nty = Math.max(0, Math.min(N - 1, Math.floor(ny)));
+            if ((ntx === curTx && nty === curTy) || !ZS.Pathfinding || !ZS.Pathfinding.canTraverseTerrainStep || ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, curTx, curTy, ntx, nty)) {
+              z.x = nx;
+              z.y = ny;
+            } else {
+              z.chargeState = null;
+            }
             continue;
           }
         }
@@ -473,7 +529,7 @@ window.ZS = window.ZS || {};
         }
       }
 
-      // Leaper single-wall leap (1x per spawn, 1.1-tile check, landing tile must be empty or passable)
+      // Leaper single-wall leap (1x per spawn, 1.1-tile check, landing tile must be empty or passable, blocked across rock/ramp/cliff)
       if (z.type === 'leaper' && !z.hasLeaped && step) {
         const ntx = tx + step.dx;
         const nty = ty + step.dy;
@@ -488,24 +544,39 @@ window.ZS = window.ZS || {};
           const ltx = ntx + step.dx;
           const lty = nty + step.dy;
           if (ltx >= 0 && lty >= 0 && ltx < N && lty < N) {
-            const landSt = state.structGrid[lty] && state.structGrid[lty][ltx];
-            const landDef = landSt ? (landSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[landSt.id]) : null;
-            if (!landSt || (landDef && landDef.passable)) {
-              z.hasLeaped = true;
-              z.facingAngle = Math.atan2(lty + 0.5 - z.y, ltx + 0.5 - z.x);
-              z.leapState = {
-                phase: 'crouch',
-                timer: 0,
-                crouchDur: 0.12,
-                airDur: 0.42,
-                startX: z.x,
-                startY: z.y,
-                targetX: ltx + 0.5,
-                targetY: lty + 0.5,
-                landTx: ltx,
-                landTy: lty
-              };
-              continue;
+            const curT = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+            const midT = G.getTerrainAt ? G.getTerrainAt(ntx, nty) : null;
+            const landT = G.getTerrainAt ? G.getTerrainAt(ltx, lty) : null;
+            const curK = curT ? curT.kind : null;
+            const midK = midT ? midT.kind : null;
+            const landK = landT ? landT.kind : null;
+            const terrainForbidden =
+              curK === 'rock' || curK === 'ramp' ||
+              midK === 'rock' || midK === 'ramp' ||
+              landK === 'rock' || landK === 'ramp';
+            const curElev = curK === 'plateau' ? 10 : 0;
+            const midElev = midK === 'plateau' ? 10 : 0;
+            const landElev = landK === 'plateau' ? 10 : 0;
+            if (!terrainForbidden && curElev === midElev && midElev === landElev) {
+              const landSt = state.structGrid[lty] && state.structGrid[lty][ltx];
+              const landDef = landSt ? (landSt.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[landSt.id]) : null;
+              if (!landSt || (landDef && landDef.passable)) {
+                z.hasLeaped = true;
+                z.facingAngle = Math.atan2(lty + 0.5 - z.y, ltx + 0.5 - z.x);
+                z.leapState = {
+                  phase: 'crouch',
+                  timer: 0,
+                  crouchDur: 0.12,
+                  airDur: 0.42,
+                  startX: z.x,
+                  startY: z.y,
+                  targetX: ltx + 0.5,
+                  targetY: lty + 0.5,
+                  landTx: ltx,
+                  landTy: lty
+                };
+                continue;
+              }
             }
           }
         }
@@ -576,9 +647,11 @@ window.ZS = window.ZS || {};
           }
 
           // Wall/Gate Thorns (+15%p melee reflection when Reactive Armor Coating is active)
-          const totalThorns = ((bProf && bProf.thornsRatio) || 0) + (reactiveOn ? 0.15 : 0);
+          const div = G.getDivisionDef ? G.getDivisionDef() : null;
+          const thornsMult = (div && div.thornsMult) || 1.0;
+          const totalThorns = (((bProf && bProf.thornsRatio) || 0) + (reactiveOn ? 0.15 : 0)) * thornsMult;
           if (totalThorns > 0) {
-            const minRefl = (bProf && bProf.thornsMin) || 4;
+            const minRefl = Math.round(((bProf && bProf.thornsMin) || 4) * thornsMult);
             const reflDmg = Math.max(minRefl, Math.round(z.damage * totalThorns));
             state.projectiles.push({
               kind: 'spark',
@@ -595,9 +668,47 @@ window.ZS = window.ZS || {};
           }
         }
       } else if (distGoal > 0.01) {
-        const moveSpd = z.speed * slowMult * frenzyMult * dt;
-        z.x += ((goalX - z.x) / distGoal) * moveSpd;
-        z.y += ((goalY - z.y) / distGoal) * moveSpd;
+        let rampMult = 1.0;
+        const curT = G.getTerrainAt ? G.getTerrainAt(tx, ty) : null;
+        const stepDx = (goalX - z.x) / distGoal;
+        const stepDy = (goalY - z.y) / distGoal;
+        if (curT && curT.kind === 'ramp' && curT.rampDir) {
+          const dot = stepDx * curT.rampDir.dx + stepDy * curT.rampDir.dy;
+          const rampSpd = DATA.RAMP_SPEED || { uphill: 0.70, downhill: 1.25 };
+          if (dot > 0.25) rampMult = rampSpd.uphill;
+          else if (dot < -0.25) rampMult = rampSpd.downhill;
+        }
+        const moveSpd = z.speed * slowMult * frenzyMult * rampMult * dt;
+        const candX = Math.max(0.02, Math.min(N - 0.02, z.x + stepDx * moveSpd));
+        const candY = Math.max(0.02, Math.min(N - 0.02, z.y + stepDy * moveSpd));
+        const ntx = Math.floor(candX);
+        const nty = Math.floor(candY);
+        const canStep =
+          (ntx === tx && nty === ty) ||
+          !ZS.Pathfinding ||
+          !ZS.Pathfinding.canTraverseTerrainStep ||
+          ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, tx, ty, ntx, nty);
+        if (canStep) {
+          z.x = candX;
+          z.y = candY;
+        } else {
+          const canSlideX =
+            ntx !== tx &&
+            ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, tx, ty, ntx, ty);
+          const canSlideY =
+            nty !== ty &&
+            ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, tx, ty, tx, nty);
+          if (canSlideX) {
+            z.x = candX;
+            z.y = Math.max(ty + 0.02, Math.min(ty + 0.98, candY));
+          } else if (canSlideY) {
+            z.x = Math.max(tx + 0.02, Math.min(tx + 0.98, candX));
+            z.y = candY;
+          } else {
+            z.x = Math.max(tx + 0.02, Math.min(tx + 0.98, candX));
+            z.y = Math.max(ty + 0.02, Math.min(ty + 0.98, candY));
+          }
+        }
       }
     }
 
@@ -650,6 +761,7 @@ window.ZS = window.ZS || {};
 
   function completeWave() {
     const clearedWave = state.wave;
+    const hadBlackout = !!state.blackoutTriggered;
     state.phase = 'day';
     state.isNight = false;
     state.blackoutActive = false;
@@ -666,9 +778,9 @@ window.ZS = window.ZS || {};
     if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     // 1. Wave clearance rewards + Cozy dividend bonus
-    const woodReward = 38 + clearedWave * 12;
-    const scrapReward = 24 + clearedWave * 7;
-    const baseCoin = 24 + clearedWave * 6;
+    const woodReward = 26 + clearedWave * 9;
+    const scrapReward = 16 + clearedWave * 5;
+    const baseCoin = 16 + clearedWave * 4;
     const bonusCoin = Math.round(baseCoin * state.cozyTier.coinBonus);
     const totalCoin = baseCoin + bonusCoin;
 
@@ -702,11 +814,11 @@ window.ZS = window.ZS || {};
     state.power = Math.min(maxTarget, state.power + state.dayCharge);
     const gainedPower = Math.round(state.power - beforePower);
 
-    // 4. Morning Survivor Arrival (every day below 12 agents, every 2 waves at 12+ agents)
+    // 4. Morning Survivor Arrival (every day below 6 agents, every 2 waves at 6+ agents)
     let arrivedAgent = 0;
     let recruitNote = '';
     if (state.agents < state.popCap) {
-      if (state.agents < 12) {
+      if (state.agents < 6) {
         state.agents += 1;
         arrivedAgent = 1;
         state.agentRecruitProgress = 0;
@@ -731,12 +843,32 @@ window.ZS = window.ZS || {};
     G.refreshTraderOffers(false);
     ZS.Audio.playWaveClear();
 
+    const isRunCleared = !!(state.bossDefeated && clearedWave >= 20);
+    if (G.recordDivisionProgress) {
+      G.recordDivisionProgress(state.divisionId, state.wave, isRunCleared);
+    }
+
+    const newlyUnlocked = [];
+    if (hadBlackout && G.unlockDivision && G.unlockDivision('nightwatch')) {
+      newlyUnlocked.push(G.getDivisionDef('nightwatch').name);
+    }
+    if (state.wave >= 15 && G.unlockDivision && G.unlockDivision('arc_tech')) {
+      newlyUnlocked.push(G.getDivisionDef('arc_tech').name);
+    }
+
     const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
     G.banner(
       `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
       `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 주간 충전 전력 +${gainedPower}${agentMsg}`,
       'good'
     );
+    if (newlyUnlocked.length > 0) {
+      G.banner(
+        `사령관 분과 영구 해금: ${newlyUnlocked.join(', ')}`,
+        '새 작전 개시 시 사령관 지휘 분과 선택 창에서 즉시 출격할 수 있습니다!',
+        'good'
+      );
+    }
 
     G.saveGame();
     G.notifyUi();
@@ -744,6 +876,9 @@ window.ZS = window.ZS || {};
 
   function triggerGameOver() {
     state.phase = 'gameover';
+    if (G.recordDivisionProgress) {
+      G.recordDivisionProgress(state.divisionId, state.wave, !!(state.bossDefeated && state.wave >= 20));
+    }
     if (G.invalidateStatsCache) G.invalidateStatsCache();
     ZS.Audio.playBlackout();
     G.banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
@@ -1014,14 +1149,32 @@ window.ZS = window.ZS || {};
     state: G.state,
     getEnvInfo: G.getEnvInfo,
     getSaveKey: G.getSaveKey,
+    getMetaKey: G.getMetaKey,
+    getDivisionDef: G.getDivisionDef,
+    getCommanderMeta: G.getCommanderMeta,
+    isDivisionUnlocked: G.isDivisionUnlocked,
+    unlockDivision: G.unlockDivision,
+    setLastSelectedDivision: G.setLastSelectedDivision,
+    recordDivisionProgress: G.recordDivisionProgress,
+    debugUnlockAllDivisions: G.debugUnlockAllDivisions,
+    isArcOverdriveActive: G.isArcOverdriveActive,
     isScreenShakeEnabled: G.isScreenShakeEnabled,
     setScreenShakeEnabled: G.setScreenShakeEnabled,
     toggleScreenShake: G.toggleScreenShake,
     setCallbacks: G.setCallbacks,
     initNewGame: G.initNewGame,
+    regenerateMapSeed: G.regenerateMapSeed,
+    getTerrainAt: G.getTerrainAt,
+    getTerrainElevationAt: G.getTerrainElevationAt,
+    findFirstPeakOnSegment: G.findFirstPeakOnSegment,
+    hasDirectLineOfSight: G.hasDirectLineOfSight,
+    getTerrainPowerStats: G.getTerrainPowerStats,
     loadGame: G.loadGame,
     clearSaveAndReset: G.clearSaveAndReset,
     getHqLevelInfo: G.getHqLevelInfo,
+    getEffectiveHqUpgradeCost: G.getEffectiveHqUpgradeCost,
+    getEffectiveBuildCost: G.getEffectiveBuildCost,
+    getEffectiveUpgradeCost: G.getEffectiveUpgradeCost,
     canUpgradeHq: G.canUpgradeHq,
     upgradeHq: G.upgradeHq,
     isUpgradeableDef: G.isUpgradeableDef,
@@ -1053,7 +1206,12 @@ window.ZS = window.ZS || {};
     buyNightConsumable: G.buyNightConsumable,
     buyTraderOffer: G.buyTraderOffer,
     startNightWave: G.startNightWave,
+    triggerBlackout: G.triggerBlackout,
+    completeWave: G.completeWave,
+    triggerGameOver: G.triggerGameOver,
     toggleReconPaths: G.toggleReconPaths,
+    toggleWindOverlay: G.toggleWindOverlay,
+    setWindOverlay: G.setWindOverlay,
     generateWaveIntel: G.generateWaveIntel,
     recomputePreviewPaths: G.recomputePreviewPaths,
     triggerNanoRepair: G.triggerNanoRepair,

@@ -24,6 +24,8 @@ window.ZS = window.ZS || {};
     canvas: document.createElement('canvas'),
     ctx: null,
     N: 0,
+    seed: null,
+    terrainGridRef: null,
     isSil: null,
     bakeScale: 0,
     worldMinX: 0,
@@ -34,6 +36,7 @@ window.ZS = window.ZS || {};
     decalOcc: null,
     bakeCount: 0
   };
+  const rockStampCache = new Map();
   const occludeAlphaMap = new Map();
   let lastOccTimeSec = -1;
   const R = (ZS._Renderer = {
@@ -46,6 +49,7 @@ window.ZS = window.ZS || {};
     glowStampCache,
     emissiveStampCache,
     thumbnailCache,
+    rockStampCache,
     occludeAlphaMap,
     bgCache,
     terrainCache,
@@ -927,12 +931,14 @@ window.ZS = window.ZS || {};
     const prevCamX = Iso.cam.x;
     const prevCamY = Iso.cam.y;
     const prevZoom = Iso.cam.zoom;
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
     const prevMods = Iso.getRenderModifiers();
     const prevEmis = R.emissiveList;
     const stampEmis = isSil ? null : [];
     let bakedEmis = null;
 
     try {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(0);
       Iso.setViewport(logicalW, logicalH);
       Iso.cam.zoom = 1.0;
       Iso.cam.x = logicalW * 0.5 - anchorX;
@@ -946,6 +952,7 @@ window.ZS = window.ZS || {};
       bakeFn(sctx);
       bakedEmis = bakeEmissiveStamp(stampEmis, logicalW, logicalH, scale, anchorX, anchorY);
     } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
       Iso.setViewport(prevVp.w, prevVp.h);
       Iso.cam.minZoom = prevMinZoom;
       Iso.cam.x = prevCamX;
@@ -1041,6 +1048,21 @@ window.ZS = window.ZS || {};
     return false;
   }
 
+  function getTileElevAt(state, gx, gy) {
+    if (ZS.Game && ZS.Game.getTerrainElevationAt) {
+      return ZS.Game.getTerrainElevationAt(gx, gy);
+    }
+    const tGrid = state && state.terrainGrid;
+    if (!tGrid) return 0;
+    const tx = Math.floor(gx);
+    const ty = Math.floor(gy);
+    const t = tGrid[ty] && tGrid[ty][tx];
+    if (!t) return 0;
+    if (t.kind === 'plateau') return t.elev != null ? t.elev : 10;
+    if (t.kind === 'ramp') return t.elev != null ? t.elev : 5;
+    return 0;
+  }
+
   function ensureTerrainCache(N, meta, state, P, isSil) {
     const Iso = ZS.Iso;
     const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
@@ -1052,9 +1074,13 @@ window.ZS = window.ZS || {};
     const worldH = Math.ceil(worldMaxY - worldMinY);
     const bakeScale = Math.min(3.0, Math.max(2.0, dpr * 1.25), 6144 / Math.max(1, worldW));
     const totalCells = N * N;
+    const tSeed = state.terrainSeed || 0;
+    const tGrid = state.terrainGrid || null;
 
     let dirty =
       terrainCache.N !== N ||
+      terrainCache.seed !== tSeed ||
+      terrainCache.terrainGridRef !== tGrid ||
       terrainCache.isSil !== isSil ||
       terrainCache.bakeScale !== bakeScale ||
       !terrainCache.floorIds ||
@@ -1066,6 +1092,7 @@ window.ZS = window.ZS || {};
       for (let y = 0; y < N && !dirty; y++) {
         const fRow = fg && fg[y];
         const sRow = sg && sg[y];
+        const tRow = tGrid && tGrid[y];
         const mRow = meta.grid[y];
         const rowOff = y * N;
         for (let x = 0; x < N; x++) {
@@ -1075,7 +1102,8 @@ window.ZS = window.ZS || {};
             dirty = true;
             break;
           }
-          if (!fid && mRow[x].decal) {
+          const tCell = tRow && tRow[x];
+          if (!fid && !tCell && mRow[x].decal) {
             const occ = Boolean(sRow && sRow[x]);
             if (terrainCache.decalOcc[idx] !== occ) {
               dirty = true;
@@ -1094,6 +1122,8 @@ window.ZS = window.ZS || {};
     }
 
     terrainCache.N = N;
+    terrainCache.seed = tSeed;
+    terrainCache.terrainGridRef = tGrid;
     terrainCache.isSil = isSil;
     terrainCache.bakeScale = bakeScale;
     terrainCache.worldMinX = worldMinX;
@@ -1114,8 +1144,10 @@ window.ZS = window.ZS || {};
     const prevCamX = Iso.cam.x;
     const prevCamY = Iso.cam.y;
     const prevZoom = Iso.cam.zoom;
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
 
     try {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(0);
       Iso.setViewport(worldW, worldH);
       Iso.cam.zoom = 1.0;
       Iso.cam.x = worldMinX + worldW * 0.5;
@@ -1134,9 +1166,11 @@ window.ZS = window.ZS || {};
       for (let y = 0; y < N; y++) {
         const fRow = state.floorGrid && state.floorGrid[y];
         const sRow = state.structGrid && state.structGrid[y];
+        const tRow = tGrid && tGrid[y];
         const rowOff = y * N;
         for (let x = 0; x < N; x++) {
           const cell = meta.grid[y][x];
+          const tCell = (tRow && tRow[x]) || null;
           const isEdge = cell.isEdge;
           const checker = (x + y) % 2 === 0;
           const rawBase = isEdge
@@ -1146,13 +1180,42 @@ window.ZS = window.ZS || {};
             : checker
             ? P.terrainA
             : P.terrainB;
-          const tileFill = isSil ? (isEdge ? '#CBD3DB' : '#D5DBE1') : Iso.shadeHex(rawBase, cell.shadeFactor);
-          Iso.drawTilePoly(tctx, x, y, 0, tileFill, tileFill, 0.65);
-
           const fid = (fRow && fRow[x]) || null;
           const occ = Boolean(sRow && sRow[x]);
           terrainCache.floorIds[rowOff + x] = fid;
           terrainCache.decalOcc[rowOff + x] = occ;
+
+          if (tCell && tCell.kind === 'plateau') {
+            // Plateau has its own elevated 3D block & top surface; keep flat under-tile muted soil
+            const underFill = isSil ? '#C4CCD4' : '#39463B';
+            Iso.drawTilePoly(tctx, x, y, 0, underFill, underFill, 0.5);
+            continue;
+          }
+
+          const tileFill = isSil ? (isEdge ? '#CBD3DB' : '#D5DBE1') : Iso.shadeHex(rawBase, cell.shadeFactor);
+          Iso.drawTilePoly(tctx, x, y, 0, tileFill, tileFill, 0.65);
+
+          if (tCell && tCell.kind === 'rock') {
+            if (!isSil) {
+              const bedP = Iso.gridToScreen(x + 0.5, y + 0.5, 0.15);
+              tctx.fillStyle = 'rgba(12, 16, 14, 0.16)';
+              tctx.beginPath();
+              tctx.ellipse(bedP.x, bedP.y, tCell.isPeak ? 25 : 22, tCell.isPeak ? 12.5 : 11, 0, 0, Math.PI * 2);
+              tctx.fill();
+            }
+            continue;
+          }
+
+          if (tCell && tCell.kind === 'ramp') {
+            if (!isSil) {
+              const bedP = Iso.gridToScreen(x + 0.5, y + 0.5, 0.15);
+              tctx.fillStyle = 'rgba(26, 24, 20, 0.16)';
+              tctx.beginPath();
+              tctx.ellipse(bedP.x, bedP.y, 21, 10.5, 0, 0, Math.PI * 2);
+              tctx.fill();
+            }
+            continue;
+          }
 
           if (fid) {
             drawFloorTile(tctx, x, y, fid, 1.0);
@@ -1172,6 +1235,7 @@ window.ZS = window.ZS || {};
       }
       terrainCache.bakeCount += 1;
     } finally {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
       Iso.setViewport(prevVp.w, prevVp.h);
       Iso.cam.minZoom = prevMinZoom;
       Iso.cam.x = prevCamX;
@@ -1395,7 +1459,13 @@ window.ZS = window.ZS || {};
     if (uiState.hoverTile) {
       const { tx, ty } = uiState.hoverTile;
       if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
-        drawHoverOverlay(ctx, state, uiState, tx, ty, zScale);
+        const hovElev = getTileElevAt(state, tx + 0.5, ty + 0.5);
+        Iso.setElevationOffset(hovElev);
+        try {
+          drawHoverOverlay(ctx, state, uiState, tx, ty, zScale);
+        } finally {
+          Iso.setElevationOffset(0);
+        }
       }
     }
 
@@ -1403,43 +1473,53 @@ window.ZS = window.ZS || {};
     if (uiState.inspectedTile) {
       const { tx, ty } = uiState.inspectedTile;
       if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
-        Iso.drawTilePoly(ctx, tx, ty, 2.2, P.selectFill, P.selectStroke, 1.8);
-      }
-      const st = state.structGrid[ty] && state.structGrid[ty][tx];
-      if (st) {
-        if (st.id === 'command_hq') {
-          const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null;
-          if (hqInfo && hqInfo.weapon && hqInfo.weapon.range > 0) {
-            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, hqInfo.weapon.range, P.rangeStroke, P.rangeFill);
-          }
-        } else {
-          const def = DATA.ITEMS[st.id];
-          if (st.id === 'barricade_wall' && st.mounted) {
-            const mDef = DATA.ITEMS[st.mounted.id];
-            if (mDef) {
-              if (mDef.range > 0 && ZS.Game.getStructureEffectiveStats) {
-                const groundEff = ZS.Game.getStructureEffectiveStats(st.mounted, tx, ty, undefined, false);
-                const mountEff = ZS.Game.getStructureEffectiveStats(st.mounted, tx, ty, undefined, true);
-                drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, groundEff.range, mountEff.range, zScale);
+        const selElev = getTileElevAt(state, tx + 0.5, ty + 0.5);
+        Iso.setElevationOffset(selElev);
+        try {
+          Iso.drawTilePoly(ctx, tx, ty, 2.2, P.selectFill, P.selectStroke, 1.8);
+          const st = state.structGrid[ty] && state.structGrid[ty][tx];
+          if (st) {
+            if (st.id === 'command_hq') {
+              const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(state.hqLevel) : null;
+              if (hqInfo && hqInfo.weapon && hqInfo.weapon.range > 0) {
+                drawCombatRangeOverlay(ctx, state, DATA.HQ_STATS, tx + 0.5, ty + 0.5, hqInfo.weapon.range, 0, zScale);
               }
-              if (mDef.aura && mDef.aura.radius) {
-                const auraR = mDef.aura.radius + (mDef.id === 'led_floodlight' ? 0.4 : 0);
-                drawIsoCircle(ctx, tx + 0.5, ty + 0.5, auraR, P.goldStroke, P.goldFill);
+            } else {
+              const def = DATA.ITEMS[st.id];
+              if (st.id === 'barricade_wall' && st.mounted) {
+                const mDef = DATA.ITEMS[st.mounted.id];
+                if (mDef) {
+                  if (mDef.range > 0 && ZS.Game.getStructureEffectiveStats) {
+                    const groundEff = ZS.Game.getStructureEffectiveStats(st.mounted, tx, ty, undefined, false);
+                    const mountEff = ZS.Game.getStructureEffectiveStats(st.mounted, tx, ty, undefined, true);
+                    drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, groundEff.range, mountEff.range, zScale);
+                    if (isDirectFireDef(mDef)) {
+                      drawPeakShadowSectors(ctx, state, tx + 0.5, ty + 0.5, mountEff.range, zScale);
+                    }
+                  }
+                  if (mDef.aura && mDef.aura.radius && ZS.Game.getStructureEffectiveStats) {
+                    const mEff = ZS.Game.getStructureEffectiveStats(st.mounted, tx, ty, undefined, true);
+                    const auraR = mEff.auraRadius || (mDef.aura.radius + (mDef.id === 'led_floodlight' ? 0.4 : 0));
+                    drawIsoCircle(ctx, tx + 0.5, ty + 0.5, auraR, P.goldStroke, P.goldFill);
+                  }
+                }
+              } else if (def) {
+                const eff = ZS.Game.getStructureEffectiveStats(st, tx, ty);
+                if (eff.range > 0) {
+                  drawCombatRangeOverlay(ctx, state, def, tx + 0.5, ty + 0.5, eff.range, eff.minRange || def.minRange || 0, zScale);
+                }
+                if (eff.auraRadius > 0) {
+                  drawIsoCircle(ctx, tx + 0.5, ty + 0.5, eff.auraRadius, P.goldStroke, P.goldFill);
+                }
+                const gateSlowR = (eff.prof && eff.prof.gateSlowRadius) || eff.gateSlowRadius || def.gateSlowRadius;
+                if (gateSlowR) {
+                  drawIsoCircle(ctx, tx + 0.5, ty + 0.5, gateSlowR, P.rangeStroke, 'rgba(255, 255, 255, 0.08)');
+                }
               }
             }
-          } else if (def) {
-            const eff = ZS.Game.getStructureEffectiveStats(st, tx, ty);
-            if (eff.range > 0) {
-              drawIsoCircle(ctx, tx + 0.5, ty + 0.5, eff.range, P.rangeStroke, P.rangeFill);
-            }
-            if (eff.auraRadius > 0) {
-              drawIsoCircle(ctx, tx + 0.5, ty + 0.5, eff.auraRadius, P.goldStroke, P.goldFill);
-            }
-            const gateSlowR = (eff.prof && eff.prof.gateSlowRadius) || eff.gateSlowRadius || def.gateSlowRadius;
-            if (gateSlowR) {
-              drawIsoCircle(ctx, tx + 0.5, ty + 0.5, gateSlowR, P.rangeStroke, 'rgba(255, 255, 255, 0.08)');
-            }
           }
+        } finally {
+          Iso.setElevationOffset(0);
         }
       }
     }
@@ -1487,13 +1567,28 @@ window.ZS = window.ZS || {};
     const zPadBot = Math.max(95, 125 * zScale);
 
     const renderList = [];
+    const tGrid = state.terrainGrid;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
+        const tCell = tGrid && tGrid[y] && tGrid[y][x];
+        if (tCell && (tCell.kind === 'plateau' || tCell.kind === 'ramp' || tCell.kind === 'rock')) {
+          if (isGridVisible(x + 0.5, y + 0.5, cullPadX, cullPadTop, cullPadBot, w, h)) {
+            renderList.push({
+              kind: tCell.kind,
+              depth: (x + 0.48) + (y + 0.48),
+              tx: x,
+              ty: y,
+              terrain: tCell
+            });
+          }
+        }
+
         const st = state.structGrid[y][x];
         if (!st) continue;
         if (!isGridVisible(x + 0.5, y + 0.5, cullPadX, cullPadTop, cullPadBot, w, h)) continue;
         const def = st.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[st.id];
-        const depthOffset = def && def.passable ? 0.15 : 1.0;
+        const onElevTerrain = !!(tCell && (tCell.kind === 'plateau' || tCell.kind === 'ramp'));
+        const depthOffset = def && def.passable ? (onElevTerrain ? 0.98 : 0.15) : 1.0;
         renderList.push({
           kind: 'struct',
           depth: x + y + depthOffset,
@@ -1524,9 +1619,12 @@ window.ZS = window.ZS || {};
         visible = isGridVisible(z.chargeState.targetX, z.chargeState.targetY, zPadX, zPadTop, zPadBot, w, h);
       }
       if (!visible) continue;
+      const zElev = getTileElevAt(state, z.x, z.y);
+      const rawZDepth = z.x + z.y + 0.05;
+      const zDepth = zElev > 0 ? Math.max(rawZDepth, Math.floor(z.x) + Math.floor(z.y) + 0.99) : rawZDepth;
       renderList.push({
         kind: 'zombie',
-        depth: z.x + z.y + 0.05,
+        depth: zDepth,
         z
       });
     }
@@ -1535,9 +1633,12 @@ window.ZS = window.ZS || {};
       for (let i = 0; i < state.dyingZombies.length; i++) {
         const dz = state.dyingZombies[i];
         if (!isGridVisible(dz.x, dz.y, zPadX, zPadTop, zPadBot, w, h)) continue;
+        const dzElev = getTileElevAt(state, dz.x, dz.y);
+        const rawDzDepth = dz.x + dz.y + 0.04;
+        const dzDepth = dzElev > 0 ? Math.max(rawDzDepth, Math.floor(dz.x) + Math.floor(dz.y) + 0.985) : rawDzDepth;
         renderList.push({
           kind: 'dying_zombie',
-          depth: dz.x + dz.y + 0.04,
+          depth: dzDepth,
           dz
         });
       }
@@ -1560,13 +1661,16 @@ window.ZS = window.ZS || {};
     const seenOcc = occludeAlphaMap.size > 0 ? new Set() : null;
     for (let i = 0; i < renderList.length; i++) {
       const item = renderList[i];
-      if (item.kind !== 'struct') continue;
+      if (item.kind !== 'struct' && item.kind !== 'rock') continue;
       const shouldFade = !!(
         activeHoverTile &&
-        doesStructOccludeTarget(item.st, item.tx, item.ty, activeHoverTile.tx, activeHoverTile.ty)
+        (item.kind === 'struct'
+          ? doesStructOccludeTarget(item.st, item.tx, item.ty, activeHoverTile.tx, activeHoverTile.ty, state)
+          : doesRockOccludeTarget(item.tx, item.ty, activeHoverTile.tx, activeHoverTile.ty, state))
       );
       if (shouldFade) hoverOccluded = true;
-      const occKey = (shouldFade || occludeAlphaMap.size > 0) ? (item.tx + ',' + item.ty) : null;
+      const occPrefix = item.kind === 'rock' ? 'r:' : 's:';
+      const occKey = (shouldFade || occludeAlphaMap.size > 0) ? (occPrefix + item.tx + ',' + item.ty) : null;
       if (seenOcc && occKey) seenOcc.add(occKey);
       let occA = 1.0;
       if (shouldFade) {
@@ -1599,44 +1703,78 @@ window.ZS = window.ZS || {};
     const nightEmissives = state.nightAlpha > 0.02 ? [] : null;
     R.emissiveList = nightEmissives;
 
-    for (let i = 0; i < renderList.length; i++) {
-      const item = renderList[i];
-      if (item.kind === 'struct') {
-        const occA = item.occAlpha != null ? item.occAlpha : 1.0;
-        if (occA < 0.995) {
-          ctx.save();
-          ctx.globalAlpha *= occA;
-          R.currentEntityAlpha = occA;
-          R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
-          R.currentEntityAlpha = 1.0;
-          ctx.restore();
-        } else {
-          R.currentEntityAlpha = 1.0;
-          R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
+    try {
+      for (let i = 0; i < renderList.length; i++) {
+        const item = renderList[i];
+        if (item.kind === 'plateau') {
+          Iso.setElevationOffset(0);
+          R.emissiveList = null;
+          drawPlateauTile(ctx, item.tx, item.ty, item.terrain, state, P, isSil, zScale);
+          R.emissiveList = nightEmissives;
+        } else if (item.kind === 'ramp') {
+          Iso.setElevationOffset(0);
+          R.emissiveList = null;
+          drawRampTile(ctx, item.tx, item.ty, item.terrain, state, P, isSil, zScale);
+          R.emissiveList = nightEmissives;
+        } else if (item.kind === 'rock') {
+          Iso.setElevationOffset(0);
+          R.emissiveList = null;
+          const occA = item.occAlpha != null ? item.occAlpha : 1.0;
+          if (occA < 0.995) {
+            ctx.save();
+            ctx.globalAlpha *= occA;
+            drawRockTile(ctx, item.tx, item.ty, item.terrain, state, P, isSil, zScale);
+            ctx.restore();
+          } else {
+            drawRockTile(ctx, item.tx, item.ty, item.terrain, state, P, isSil, zScale);
+          }
+          R.emissiveList = nightEmissives;
+        } else if (item.kind === 'struct') {
+          const elev = getTileElevAt(state, item.tx + 0.5, item.ty + 0.5);
+          Iso.setElevationOffset(elev);
+          const occA = item.occAlpha != null ? item.occAlpha : 1.0;
+          if (occA < 0.995) {
+            ctx.save();
+            ctx.globalAlpha *= occA;
+            R.currentEntityAlpha = occA;
+            R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
+            R.currentEntityAlpha = 1.0;
+            ctx.restore();
+          } else {
+            R.currentEntityAlpha = 1.0;
+            R.drawStructure(ctx, item.st, item.tx, item.ty, state, powered, timeSec, zScale);
+          }
+        } else if (item.kind === 'edge_prop') {
+          Iso.setElevationOffset(0);
+          R.emissiveList = null;
+          drawPerimeterProp(ctx, item.ep, zScale);
+          R.emissiveList = nightEmissives;
+        } else if (item.kind === 'zombie') {
+          const z = item.z;
+          const elev = getTileElevAt(state, z.x, z.y);
+          Iso.setElevationOffset(elev);
+          const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
+          const pose = R.getQuantizedZombiePoseMetrics
+            ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec, zScale)
+            : R.getZombiePoseMetrics(z, zDef, timeSec);
+          const eyes = R.getZombieEyePositions(z, zDef, timeSec, zScale, pose);
+          const occluded = nightEmissives ? R.isZombieEyesOccluded(state, z, eyes, zScale) : false;
+          z._framePose = pose;
+          z._frameEyes = eyes;
+          z._frameEyesOccluded = occluded;
+          R.emissiveList = nightEmissives && eyes && !occluded ? nightEmissives : null;
+          R.drawZombie(ctx, z, timeSec, zScale, state);
+          R.emissiveList = nightEmissives;
+        } else if (item.kind === 'dying_zombie') {
+          const elev = getTileElevAt(state, item.dz.x, item.dz.y);
+          Iso.setElevationOffset(elev);
+          R.emissiveList = null;
+          R.drawDyingZombie(ctx, item.dz, zScale);
+          R.emissiveList = nightEmissives;
         }
-      } else if (item.kind === 'edge_prop') {
-        R.emissiveList = null;
-        drawPerimeterProp(ctx, item.ep, zScale);
-        R.emissiveList = nightEmissives;
-      } else if (item.kind === 'zombie') {
-        const z = item.z;
-        const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
-        const pose = R.getQuantizedZombiePoseMetrics
-          ? R.getQuantizedZombiePoseMetrics(z, zDef, timeSec, zScale)
-          : R.getZombiePoseMetrics(z, zDef, timeSec);
-        const eyes = R.getZombieEyePositions(z, zDef, timeSec, zScale, pose);
-        const occluded = nightEmissives ? R.isZombieEyesOccluded(state, z, eyes, zScale) : false;
-        z._framePose = pose;
-        z._frameEyes = eyes;
-        z._frameEyesOccluded = occluded;
-        R.emissiveList = nightEmissives && eyes && !occluded ? nightEmissives : null;
-        R.drawZombie(ctx, z, timeSec, zScale, state);
-        R.emissiveList = nightEmissives;
-      } else if (item.kind === 'dying_zombie') {
-        R.emissiveList = null;
-        R.drawDyingZombie(ctx, item.dz, zScale);
-        R.emissiveList = nightEmissives;
       }
+    } finally {
+      Iso.setElevationOffset(0);
     }
     R.emissiveList = null;
     R.activeTrapTiles = null;
@@ -1650,7 +1788,13 @@ window.ZS = window.ZS || {};
     if (uiState.hoverTile && state.phase === 'day') {
       const { tx, ty } = uiState.hoverTile;
       if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
-        drawBuildGhost(ctx, state, uiState, tx, ty, timeSec, zScale);
+        const ghostElev = getTileElevAt(state, tx + 0.5, ty + 0.5);
+        Iso.setElevationOffset(ghostElev);
+        try {
+          drawBuildGhost(ctx, state, uiState, tx, ty, timeSec, zScale);
+        } finally {
+          Iso.setElevationOffset(0);
+        }
       }
     }
 
@@ -1756,7 +1900,11 @@ window.ZS = window.ZS || {};
     });
 
     // Protruding bedrock cliff blocks along visible front-left (y = N) and front-right (x = N) faces
-    const rockOffsets = N >= 22 ? [2.2, 6.4, 11.1, 14.8, 18.9] : [2.2, 6.4, 11.1, 14.8];
+    const rockOffsets = N >= 26
+      ? [2.2, 6.2, 10.4, 14.8, 19.2, 23.1]
+      : N >= 22
+      ? [2.2, 6.4, 11.1, 14.8, 18.9]
+      : [2.2, 6.4, 11.1, 14.8];
     for (let i = 0; i < rockOffsets.length; i++) {
       const k = rockOffsets[i];
       Iso.drawVoxelBox(ctx, k, N - 0.16, -21.8 + (i % 2) * 1.4, 1.5, 0.24, 6.4, {
@@ -1789,7 +1937,11 @@ window.ZS = window.ZS || {};
     });
 
     // Embedded cliff stones in earth / ochre-clay strata
-    const stoneOffsets = N >= 22 ? [1.4, 4.7, 8.3, 12.6, 15.9, 19.3] : [1.4, 4.7, 8.3, 12.6, 15.9];
+    const stoneOffsets = N >= 26
+      ? [1.4, 4.8, 8.2, 11.9, 15.6, 19.2, 22.8]
+      : N >= 22
+      ? [1.4, 4.7, 8.3, 12.6, 15.9, 19.3]
+      : [1.4, 4.7, 8.3, 12.6, 15.9];
     for (let i = 0; i < stoneOffsets.length; i++) {
       const k = stoneOffsets[i];
       Iso.drawVoxelBox(ctx, k, N - 0.06, -12.0 + (i % 2) * 2.4, 0.55, 0.11, 2.6, {
@@ -2043,7 +2195,7 @@ window.ZS = window.ZS || {};
     const dangerStamp = getGlowStamp(dangerKey, 0.05);
 
     ctx.save();
-    const wispCount = N >= 22 ? 20 : 16;
+    const wispCount = N >= 26 ? 24 : N >= 22 ? 20 : 16;
     for (let i = 0; i < wispCount; i++) {
       const side = i % 4;
       const t = ((i * 0.23 + timeSec * 0.018) % 1) * (N - 1) + 0.5;
@@ -2236,6 +2388,116 @@ window.ZS = window.ZS || {};
     }
   }
 
+  function isDirectFireDef(def) {
+    if (!def) return false;
+    if (def.id === 'missile_pod' || def.id === 'emp_coil' || def.projType === 'rocket' || def.projType === 'emp') {
+      return false;
+    }
+    return def.id === 'command_hq' || def.subType === 'manned' || def.subType === 'turret';
+  }
+
+  function drawPeakShadowSectors(ctx, state, cx, cy, maxRange, zScale) {
+    const tGrid = state && state.terrainGrid;
+    if (!tGrid || !(maxRange > 0.5)) return;
+    const N = ZS.DATA.GRID_SIZE;
+    const Iso = ZS.Iso;
+    const minX = Math.max(0, Math.floor(cx - maxRange));
+    const maxX = Math.min(N - 1, Math.ceil(cx + maxRange));
+    const minY = Math.max(0, Math.floor(cy - maxRange));
+    const maxY = Math.min(N - 1, Math.ceil(cy + maxRange));
+
+    ctx.save();
+    for (let py = minY; py <= maxY; py++) {
+      const row = tGrid[py];
+      if (!row) continue;
+      for (let px = minX; px <= maxX; px++) {
+        const t = row[px];
+        if (!t || t.kind !== 'rock' || !t.isPeak) continue;
+        const ox = px + 0.5;
+        const oy = py + 0.5;
+        const dx = ox - cx;
+        const dy = oy - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 0.45 || dist >= maxRange - 0.15) continue;
+        const ang0 = Math.atan2(dy, dx);
+        const halfAng = Math.asin(Math.min(0.90, 0.45 / dist));
+        const rStart = Math.max(0.45, dist + 0.15);
+        if (rStart >= maxRange) continue;
+
+        const steps = 10;
+        ctx.beginPath();
+        for (let s = 0; s <= steps; s++) {
+          const a = (ang0 - halfAng) + (halfAng * 2 * s) / steps;
+          const p = Iso.gridToScreen(cx + Math.cos(a) * rStart, cy + Math.sin(a) * rStart, 2);
+          if (s === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        for (let s = steps; s >= 0; s--) {
+          const a = (ang0 - halfAng) + (halfAng * 2 * s) / steps;
+          const p = Iso.gridToScreen(cx + Math.cos(a) * maxRange, cy + Math.sin(a) * maxRange, 2);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 77, 109, 0.17)';
+        ctx.fill();
+
+        const pA0 = Iso.gridToScreen(cx + Math.cos(ang0 - halfAng) * rStart, cy + Math.sin(ang0 - halfAng) * rStart, 2);
+        const pA1 = Iso.gridToScreen(cx + Math.cos(ang0 - halfAng) * maxRange, cy + Math.sin(ang0 - halfAng) * maxRange, 2);
+        const pB0 = Iso.gridToScreen(cx + Math.cos(ang0 + halfAng) * rStart, cy + Math.sin(ang0 + halfAng) * rStart, 2);
+        const pB1 = Iso.gridToScreen(cx + Math.cos(ang0 + halfAng) * maxRange, cy + Math.sin(ang0 + halfAng) * maxRange, 2);
+        ctx.strokeStyle = 'rgba(255, 77, 109, 0.56)';
+        ctx.lineWidth = Math.max(1.1, 1.3 * zScale);
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pA0.x, pA0.y);
+        ctx.lineTo(pA1.x, pA1.y);
+        ctx.moveTo(pB0.x, pB0.y);
+        ctx.lineTo(pB1.x, pB1.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawCombatRangeOverlay(ctx, state, def, cx, cy, maxRange, minRange, zScale) {
+    const Iso = ZS.Iso;
+    const P = ZS.DATA.PALETTE;
+    const minR = minRange > 0.1 && minRange < maxRange - 0.1 ? minRange : 0;
+
+    if (minR > 0) {
+      const steps = 48;
+      ctx.save();
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const ang = (i / steps) * Math.PI * 2;
+        const p = Iso.gridToScreen(cx + Math.cos(ang) * maxRange, cy + Math.sin(ang) * maxRange, 2);
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      for (let i = steps; i >= 0; i--) {
+        const ang = (i / steps) * Math.PI * 2;
+        const p = Iso.gridToScreen(cx + Math.cos(ang) * minR, cy + Math.sin(ang) * minR, 2);
+        if (i === steps) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = P.rangeFill;
+      ctx.fill('evenodd');
+      ctx.restore();
+
+      drawIsoCircle(ctx, cx, cy, minR, P.danger, 'rgba(255, 77, 109, 0.10)', [5, 4], Math.max(1.5, 1.7 * zScale));
+      drawIsoCircle(ctx, cx, cy, maxRange, P.rangeStroke, null);
+    } else {
+      drawIsoCircle(ctx, cx, cy, maxRange, P.rangeStroke, P.rangeFill);
+    }
+
+    if (isDirectFireDef(def)) {
+      drawPeakShadowSectors(ctx, state, cx, cy, maxRange, zScale);
+    }
+  }
+
   function drawDualRangeRings(ctx, cx, cy, groundR, mountR, zScale) {
     const Iso = ZS.Iso;
     const steps = 48;
@@ -2295,6 +2557,636 @@ window.ZS = window.ZS || {};
     ctx.restore();
   }
 
+  function getCornerClipElev(dx, dy, cx, cy, highZ, lowZ) {
+    if (dx === 1) return cx >= 0.5 ? highZ : lowZ;
+    if (dx === -1) return cx < 0.5 ? highZ : lowZ;
+    if (dy === 1) return cy >= 0.5 ? highZ : lowZ;
+    if (dy === -1) return cy < 0.5 ? highZ : lowZ;
+    return lowZ;
+  }
+
+  function drawFacetedCragSpire(rctx, cx, cy, zBase, rx, ry, topDx, topDy, h, taper, sides, seed, colBody, colCap, isSil, flip) {
+    const Iso = ZS.Iso;
+    const ptsB = [];
+    const ptsT = [];
+    const worldMids = [];
+    const topCx = cx + topDx;
+    const topCy = cy + topDy;
+    const zTop = zBase + h;
+
+    for (let k = 0; k < sides; k++) {
+      const a = (k / sides) * Math.PI * 2 + (seed % 7) * 0.27;
+      const radJit = 0.84 + tileHash01(k + 1, seed, 701) * 0.34;
+      const topJit = 0.80 + tileHash01(k + 3, seed, 709) * 0.40;
+      let bx = cx + Math.cos(a) * rx * radJit;
+      let by = cy + Math.sin(a) * ry * radJit;
+      let tx = topCx + Math.cos(a) * rx * taper * topJit;
+      let ty = topCy + Math.sin(a) * ry * taper * topJit;
+      if (flip) {
+        const tmpB = bx; bx = by; by = tmpB;
+        const tmpT = tx; tx = ty; ty = tmpT;
+      }
+      ptsB.push(Iso.gridToScreen(bx, by, zBase));
+      ptsT.push(Iso.gridToScreen(tx, ty, zTop));
+      worldMids.push({ bx, by });
+    }
+
+    const faces = [];
+    for (let k = 0; k < sides; k++) {
+      const k1 = (k + 1) % sides;
+      const mx0 = worldMids[k].bx;
+      const my0 = worldMids[k].by;
+      const mx1 = worldMids[k1].bx;
+      const my1 = worldMids[k1].by;
+      const midX = (mx0 + mx1) * 0.5;
+      const midY = (my0 + my1) * 0.5;
+      const ctrX = flip ? cy : cx;
+      const ctrY = flip ? cx : cy;
+      const nx = midX - ctrX;
+      const ny = midY - ctrY;
+      // Back-to-front painter's sort along iso depth (x + y)
+      const faceShade = nx + ny < -0.02
+        ? 0.94
+        : nx + ny < 0.06
+        ? 0.84
+        : nx > ny
+        ? 0.66
+        : 0.78;
+      faces.push({
+        depth: midX + midY,
+        shade: isSil ? 0.90 : faceShade,
+        quad: [ptsB[k], ptsB[k1], ptsT[k1], ptsT[k]]
+      });
+    }
+    faces.sort((a, b) => a.depth - b.depth);
+    for (let i = 0; i < faces.length; i++) {
+      drawPolyFace(rctx, faces[i].quad, colBody, faces[i].shade, false, !isSil, 1.0);
+    }
+    drawPolyFace(rctx, ptsT, colCap, 1.0, false, !isSil, 1.0);
+  }
+
+  function isRockAt(state, x, y) {
+    const g = state && state.terrainGrid;
+    const t = g && g[y] && g[y][x];
+    return !!(t && t.kind === 'rock');
+  }
+
+  function ensureRockStamp(isPeak, variant, flip, mask, P, isSil) {
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+    const bakeScale = Math.min(3.0, Math.max(2.0, dpr * 1.35));
+    const vIdx = (variant || 0) & 7;
+    const fl = flip ? 1 : 0;
+    const mk = mask & 15;
+    const pk = isPeak ? 1 : 0;
+    const key = `${pk}|v${vIdx}|f${fl}|m${mk}|s${isSil ? 1 : 0}|b${bakeScale.toFixed(2)}`;
+    const cached = rockStampCache.get(key);
+    if (cached) return cached;
+    if (rockStampCache.size >= 96) {
+      rockStampCache.clear();
+    }
+
+    const logW = 92;
+    const logH = 108;
+    const originX = 46;
+    const originY = 72;
+    const cw = Math.round(logW * bakeScale);
+    const ch = Math.round(logH * bakeScale);
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const rctx = canvas.getContext('2d');
+    const Iso = ZS.Iso;
+
+    const prevVp = Iso.getViewport();
+    const prevMinZoom = Iso.cam.minZoom;
+    const prevCamX = Iso.cam.x;
+    const prevCamY = Iso.cam.y;
+    const prevZoom = Iso.cam.zoom;
+    const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+    const prevTint = Iso.setSceneTint ? true : false;
+
+    try {
+      if (Iso.setElevationOffset) Iso.setElevationOffset(0);
+      Iso.setViewport(logW, logH);
+      Iso.cam.minZoom = 0.25;
+      Iso.cam.zoom = 1.0;
+      const gOrigin = Iso.gridToScreen(0.5, 0.5, 0);
+      Iso.cam.x += (gOrigin.x - originX);
+      Iso.cam.y += (gOrigin.y - originY);
+      rctx.setTransform(bakeScale, 0, 0, bakeScale, 0, 0);
+      if (isSil) {
+        Iso.resetRenderModifiers();
+      } else {
+        Iso.setSceneTint('#FFE8BA', 0.045);
+      }
+
+      const bodyLow = isSil ? '#AAB3BC' : (P.rockBase || '#5B646F');
+      const darkLow = isSil ? '#8E97A1' : (P.rockDark || '#3D444D');
+      const capLow = isSil ? '#C8D0D8' : '#76808B';
+      const mossCol = isSil ? '#B8C0C8' : (P.rockMoss || '#5D7455');
+
+      const peakBody = isSil ? '#949EA8' : (P.rockPeakBase || '#4B525B');
+      const peakDark = isSil ? '#79828C' : (P.rockPeakDark || '#2F353D');
+      const peakCap = isSil ? '#D0D7DF' : (P.rockPeakCap || '#6E7680');
+
+      // Double Contact AO shadow on ground plane
+      if (!isSil) {
+        const aoPos = Iso.gridToScreen(0.51, 0.52, 0.05);
+        rctx.fillStyle = isPeak ? 'rgba(6, 10, 14, 0.26)' : 'rgba(8, 12, 14, 0.20)';
+        rctx.beginPath();
+        rctx.ellipse(aoPos.x, aoPos.y, isPeak ? 28 : 24, isPeak ? 14 : 12, 0, 0, Math.PI * 2);
+        rctx.fill();
+
+        const tightAo = Iso.gridToScreen(0.50, 0.51, 0.1);
+        rctx.fillStyle = isPeak ? 'rgba(4, 8, 12, 0.44)' : 'rgba(6, 10, 14, 0.34)';
+        rctx.beginPath();
+        rctx.ellipse(tightAo.x, tightAo.y, isPeak ? 18 : 15, isPeak ? 9 : 7.5, 0, 0, Math.PI * 2);
+        rctx.fill();
+      }
+
+      const bridgeBody = pk ? peakDark : darkLow;
+      const bridgeCap = pk ? peakBody : bodyLow;
+      const bridgeH = pk ? 11.5 : 8.2;
+
+      // Back neighbor saddle bridges (North y-1, West x-1)
+      if (mk & 1) {
+        drawFacetedCragSpire(rctx, 0.50, 0.12, 0, 0.22, 0.18, 0.02, 0.02, bridgeH, 0.45, 5, 11 + vIdx, bridgeBody, bridgeCap, isSil, false);
+      }
+      if (mk & 8) {
+        drawFacetedCragSpire(rctx, 0.12, 0.50, 0, 0.18, 0.22, 0.02, 0.02, bridgeH, 0.45, 5, 23 + vIdx, bridgeBody, bridgeCap, isSil, false);
+      }
+
+      if (pk) {
+        // Mountain Peak (isPeak: true, tall z = 29..34 sharp crags + shoulder spurs + base scree)
+        const peakSpecs = [
+          { cx: 0.48, cy: 0.48, rx: 0.36, ry: 0.34, tdx: -0.05, tdy: -0.04, h: 32.5, tp: 0.18, shX: 0.68, shY: 0.62, shH: 15.0 },
+          { cx: 0.52, cy: 0.46, rx: 0.35, ry: 0.36, tdx: 0.04, tdy: -0.05, h: 31.0, tp: 0.20, shX: 0.28, shY: 0.60, shH: 17.5 },
+          { cx: 0.46, cy: 0.52, rx: 0.38, ry: 0.33, tdx: -0.03, tdy: 0.03, h: 33.8, tp: 0.16, shX: 0.66, shY: 0.32, shH: 16.5 },
+          { cx: 0.50, cy: 0.50, rx: 0.34, ry: 0.37, tdx: 0.05, tdy: 0.02, h: 29.5, tp: 0.22, shX: 0.30, shY: 0.30, shH: 18.0 },
+          { cx: 0.44, cy: 0.48, rx: 0.36, ry: 0.35, tdx: 0.06, tdy: -0.03, h: 33.0, tp: 0.17, shX: 0.68, shY: 0.58, shH: 19.0 },
+          { cx: 0.53, cy: 0.49, rx: 0.37, ry: 0.34, tdx: -0.06, tdy: 0.01, h: 30.8, tp: 0.19, shX: 0.28, shY: 0.52, shH: 16.0 },
+          { cx: 0.49, cy: 0.45, rx: 0.35, ry: 0.36, tdx: 0.02, tdy: 0.05, h: 32.0, tp: 0.18, shX: 0.64, shY: 0.66, shH: 14.5 },
+          { cx: 0.47, cy: 0.51, rx: 0.36, ry: 0.36, tdx: -0.04, tdy: -0.04, h: 34.0, tp: 0.15, shX: 0.34, shY: 0.68, shH: 15.5 }
+        ];
+        const sp = peakSpecs[vIdx];
+        // Back ridge shoulder
+        drawFacetedCragSpire(rctx, sp.cx - 0.04, sp.cy - 0.06, 0, 0.24, 0.23, 0, 0, sp.shH, 0.34, 6, 41 + vIdx, peakDark, peakBody, isSil, fl);
+        // Dominant mountain crag summit (29.5..34px height!)
+        drawFacetedCragSpire(rctx, sp.cx, sp.cy, 0, sp.rx, sp.ry, sp.tdx, sp.tdy, sp.h, sp.tp, 7, 101 + vIdx * 13, peakBody, peakCap, isSil, fl);
+        // Foreground flank shoulder buttress
+        drawFacetedCragSpire(rctx, sp.shX, sp.shY, 0, 0.21, 0.20, -0.02, 0.02, sp.shH * 0.78, 0.36, 5, 181 + vIdx, peakDark, peakBody, isSil, fl);
+
+        // Weathered sunlit ridge knife-edge glint near crown
+        if (!isSil) {
+          const sx = fl ? sp.cy : sp.cx;
+          const sy = fl ? sp.cx : sp.cy;
+          const rA = Iso.gridToScreen(sx - 0.04, sy - 0.02, sp.h);
+          const rB = Iso.gridToScreen(sx + (fl ? sp.tdy : sp.tdx), sy + (fl ? sp.tdx : sp.tdy), sp.h - 1.2);
+          const rC = Iso.gridToScreen(sx - 0.14, sy + 0.10, sp.h * 0.55);
+          rctx.strokeStyle = 'rgba(220, 230, 240, 0.34)';
+          rctx.lineWidth = 1.15;
+          rctx.beginPath();
+          rctx.moveTo(rC.x, rC.y);
+          rctx.lineTo(rA.x, rA.y);
+          rctx.lineTo(rB.x, rB.y);
+          rctx.stroke();
+
+          // Sharp base scree splinters around peak base
+          const screes = [[0.20, 0.76, 3.6], [0.78, 0.72, 4.0], [0.76, 0.24, 3.4], [0.18, 0.28, 3.2]];
+          for (let i = 0; i < screes.length; i++) {
+            const sc = screes[i];
+            drawFacetedCragSpire(rctx, sc[0], sc[1], 0, 0.08, 0.07, 0, 0, sc[2], 0.45, 5, 300 + i + vIdx, peakDark, peakBody, false, fl);
+          }
+        }
+      } else {
+        // Foothill Rock (isPeak: false, broad low boulders topZ = 11..16 + moss cushions)
+        const lowSpecs = [
+          { cx: 0.44, cy: 0.46, rx: 0.32, ry: 0.30, tdx: -0.02, tdy: -0.02, h: 14.5, tp: 0.46, b2x: 0.68, b2y: 0.62, b2h: 9.2 },
+          { cx: 0.54, cy: 0.44, rx: 0.30, ry: 0.33, tdx: 0.03, tdy: -0.01, h: 15.6, tp: 0.42, b2x: 0.28, b2y: 0.60, b2h: 10.4 },
+          { cx: 0.48, cy: 0.52, rx: 0.34, ry: 0.29, tdx: -0.03, tdy: 0.02, h: 12.8, tp: 0.52, b2x: 0.66, b2y: 0.30, b2h: 8.6 },
+          { cx: 0.42, cy: 0.50, rx: 0.31, ry: 0.32, tdx: 0.02, tdy: 0.03, h: 15.2, tp: 0.44, b2x: 0.68, b2y: 0.56, b2h: 11.0 },
+          { cx: 0.52, cy: 0.50, rx: 0.33, ry: 0.31, tdx: -0.04, tdy: -0.02, h: 13.8, tp: 0.48, b2x: 0.28, b2y: 0.34, b2h: 9.8 },
+          { cx: 0.47, cy: 0.45, rx: 0.30, ry: 0.34, tdx: 0.01, tdy: 0.02, h: 15.8, tp: 0.40, b2x: 0.64, b2y: 0.68, b2h: 8.2 },
+          { cx: 0.50, cy: 0.54, rx: 0.35, ry: 0.30, tdx: 0.03, tdy: -0.03, h: 11.8, tp: 0.55, b2x: 0.26, b2y: 0.42, b2h: 9.4 },
+          { cx: 0.45, cy: 0.48, rx: 0.32, ry: 0.31, tdx: -0.02, tdy: 0.02, h: 14.0, tp: 0.47, b2x: 0.70, b2y: 0.46, b2h: 10.0 }
+        ];
+        const sp = lowSpecs[vIdx];
+        drawFacetedCragSpire(rctx, sp.cx, sp.cy, 0, sp.rx, sp.ry, sp.tdx, sp.tdy, sp.h, sp.tp, 6, 51 + vIdx * 11, bodyLow, capLow, isSil, fl);
+        drawFacetedCragSpire(rctx, sp.b2x, sp.b2y, 0, 0.20, 0.19, 0.01, -0.01, sp.b2h, 0.50, 5, 91 + vIdx, darkLow, bodyLow, isSil, fl);
+        if (!isSil) {
+          // Subtle moss tuft along sunlit top-left shoulder
+          drawFacetedCragSpire(rctx, sp.cx - 0.05, sp.cy - 0.04, sp.h - 0.4, 0.14, 0.13, 0, 0, 1.5, 0.60, 5, 141 + vIdx, mossCol, mossCol, false, fl);
+          // Single small foreground pebble
+          drawFacetedCragSpire(rctx, 0.22 + (vIdx % 3) * 0.18, 0.76, 0, 0.08, 0.07, 0, 0, 3.0, 0.55, 5, 210 + vIdx, darkLow, bodyLow, false, fl);
+        }
+      }
+
+      // Front neighbor saddle bridges (East x+1, South y+1)
+      if (mk & 2) {
+        drawFacetedCragSpire(rctx, 0.88, 0.50, 0, 0.18, 0.22, -0.02, 0.0, bridgeH * 0.92, 0.48, 5, 31 + vIdx, bridgeBody, bridgeCap, isSil, false);
+      }
+      if (mk & 4) {
+        drawFacetedCragSpire(rctx, 0.50, 0.88, 0, 0.22, 0.18, 0.0, -0.02, bridgeH * 0.92, 0.48, 5, 37 + vIdx, bridgeBody, bridgeCap, isSil, false);
+      }
+    } finally {
+      if (prevTint) Iso.resetRenderModifiers();
+      if (Iso.setElevationOffset) Iso.setElevationOffset(prevElev);
+      Iso.setViewport(prevVp.w, prevVp.h);
+      Iso.cam.minZoom = prevMinZoom;
+      Iso.cam.x = prevCamX;
+      Iso.cam.y = prevCamY;
+      Iso.cam.zoom = prevZoom;
+    }
+
+    const stamp = { canvas, originX, originY, logW, logH, bakeScale };
+    rockStampCache.set(key, stamp);
+    return stamp;
+  }
+
+  function drawRockTile(ctx, tx, ty, tCell, state, P, isSil, zScale) {
+    const Iso = ZS.Iso;
+    let mask = 0;
+    if (isRockAt(state, tx, ty - 1)) mask |= 1;
+    if (isRockAt(state, tx + 1, ty)) mask |= 2;
+    if (isRockAt(state, tx, ty + 1)) mask |= 4;
+    if (isRockAt(state, tx - 1, ty)) mask |= 8;
+    const isPeak = !!(tCell && tCell.isPeak);
+    const variant = (tCell && tCell.variant != null) ? tCell.variant : ((tx * 5 + ty * 7) & 7);
+    const flip = (tCell && tCell.flip) ? 1 : 0;
+    const stamp = ensureRockStamp(isPeak, variant, flip, mask, P, isSil);
+    const p = Iso.gridToScreen(tx + 0.5, ty + 0.5, 0);
+    const drawW = stamp.logW * zScale;
+    const drawH = stamp.logH * zScale;
+    const dx = p.x - stamp.originX * zScale;
+    const dy = p.y - stamp.originY * zScale;
+    ctx.drawImage(stamp.canvas, 0, 0, stamp.canvas.width, stamp.canvas.height, dx, dy, drawW, drawH);
+  }
+
+  function isNeighborPlateau(state, nx, ny) {
+    const tGrid = state && state.terrainGrid;
+    const c = tGrid && tGrid[ny] && tGrid[ny][nx];
+    return !!(c && c.kind === 'plateau');
+  }
+
+  function isNeighborRampInto(state, nx, ny, tx, ty) {
+    const tGrid = state && state.terrainGrid;
+    const c = tGrid && tGrid[ny] && tGrid[ny][nx];
+    if (!c || c.kind !== 'ramp' || !c.rampDir) return false;
+    return nx + c.rampDir.dx === tx && ny + c.rampDir.dy === ty;
+  }
+
+  const _msB0 = { x: 0, y: 0 };
+  const _msB1 = { x: 0, y: 0 };
+  const _msB2 = { x: 0, y: 0 };
+  const _msB3 = { x: 0, y: 0 };
+  const _msT0 = { x: 0, y: 0 };
+  const _msT1 = { x: 0, y: 0 };
+  const _msT2 = { x: 0, y: 0 };
+  const _msT3 = { x: 0, y: 0 };
+  const _msLeftQuad = [_msB3, _msB2, _msT2, _msT3];
+  const _msRightQuad = [_msB2, _msB1, _msT1, _msT2];
+  const _msTopQuad = [_msT0, _msT1, _msT2, _msT3];
+
+  function drawMiniStoneBlock(ctx, cx, cy, zBase, rx, ry, h, colBody, colTop, isSil, zScale) {
+    const Iso = ZS.Iso;
+    const zTop = zBase + h;
+    const ix = rx * 0.65;
+    const iy = ry * 0.65;
+    Iso.projectTo(cx - rx, cy - ry * 0.85, zBase, _msB0);
+    Iso.projectTo(cx + rx, cy - ry, zBase, _msB1);
+    Iso.projectTo(cx + rx * 0.92, cy + ry, zBase, _msB2);
+    Iso.projectTo(cx - rx * 0.95, cy + ry * 0.9, zBase, _msB3);
+    Iso.projectTo(cx - ix, cy - iy * 0.85, zTop, _msT0);
+    Iso.projectTo(cx + ix, cy - iy, zTop, _msT1);
+    Iso.projectTo(cx + ix * 0.92, cy + iy, zTop, _msT2);
+    Iso.projectTo(cx - ix * 0.95, cy + iy * 0.9, zTop, _msT3);
+    drawPolyFace(ctx, _msLeftQuad, colBody, isSil ? 0.88 : 0.82, false, !isSil, zScale);
+    drawPolyFace(ctx, _msRightQuad, colBody, isSil ? 0.78 : 0.66, false, !isSil, zScale);
+    drawPolyFace(ctx, _msTopQuad, colTop, 1.0, false, !isSil, zScale);
+  }
+
+  function drawPlateauTile(ctx, tx, ty, tCell, state, P, isSil, zScale) {
+    const Iso = ZS.Iso;
+    const elev = (ZS.DATA.PLATEAU_ELEV_Z != null ? ZS.DATA.PLATEAU_ELEV_Z : 10);
+    const checker = (tx + ty) % 2 === 0;
+    const turfBase = isSil
+      ? '#DFE5EC'
+      : checker
+      ? (P.plateauTopA || '#5D775A')
+      : (P.plateauTopB || '#577054');
+    const tileJitter = (tileHash01(tx, ty, 307) * 2 - 1) * 0.03;
+    const topCol = isSil ? turfBase : (Iso.shadeHex(turfBase, 1 + tileJitter) || turfBase);
+
+    const soilCol = isSil ? '#8E96A0' : (P.plateauCliffSoil || '#473628');
+    const slateCol = isSil ? '#9FA8B2' : (P.plateauCliffSlate || '#424A56');
+    const ochreCol = isSil ? '#B8C0C8' : (P.plateauCliffOchre || '#8E6A42');
+
+    const expNorth = !isNeighborPlateau(state, tx, ty - 1) && !isNeighborRampInto(state, tx, ty - 1, tx, ty);
+    const expWest = !isNeighborPlateau(state, tx - 1, ty) && !isNeighborRampInto(state, tx - 1, ty, tx, ty);
+    const expSouth = !isNeighborPlateau(state, tx, ty + 1) && !isNeighborRampInto(state, tx, ty + 1, tx, ty);
+    const expEast = !isNeighborPlateau(state, tx + 1, ty) && !isNeighborRampInto(state, tx + 1, ty, tx, ty);
+
+    // 1) Exposed South-West cliff face (y = ty + 1, top-left 82% directional shade)
+    if (expSouth) {
+      if (!isSil) {
+        const g0 = Iso.projectTo(tx, ty + 1.0, 0.15, _msB0);
+        const g1 = Iso.projectTo(tx + 1.0, ty + 1.0, 0.15, _msB1);
+        const g2 = Iso.projectTo(tx + 1.0, ty + 1.16, 0.15, _msB2);
+        const g3 = Iso.projectTo(tx, ty + 1.16, 0.15, _msB3);
+        ctx.fillStyle = 'rgba(10, 14, 16, 0.28)';
+        ctx.beginPath();
+        ctx.moveTo(g0.x, g0.y);
+        ctx.lineTo(g1.x, g1.y);
+        ctx.lineTo(g2.x, g2.y);
+        ctx.lineTo(g3.x, g3.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+      const zSplit = elev * 0.44 + (tileHash01(tx, ty, 503) - 0.5) * 1.4;
+      const zLip = elev - 2.1;
+      const yWall = ty + 1.0;
+      const midCol = tileHash01(tx, ty, 509) > 0.45 ? ochreCol : slateCol;
+      // Lower soil stratum
+      drawPolyFace(ctx, [
+        Iso.projectTo(tx, yWall, 0, _msB0),
+        Iso.projectTo(tx + 1, yWall, 0, _msB1),
+        Iso.projectTo(tx + 1, yWall, zSplit + 0.3, _msB2),
+        Iso.projectTo(tx, yWall, zSplit + 0.3, _msB3)
+      ], soilCol, 0.82, false, false, zScale);
+      // Upper rock strata
+      drawPolyFace(ctx, [
+        Iso.projectTo(tx, yWall, zSplit, _msT0),
+        Iso.projectTo(tx + 1, yWall, zSplit, _msT1),
+        Iso.projectTo(tx + 1, yWall, zLip + 0.2, _msT2),
+        Iso.projectTo(tx, yWall, zLip + 0.2, _msT3)
+      ], midCol, 0.82, false, false, zScale);
+      // Protruding stone buttress rib & fallen scree pebble
+      const bPos = 0.25 + tileHash01(tx, ty, 521) * 0.45;
+      drawMiniStoneBlock(ctx, tx + bPos, yWall + 0.03, 0, 0.14, 0.06, elev - 2.0, slateCol, midCol, isSil, zScale);
+      // Overhanging turf skirt lip
+      const midDrop = (tileHash01(tx, ty, 541) - 0.5) * 0.8;
+      drawPolyFace(ctx, [
+        Iso.gridToScreen(tx, yWall + 0.025, zLip + 0.2),
+        Iso.gridToScreen(tx + 0.5, yWall + 0.035, zLip + midDrop),
+        Iso.gridToScreen(tx + 1, yWall + 0.025, zLip + 0.2),
+        Iso.gridToScreen(tx + 1, yWall, elev),
+        Iso.gridToScreen(tx, yWall, elev)
+      ], turfBase, 0.80, false, false, zScale);
+      if (!isSil) {
+        drawMiniStoneBlock(ctx, tx + 0.28 + tileHash01(tx, ty, 557) * 0.42, ty + 1.11, 0, 0.06, 0.04, 2.0, P.rockDark || '#3D444D', P.rockBase || '#5B646F', false, zScale);
+      }
+    }
+
+    // 2) Exposed South-East cliff face (x = tx + 1, darker 66% directional shade)
+    if (expEast) {
+      if (!isSil) {
+        const g0 = Iso.projectTo(tx + 1.0, ty, 0.15, _msB0);
+        const g1 = Iso.projectTo(tx + 1.0, ty + 1.0, 0.15, _msB1);
+        const g2 = Iso.projectTo(tx + 1.16, ty + 1.0, 0.15, _msB2);
+        const g3 = Iso.projectTo(tx + 1.16, ty, 0.15, _msB3);
+        ctx.fillStyle = 'rgba(10, 14, 16, 0.32)';
+        ctx.beginPath();
+        ctx.moveTo(g0.x, g0.y);
+        ctx.lineTo(g1.x, g1.y);
+        ctx.lineTo(g2.x, g2.y);
+        ctx.lineTo(g3.x, g3.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+      const zSplit = elev * 0.44 + (tileHash01(tx, ty, 603) - 0.5) * 1.4;
+      const zLip = elev - 2.1;
+      const xWall = tx + 1.0;
+      const midCol = tileHash01(tx, ty, 609) > 0.45 ? ochreCol : slateCol;
+      drawPolyFace(ctx, [
+        Iso.projectTo(xWall, ty, 0, _msB0),
+        Iso.projectTo(xWall, ty + 1, 0, _msB1),
+        Iso.projectTo(xWall, ty + 1, zSplit + 0.3, _msB2),
+        Iso.projectTo(xWall, ty, zSplit + 0.3, _msB3)
+      ], soilCol, 0.66, false, false, zScale);
+      drawPolyFace(ctx, [
+        Iso.projectTo(xWall, ty, zSplit, _msT0),
+        Iso.projectTo(xWall, ty + 1, zSplit, _msT1),
+        Iso.projectTo(xWall, ty + 1, zLip + 0.2, _msT2),
+        Iso.projectTo(xWall, ty, zLip + 0.2, _msT3)
+      ], midCol, 0.66, false, false, zScale);
+      const bPos = 0.25 + tileHash01(tx, ty, 621) * 0.45;
+      drawMiniStoneBlock(ctx, xWall + 0.03, ty + bPos, 0, 0.06, 0.14, elev - 2.0, slateCol, midCol, isSil, zScale);
+      const midDrop = (tileHash01(tx, ty, 641) - 0.5) * 0.8;
+      drawPolyFace(ctx, [
+        Iso.gridToScreen(xWall + 0.025, ty, zLip + 0.2),
+        Iso.gridToScreen(xWall + 0.035, ty + 0.5, zLip + midDrop),
+        Iso.gridToScreen(xWall + 0.025, ty + 1, zLip + 0.2),
+        Iso.gridToScreen(xWall, ty + 1, elev),
+        Iso.gridToScreen(xWall, ty, elev)
+      ], turfBase, 0.65, false, false, zScale);
+      if (!isSil) {
+        drawMiniStoneBlock(ctx, tx + 1.11, ty + 0.28 + tileHash01(tx, ty, 657) * 0.42, 0, 0.04, 0.06, 2.0, P.rockDark || '#3D444D', P.rockBase || '#5B646F', false, zScale);
+      }
+    }
+
+    // 3) Seamless mesa deck surface (no internal borders; overlap interior edges slightly by 0.012 to prevent AA seams)
+    const padN = !expNorth ? -0.012 : 0;
+    const padW = !expWest ? -0.012 : 0;
+    const padS = expSouth ? 0.02 : 0;
+    const padE = expEast ? 0.02 : 0;
+    drawPolyFace(ctx, [
+      Iso.projectTo(tx + padW, ty + padN, elev, _msT0),
+      Iso.projectTo(tx + 1 + padE, ty + padN, elev, _msT1),
+      Iso.projectTo(tx + 1 + padE, ty + 1 + padS, elev, _msT2),
+      Iso.projectTo(tx + padW, ty + 1 + padS, elev, _msT3)
+    ], topCol, 1.0, false, false, zScale);
+
+    const fid = state && state.floorGrid && state.floorGrid[ty] && state.floorGrid[ty][tx];
+    if (fid && !isSil) {
+      const prevElev = Iso.getElevationOffset ? Iso.getElevationOffset() : 0;
+      Iso.setElevationOffset(elev);
+      try {
+        drawFloorTile(ctx, tx, ty, fid, zScale);
+      } finally {
+        Iso.setElevationOffset(prevElev);
+      }
+    } else if (!isSil) {
+      if (tileHash01(tx, ty, 311) > 0.42) {
+        const sx = tx + 0.25 + tileHash01(tx, ty, 317) * 0.5;
+        const sy = ty + 0.25 + tileHash01(tx, ty, 331) * 0.5;
+        const gp = Iso.projectTo(sx, sy, elev + 0.15, _msB0);
+        ctx.fillStyle = tileHash01(tx, ty, 349) > 0.5 ? 'rgba(64, 84, 60, 0.42)' : 'rgba(130, 146, 118, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(gp.x, gp.y, 2.4 * zScale, 1.2 * zScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (isSil) return;
+
+    ctx.save();
+    if (expNorth || expWest) {
+      ctx.strokeStyle = P.plateauRimSoft || 'rgba(176, 196, 152, 0.28)';
+      ctx.lineWidth = Math.max(0.95, 1.25 * zScale);
+      ctx.beginPath();
+      if (expNorth) {
+        const a = Iso.projectTo(tx, ty, elev + 0.1, _msB0);
+        const b = Iso.projectTo(tx + 1, ty, elev + 0.1, _msB1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      if (expWest) {
+        const a = Iso.projectTo(tx, ty, elev + 0.1, _msB0);
+        const b = Iso.projectTo(tx, ty + 1, elev + 0.1, _msB1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      ctx.stroke();
+    }
+    if (expSouth || expEast) {
+      ctx.strokeStyle = 'rgba(16, 22, 18, 0.36)';
+      ctx.lineWidth = Math.max(0.9, 1.15 * zScale);
+      ctx.beginPath();
+      if (expSouth) {
+        const a = Iso.projectTo(tx, ty + 1 + padS, elev + 0.1, _msB0);
+        const b = Iso.projectTo(tx + 1 + padE, ty + 1 + padS, elev + 0.1, _msB1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      if (expEast) {
+        const a = Iso.projectTo(tx + 1 + padE, ty, elev + 0.1, _msB0);
+        const b = Iso.projectTo(tx + 1 + padE, ty + 1 + padS, elev + 0.1, _msB1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawRampTile(ctx, tx, ty, tCell, state, P, isSil, zScale) {
+    const Iso = ZS.Iso;
+    const elev = (ZS.DATA.PLATEAU_ELEV_Z != null ? ZS.DATA.PLATEAU_ELEV_Z : 10);
+    const dir = (tCell && tCell.rampDir) || { dx: 1, dy: 0 };
+    const dx = dir.dx || 0;
+    const dy = dir.dy || 0;
+
+    const z00 = getCornerClipElev(dx, dy, 0, 0, elev, 0.15);
+    const z10 = getCornerClipElev(dx, dy, 1, 0, elev, 0.15);
+    const z11 = getCornerClipElev(dx, dy, 1, 1, elev, 0.15);
+    const z01 = getCornerClipElev(dx, dy, 0, 1, elev, 0.15);
+
+    const sideSoil = isSil ? '#9FA8B2' : (P.plateauCliffSoil || '#473628');
+    const sideSlate = isSil ? '#AAB3BC' : (P.plateauCliffSlate || '#424A56');
+    const earthTop = isSil ? '#C8D0D8' : (P.rampEarth || '#6B665D');
+
+    if (z01 > 0.5 || z11 > 0.5) {
+      drawPolyFace(ctx, [
+        Iso.projectTo(tx, ty + 1, z01, _msB0),
+        Iso.projectTo(tx + 1, ty + 1, z11, _msB1),
+        Iso.projectTo(tx + 1, ty + 1, 0, _msB2),
+        Iso.projectTo(tx, ty + 1, 0, _msB3)
+      ], sideSoil, 0.82, false, false, zScale);
+      drawPolyFace(ctx, [
+        Iso.projectTo(tx, ty + 1, Math.min(z01, z01 * 0.55), _msT0),
+        Iso.projectTo(tx + 1, ty + 1, Math.min(z11, z11 * 0.55), _msT1),
+        Iso.projectTo(tx + 1, ty + 1, 0, _msT2),
+        Iso.projectTo(tx, ty + 1, 0, _msT3)
+      ], sideSlate, 0.80, false, false, zScale);
+    }
+    if (z10 > 0.5 || z11 > 0.5) {
+      drawPolyFace(ctx, [
+        Iso.projectTo(tx + 1, ty, z10, _msB0),
+        Iso.projectTo(tx + 1, ty + 1, z11, _msB1),
+        Iso.projectTo(tx + 1, ty + 1, 0, _msB2),
+        Iso.projectTo(tx + 1, ty, 0, _msB3)
+      ], sideSoil, 0.66, false, false, zScale);
+      drawPolyFace(ctx, [
+        Iso.projectTo(tx + 1, ty, Math.min(z10, z10 * 0.55), _msT0),
+        Iso.projectTo(tx + 1, ty + 1, Math.min(z11, z11 * 0.55), _msT1),
+        Iso.projectTo(tx + 1, ty + 1, 0, _msT2),
+        Iso.projectTo(tx + 1, ty, 0, _msT3)
+      ], sideSlate, 0.66, false, false, zScale);
+    }
+
+    const slopeShade = (dx < 0 || dy < 0) ? 0.92 : 1.0;
+    drawPolyFace(ctx, [
+      Iso.projectTo(tx, ty, z00, _msB0),
+      Iso.projectTo(tx + 1, ty, z10, _msB1),
+      Iso.projectTo(tx + 1, ty + 1, z11, _msB2),
+      Iso.projectTo(tx, ty + 1, z01, _msB3)
+    ], earthTop, slopeShade, false, false, zScale);
+
+    if (isSil) return;
+
+    const projSlope = (u, v, zAdd, outPt) => {
+      let lx, ly;
+      if (dx === 1) { lx = u; ly = v; }
+      else if (dx === -1) { lx = 1 - u; ly = v; }
+      else if (dy === 1) { lx = v; ly = u; }
+      else { lx = v; ly = 1 - u; }
+      return Iso.projectTo(tx + lx, ty + ly, u * elev + (zAdd || 0), outPt);
+    };
+
+    const turfLip = P.plateauTopB || '#577054';
+    drawPolyFace(ctx, [
+      projSlope(1.0, 0.06, 0.15, _msB0),
+      projSlope(1.0, 0.94, 0.15, _msB1),
+      projSlope(0.84, 0.88, 0.15, _msB2),
+      projSlope(0.78, 0.52, 0.15, _msT0),
+      projSlope(0.85, 0.14, 0.15, _msB3)
+    ], turfLip, slopeShade, false, false, zScale);
+
+    const flagCol = P.rampFlagstone || '#7E786E';
+    const stoneSpots = (tx + ty) % 2 === 0 ? [0.28, 0.54, 0.76] : [0.34, 0.66];
+    for (let s = 0; s < stoneSpots.length; s++) {
+      const uC = stoneSpots[s];
+      const vOff = 0.44 + (tileHash01(tx, ty, 730 + s) - 0.5) * 0.14;
+      const du = 0.085;
+      const dv = 0.14;
+      drawPolyFace(ctx, [
+        projSlope(uC - du, vOff - dv, 0.35, _msB0),
+        projSlope(uC + du, vOff - dv * 0.8, 0.35, _msB1),
+        projSlope(uC + du * 0.9, vOff + dv, 0.35, _msB2),
+        projSlope(uC - du, vOff + dv * 0.85, 0.35, _msB3)
+      ], flagCol, slopeShade * (0.94 + s * 0.03), false, true, zScale);
+    }
+
+    ctx.fillStyle = 'rgba(42, 38, 32, 0.42)';
+    for (let g = 0; g < 3; g++) {
+      const gu = 0.18 + tileHash01(tx, ty, 750 + g) * 0.58;
+      const gv = 0.24 + tileHash01(tx, ty, 760 + g) * 0.52;
+      const gp = projSlope(gu, gv, 0.25, _msB0);
+      ctx.beginPath();
+      ctx.arc(gp.x, gp.y, 1.15 * zScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const curbCol = P.rampCurb || '#535B65';
+    const curbStone = P.rampStone || '#7E786C';
+    const curbUs = [0.25, 0.54, 0.82];
+    for (let si = 0; si < 2; si++) {
+      const vSide = si === 0 ? 0.07 : 0.93;
+      for (let ci = 0; ci < 3; ci++) {
+        const u = curbUs[ci];
+        let lx, ly;
+        if (dx === 1) { lx = u; ly = vSide; }
+        else if (dx === -1) { lx = 1 - u; ly = vSide; }
+        else if (dy === 1) { lx = vSide; ly = u; }
+        else { lx = vSide; ly = 1 - u; }
+        const hCurb = 2.4 + tileHash01(tx + ci, ty + si, 790) * 1.4;
+        drawMiniStoneBlock(
+          ctx,
+          tx + lx,
+          ty + ly,
+          u * elev - 0.2,
+          dx !== 0 ? 0.08 : 0.055,
+          dx !== 0 ? 0.055 : 0.08,
+          hCurb,
+          curbCol,
+          curbStone,
+          false,
+          zScale
+        );
+      }
+    }
+  }
+
   function drawHoverOverlay(ctx, state, uiState, tx, ty, zScale) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
@@ -2321,10 +3213,16 @@ window.ZS = window.ZS || {};
         const srcUnit = srcCell && (srcCell.mounted || srcCell);
         const srcDef = srcUnit ? DATA.ITEMS[srcUnit.id] : null;
         const dest = state.structGrid[ty] && state.structGrid[ty][tx];
+        const destTerrain = ZS.Game.getTerrainAt ? ZS.Game.getTerrainAt(tx, ty) : (state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx]);
         const inBounds = tx > 0 && ty > 0 && tx < DATA.GRID_SIZE - 1 && ty < DATA.GRID_SIZE - 1;
-        const canMountDest = !!(dest && srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && !dest.mounted);
-        const canDrop = inBounds && (!dest || canMountDest);
-        if (inBounds && dest && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && srcDef && srcDef.canMountOnWall) {
+        let terrainOk = true;
+        if (destTerrain) {
+          if (destTerrain.kind === 'rock') terrainOk = false;
+          else if (destTerrain.kind === 'ramp' && (!srcDef || srcDef.id !== 'razor_pad')) terrainOk = false;
+        }
+        const canMountDest = !!(terrainOk && dest && srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && !dest.mounted);
+        const canDrop = inBounds && terrainOk && (!dest || canMountDest);
+        if (inBounds && terrainOk && dest && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && srcDef && srcDef.canMountOnWall) {
           drawWallPillarHighlight(
             ctx,
             tx,
@@ -2334,10 +3232,16 @@ window.ZS = window.ZS || {};
             canDrop ? P.health : P.danger,
             2.2
           );
-          if (canDrop && srcDef.range) {
-            drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, srcDef.range, srcDef.range + 0.5, zScale);
-          } else if (canDrop && srcDef.aura && srcDef.aura.radius) {
-            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, srcDef.aura.radius + 0.4, P.goldStroke, P.goldFill);
+          if (canDrop && srcDef.range && ZS.Game.getStructureEffectiveStats) {
+            const groundEff = ZS.Game.getStructureEffectiveStats(srcUnit, tx, ty, undefined, false);
+            const mountEff = ZS.Game.getStructureEffectiveStats(srcUnit, tx, ty, undefined, true);
+            drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, groundEff.range, mountEff.range, zScale);
+            if (isDirectFireDef(srcDef)) {
+              drawPeakShadowSectors(ctx, state, tx + 0.5, ty + 0.5, mountEff.range, zScale);
+            }
+          } else if (canDrop && srcDef.aura && srcDef.aura.radius && ZS.Game.getStructureEffectiveStats) {
+            const mEff = ZS.Game.getStructureEffectiveStats(srcUnit, tx, ty, undefined, true);
+            drawIsoCircle(ctx, tx + 0.5, ty + 0.5, mEff.auraRadius || (srcDef.aura.radius + 0.4), P.goldStroke, P.goldFill);
           }
         } else {
           Iso.drawTilePoly(
@@ -2350,16 +3254,19 @@ window.ZS = window.ZS || {};
             2
           );
           if (inBounds && canDrop && srcDef && !(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty)) {
-            const srcProf = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(srcDef, srcUnit.level || 1) : null;
-            const moveAuraR = (srcProf && srcProf.auraRadius) || (srcDef.aura && srcDef.aura.radius);
+            const eff = ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(srcUnit, tx, ty, undefined, false) : null;
+            const moveRange = eff ? eff.range : srcDef.range;
+            const moveMinRange = (eff && eff.minRange) || srcDef.minRange || 0;
+            const moveAuraR = (eff && eff.auraRadius) || (srcDef.aura && srcDef.aura.radius);
+            const srcProf = eff && eff.prof ? eff.prof : (ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(srcDef, srcUnit.level || 1) : null);
             const moveGateR = (srcProf && srcProf.gateSlowRadius) || srcDef.gateSlowRadius;
-            if (srcDef.range) {
-              drawIsoCircle(ctx, tx + 0.5, ty + 0.5, srcDef.range, P.rangeStroke, P.rangeFill);
+            if (moveRange > 0) {
+              drawCombatRangeOverlay(ctx, state, srcDef, tx + 0.5, ty + 0.5, moveRange, moveMinRange, zScale);
             }
-            if (moveAuraR) {
+            if (moveAuraR > 0) {
               drawIsoCircle(ctx, tx + 0.5, ty + 0.5, moveAuraR, P.goldStroke, P.goldFill);
             }
-            if (moveGateR) {
+            if (moveGateR > 0) {
               drawIsoCircle(ctx, tx + 0.5, ty + 0.5, moveGateR, P.rangeStroke, 'rgba(255, 255, 255, 0.08)');
             }
           }
@@ -2386,10 +3293,18 @@ window.ZS = window.ZS || {};
           check.ok ? P.health : P.danger,
           2.2 * Math.min(1.2, zScale)
         );
-        if (check.ok && def.range) {
-          drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, def.range, def.range + 0.5, zScale);
-        } else if (check.ok && def.aura && def.aura.radius) {
-          drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.aura.radius + 0.4, P.goldStroke, P.goldFill);
+        if (check.ok && def.range && ZS.Game.getStructureEffectiveStats) {
+          const previewStub = { id: def.id, level: 1, hp: def.maxHp || 100, maxHp: def.maxHp || 100 };
+          const groundEff = ZS.Game.getStructureEffectiveStats(previewStub, tx, ty, undefined, false);
+          const mountEff = ZS.Game.getStructureEffectiveStats(previewStub, tx, ty, undefined, true);
+          drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, groundEff.range, mountEff.range, zScale);
+          if (isDirectFireDef(def)) {
+            drawPeakShadowSectors(ctx, state, tx + 0.5, ty + 0.5, mountEff.range, zScale);
+          }
+        } else if (check.ok && def.aura && def.aura.radius && ZS.Game.getStructureEffectiveStats) {
+          const previewStub = { id: def.id, level: 1, hp: def.maxHp || 100, maxHp: def.maxHp || 100 };
+          const mEff = ZS.Game.getStructureEffectiveStats(previewStub, tx, ty, undefined, true);
+          drawIsoCircle(ctx, tx + 0.5, ty + 0.5, mEff.auraRadius || (def.aura.radius + 0.4), P.goldStroke, P.goldFill);
         }
         return;
       }
@@ -2409,20 +3324,39 @@ window.ZS = window.ZS || {};
           const groundEff = ZS.Game.getStructureEffectiveStats(existing, tx, ty, undefined, false);
           const mountEff = ZS.Game.getStructureEffectiveStats(existing, tx, ty, undefined, true);
           drawDualRangeRings(ctx, tx + 0.5, ty + 0.5, groundEff.range, mountEff.range, zScale);
+          if (isDirectFireDef(eDef)) {
+            drawPeakShadowSectors(ctx, state, tx + 0.5, ty + 0.5, mountEff.range, zScale);
+          }
         } else if (eDef && eDef.aura && eDef.aura.radius) {
-          drawIsoCircle(ctx, tx + 0.5, ty + 0.5, eDef.aura.radius + 0.4, P.goldStroke, P.goldFill);
+          const mEff = ZS.Game.getStructureEffectiveStats(existing, tx, ty, undefined, true);
+          drawIsoCircle(ctx, tx + 0.5, ty + 0.5, mEff.auraRadius || (eDef.aura.radius + 0.4), P.goldStroke, P.goldFill);
         }
       } else {
-        const tier1Prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, 1) : null;
-        const auraR = (tier1Prof && tier1Prof.auraRadius) || (def.aura && def.aura.radius);
+        const previewLv =
+          def.id === 'field_tent' && state.freeVouchers && state.freeVouchers.shelter_pod > 0
+            ? 3
+            : def.id === 'shelter_pod'
+            ? 3
+            : 1;
+        const previewStub = {
+          id: def.id === 'shelter_pod' ? 'field_tent' : def.id,
+          level: previewLv,
+          hp: def.maxHp || 100,
+          maxHp: def.maxHp || 100
+        };
+        const eff = ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(previewStub, tx, ty, undefined, false) : null;
+        const tier1Prof = (eff && eff.prof) || (ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, 1) : null);
+        const buildRange = (eff && eff.range) || def.range;
+        const buildMinRange = (eff && eff.minRange) || def.minRange || 0;
+        const auraR = (eff && eff.auraRadius) || (tier1Prof && tier1Prof.auraRadius) || (def.aura && def.aura.radius);
         const gateSlowR = (tier1Prof && tier1Prof.gateSlowRadius) || def.gateSlowRadius;
-        if (def.range) {
-          drawIsoCircle(ctx, tx + 0.5, ty + 0.5, def.range, P.rangeStroke, P.rangeFill);
+        if (buildRange > 0) {
+          drawCombatRangeOverlay(ctx, state, def, tx + 0.5, ty + 0.5, buildRange, buildMinRange, zScale);
         }
-        if (auraR) {
+        if (auraR > 0) {
           drawIsoCircle(ctx, tx + 0.5, ty + 0.5, auraR, P.goldStroke, P.goldFill);
         }
-        if (gateSlowR) {
+        if (gateSlowR > 0) {
           drawIsoCircle(ctx, tx + 0.5, ty + 0.5, gateSlowR, P.rangeStroke, 'rgba(255, 255, 255, 0.08)');
         }
       }
@@ -2500,7 +3434,7 @@ window.ZS = window.ZS || {};
       case 'shotgun_post': return 23;
       case 'sniper_tower': return 60;
       case 'vulcan_turret': return level >= 2 ? 24 : 21;
-      case 'missile_pod': return 23;
+      case 'missile_pod': return level >= 3 ? 28 : 25;
       case 'emp_coil': return 35;
       case 'solar_array': return [12, 17, 24, 34][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'wind_turbine': return [34, 46, 60, 74][Math.min(4, Math.max(1, level || 1)) - 1];
@@ -2531,17 +3465,35 @@ window.ZS = window.ZS || {};
     return topZ;
   }
 
-  function doesStructOccludeTarget(st, sx, sy, tx, ty) {
+  function doesStructOccludeTarget(st, sx, sy, tx, ty, state) {
     if (!st) return false;
     const dSum = (sx + sy) - (tx + ty);
     if (dSum < 1) return false;
     const dCol = Math.abs((sx - sy) - (tx - ty));
     if (dCol > 1) return false;
-    const topZ = getEffectiveStructTopZ(st);
+    const rawTopZ = getEffectiveStructTopZ(st);
     // Flat ground traps (< 10px, e.g. razor_pad 5.4..6.45) never hide behind tiles
-    if (topZ < 10) return false;
+    if (rawTopZ < 10) return false;
+    const sElev = state ? getTileElevAt(state, sx + 0.5, sy + 0.5) : 0;
+    const tElev = state ? getTileElevAt(state, tx + 0.5, ty + 0.5) : 0;
+    const effTopZ = rawTopZ + (sElev - tElev);
     const minTopZ = dSum <= 2 ? 10 : (dSum - 1) * 15 - 3;
-    return topZ >= minTopZ;
+    return effTopZ >= minTopZ;
+  }
+
+  function doesRockOccludeTarget(rx, ry, tx, ty, state) {
+    const dSum = (rx + ry) - (tx + ty);
+    if (dSum < 1) return false;
+    const dCol = Math.abs((rx - ry) - (tx - ty));
+    if (dCol > 1) return false;
+    const tRock = state && state.terrainGrid && state.terrainGrid[ry] && state.terrainGrid[ry][rx];
+    const rockTopZ = tRock && tRock.isPeak
+      ? (tRock.topZ || ZS.DATA.ROCK_PEAK_TOP_Z || 33)
+      : ((tRock && tRock.topZ) || ZS.DATA.ROCK_TOP_Z || 16);
+    const tElev = state ? getTileElevAt(state, tx + 0.5, ty + 0.5) : 0;
+    const effTopZ = rockTopZ - tElev;
+    const minTopZ = dSum <= 2 ? 10 : (dSum - 1) * 15 - 3;
+    return effTopZ >= minTopZ;
   }
 
   // ===================== #6 SILHOUETTE PRIMITIVES (Top-Left 100% / 82% / 66% Shading) =====================
@@ -3928,9 +4880,15 @@ window.ZS = window.ZS || {};
 
   Object.assign(R, {
     tileHash01,
+    getTileElevAt,
+    doesStructOccludeTarget,
+    doesRockOccludeTarget,
     ensureTerrainMeta,
     ensureTerrainCache,
     drawEditGridOverlay,
+    drawPlateauTile,
+    drawRampTile,
+    drawRockTile,
     ensureLightCanvas,
     getGlowStamp,
     getPunchHoleStamp,
@@ -3953,6 +4911,8 @@ window.ZS = window.ZS || {};
     drawPerimeterFog,
     drawFloorTile,
     drawIsoCircle,
+    drawPeakShadowSectors,
+    drawCombatRangeOverlay,
     drawDualRangeRings,
     drawWallPillarHighlight,
     drawHoverOverlay,

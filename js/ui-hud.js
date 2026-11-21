@@ -13,6 +13,8 @@ window.ZS = window.ZS || {};
     hudResCompact: false,
     mainMenuOpen: true,
     menuOptionsOpen: false,
+    divisionModalOpen: false,
+    selectedDivisionId: 'mobile_corps',
     lastPhase: null,
     pointerClient: { x: 0, y: 0, inside: false }
   };
@@ -24,6 +26,7 @@ window.ZS = window.ZS || {};
   let lastPowerIconKey = '';
   let lastCozySig = '';
   let lastReconSig = '';
+  let lastDivBadgeSig = '';
 
   const U = (ZS._UI = {
     uiState
@@ -109,8 +112,115 @@ window.ZS = window.ZS || {};
     document.getElementById('res-power-sub').textContent = formatPowerSubText(st);
   }
 
+  function syncDivisionBadge(st) {
+    const badgeEl = document.getElementById('hud-division-badge');
+    if (!badgeEl) return;
+    const divId = (st && st.divisionId) || 'mobile_corps';
+    const def = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef(divId) : (ZS.DATA.DIVISIONS && ZS.DATA.DIVISIONS[divId]);
+    if (!def) return;
+
+    const isNight = !!(st && st.isNight);
+    const blackout = !!(st && st.blackoutActive);
+    const arcActive = ZS.Game.isArcOverdriveActive ? ZS.Game.isArcOverdriveActive() : false;
+    const meta = ZS.Game.getCommanderMeta ? ZS.Game.getCommanderMeta() : null;
+    const rec = meta && meta.divisions ? meta.divisions[divId] : null;
+    const bestWave = rec ? (rec.bestWave || 0) : 0;
+    const cleared = !!(rec && rec.cleared);
+    const pwrPct = st && st.powerCap > 0 ? Math.round((st.power / st.powerCap) * 100) : 0;
+
+    const sig = `${divId}|${isNight ? 1 : 0}|${blackout ? 1 : 0}|${arcActive ? 1 : 0}|${bestWave}|${cleared ? 1 : 0}|${pwrPct}`;
+    if (sig === lastDivBadgeSig) return;
+    lastDivBadgeSig = sig;
+
+    let statusText = def.badgeTag || '표준 교리';
+    let statusCls = 'active-gold';
+    let badgeVariantCls = 'div-mobile';
+    if (divId === 'iron_engineers') {
+      badgeVariantCls = 'div-iron';
+      statusText = '축성 +35% · 수리 12s';
+      statusCls = 'active-heal';
+    } else if (divId === 'nightwatch') {
+      badgeVariantCls = 'div-nightwatch';
+      if (isNight && blackout) {
+        statusText = '야간 유격 활성';
+        statusCls = 'active-heal';
+      } else {
+        statusText = 'XP ×2 · 정전 유격';
+        statusCls = '';
+      }
+    } else if (divId === 'arc_tech') {
+      badgeVariantCls = 'div-arc';
+      if (arcActive) {
+        statusText = 'ARC ≥70%';
+        statusCls = 'arc-active';
+      } else if (blackout) {
+        statusText = '정전 대기';
+        statusCls = 'warn-dim';
+      } else {
+        statusText = `ARC <70% (${pwrPct}%)`;
+        statusCls = 'warn-dim';
+      }
+    }
+
+    badgeEl.className = `hud-division-badge ${badgeVariantCls}`;
+    const iconEl = document.getElementById('hud-div-icon');
+    const nameEl = document.getElementById('hud-div-name');
+    const statusEl = document.getElementById('hud-div-status');
+    if (iconEl) iconEl.innerHTML = ozIcon(def.iconId || 'div-mobile', 15);
+    if (nameEl) nameEl.textContent = def.name || divId;
+    if (statusEl) {
+      statusEl.className = `div-badge-status${statusCls ? ' ' + statusCls : ''}`;
+      statusEl.textContent = statusText;
+    }
+
+    const prosList = Array.isArray(def.pros) ? def.pros : [];
+    const consList = Array.isArray(def.cons) ? def.cons : [];
+    const titleLines = [
+      `${def.name} (${def.subtitle || ''})`,
+      ...prosList.map((p) => `+ ${p}`),
+      ...consList.map((c) => `- ${c}`)
+    ];
+    badgeEl.title = titleLines.join('\n');
+
+    const tipEl = document.getElementById('hud-division-tooltip');
+    if (tipEl) {
+      const bestLabel = bestWave > 0 ? `BEST W${String(bestWave).padStart(2, '0')}` : '첫 출격';
+      const clearPill = cleared ? `<span class="div-pill meta-clear">${ozIcon('state-rank', 12)}<span>CLEAR</span></span>` : '';
+      const prosHtml = prosList
+        .map((p) => `<div class="div-pop-item pro"><span>+</span><span>${escapeHtml(p)}</span></div>`)
+        .join('');
+      const consHtml = consList
+        .map((c) => `<div class="div-pop-item ${def.hasPenalty === false ? 'neutral' : 'con'}"><span>${def.hasPenalty === false ? '·' : '-'}</span><span>${escapeHtml(c)}</span></div>`)
+        .join('');
+      tipEl.innerHTML = `
+        <div class="div-pop-head">
+          <span class="div-pop-title">${ozIcon(def.iconId || 'div-mobile', 16)}<span>${escapeHtml(def.name)}</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px;">
+            <span class="div-pill meta-best">${escapeHtml(bestLabel)}</span>
+            ${clearPill}
+          </span>
+        </div>
+        <div class="div-pop-sub">${escapeHtml(def.subtitle || '')}</div>
+        <div class="div-pop-list">
+          ${prosHtml}
+          ${consHtml}
+        </div>
+      `;
+    }
+  }
+
+  function syncWindLayerButton(st) {
+    const btn = document.getElementById('btn-toggle-wind-layer');
+    if (!btn || !st) return;
+    const on = !!st.showWindOverlay;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
   function updateHud() {
     const st = ZS.Game.state;
+    syncDivisionBadge(st);
+    syncWindLayerButton(st);
     const P = ZS.DATA.PALETTE;
     const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
     const phaseIconEl = document.getElementById('hud-phase-icon');
@@ -359,10 +469,10 @@ window.ZS = window.ZS || {};
       3: [12, 42, 60, 10, 36, 26, 0.832, 0.555]
     };
 
-    // 4x4 internal isometric radar grid lines
-    const gridLines = [1, 2, 3]
+    // 6x6 internal isometric radar grid lines matching 26x26 scale
+    const gridLines = [1, 2, 3, 4, 5]
       .map((step) => {
-        const u = step / 4;
+        const u = step / 6;
         const ax = 60 - 48 * u;
         const ay = 10 + 32 * u;
         const bx = 108 - 48 * u;
@@ -540,6 +650,8 @@ window.ZS = window.ZS || {};
     document.getElementById('res-cozy').textContent = `Lv.${st.cozyTier.level}`;
 
     syncNightPhaseAndPowerHud(st);
+    syncDivisionBadge(st);
+    syncWindLayerButton(st);
 
     const left = st.spawnQueue.length + st.zombies.length;
     document.getElementById('hud-enemies-left').textContent = `${left}기`;
@@ -548,7 +660,7 @@ window.ZS = window.ZS || {};
     const rBtn = document.getElementById('btn-skill-repair');
     rBtn.disabled = st.skills.repairCd > 0;
     document.getElementById('skill-repair-cd').textContent =
-      st.skills.repairCd > 0 ? `재충전 중 (${Math.ceil(st.skills.repairCd)}초)` : '즉시 전체 시설 +95 HP';
+      st.skills.repairCd > 0 ? `재충전 중 (${Math.ceil(st.skills.repairCd)}초)` : `즉시 전체 시설 +95 HP (${st.skills.repairMaxCd || 18}초)`;
 
     const sBtn = document.getElementById('btn-skill-airstrike');
     sBtn.disabled = st.skills.airstrikeCd > 0;
@@ -631,6 +743,7 @@ window.ZS = window.ZS || {};
     formatInlineCostHtml,
     formatPowerSubText,
     syncNightPhaseAndPowerHud,
+    syncDivisionBadge,
     updateHud,
     updateCombatHud,
     renderReconCard,

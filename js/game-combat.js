@@ -67,26 +67,26 @@ window.ZS = window.ZS || {};
   function computeWaveHpScale(waveNum) {
     const w = Math.max(1, waveNum || 1);
     if (w <= 10) {
-      return 1 + (w - 1) * 0.16;
+      return 1 + (w - 1) * 0.22;
     }
     if (w <= 20) {
       const d = w - 10;
-      return 2.44 + d * 0.24 + d * d * 0.008;
+      return 2.98 + d * 0.30 + d * d * 0.012;
     }
     const d = w - 20;
-    return 5.64 + d * 0.38 + d * d * 0.015;
+    return 7.18 + d * 0.48 + d * d * 0.020;
   }
 
   function computeBossHpScale(waveNum) {
     const tier = Math.max(1, Math.floor((waveNum || 5) / 5));
     const quad = Math.max(0, tier - 2);
-    return 1 + (tier - 1) * 0.65 + quad * quad * 0.28;
+    return 1 + (tier - 1) * 0.80 + quad * quad * 0.35;
   }
 
   function buildWaveQueue(waveNum, sideWeights, bossSide) {
     const q = [];
     const hpScale = computeWaveHpScale(waveNum);
-    const countBase = Math.round(9 + waveNum * 3.8 + Math.max(0, waveNum - 12) * 1.4);
+    const countBase = Math.round(11 + waveNum * 4.8 + Math.max(0, waveNum - 8) * 1.8);
     const sidePool = allocateSidesByWeights(countBase, sideWeights);
 
     const wSpitter = waveNum >= 4 ? Math.min(0.14, 0.05 + (waveNum - 4) * 0.012) : 0;
@@ -221,7 +221,7 @@ window.ZS = window.ZS || {};
       hp: maxHp,
       maxHp,
       speed: def.speed,
-      damage: Math.round(def.damage * (1 + (state.wave - 1) * 0.06)),
+      damage: Math.round(def.damage * (1 + (state.wave - 1) * 0.09)),
       attackRate: def.attackRate,
       atkCooldown: 0,
       slowTimer: 0,
@@ -410,6 +410,7 @@ window.ZS = window.ZS || {};
       }
 
       // 1. Night Power Generation & Idle Drain (Wind Continuous + REBOOT_POWER = 12 Hysteresis)
+      const prevArcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
       const REBOOT_POWER = 12;
       const windGen = state.nightGen || 0;
       if (!state.blackoutActive) {
@@ -426,6 +427,7 @@ window.ZS = window.ZS || {};
         if (state.power > 0 && state.power >= rebootTarget) {
           state.blackoutActive = false;
           if (G.invalidateStatsCache) G.invalidateStatsCache();
+          G.notifyCombatHud();
           G.banner('전력 복구 — 자동 방어 재가동!', `풍력 발전으로 전력 ${Math.floor(state.power)} 도달! 포탑과 투광등이 다시 가동됩니다.`, 'good');
         }
       }
@@ -454,7 +456,18 @@ window.ZS = window.ZS || {};
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
           spawnZombie(state.spawnQueue.shift());
-          const baseInterval = Math.max(0.26, 0.92 - state.wave * 0.045);
+          if (state.wave >= 4 && state.spawnQueue.length > 0) {
+            const swarmChance = Math.min(0.45, 0.20 + (state.wave - 4) * 0.025);
+            if (Math.random() < swarmChance) {
+              const extraCount = Math.random() < 0.5 ? 1 : 2;
+              for (let s = 0; s < extraCount; s += 1) {
+                const extraIdx = state.spawnQueue.findIndex((entry) => entry && entry.type !== 'boss');
+                if (extraIdx === -1) break;
+                spawnZombie(state.spawnQueue.splice(extraIdx, 1)[0]);
+              }
+            }
+          }
+          const baseInterval = Math.max(0.20, 0.82 - state.wave * 0.048);
           state.spawnTimer = baseInterval * (0.7 + Math.random() * 0.55);
         }
       }
@@ -463,6 +476,13 @@ window.ZS = window.ZS || {};
       rebuildZombieSpatialBuckets();
       updateDefenders(dt);
       updateBurstQueue(dt);
+
+      // Invalidate stats cache if ARC Overdrive (>=70% power) threshold was crossed this tick
+      const nextArcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
+      if (nextArcOverdrive !== prevArcOverdrive) {
+        if (G.invalidateStatsCache) G.invalidateStatsCache();
+        G.notifyCombatHud();
+      }
 
       // 5. Update Projectiles
       updateProjectiles(dt);
@@ -496,6 +516,7 @@ window.ZS = window.ZS || {};
     } else {
       state.blackoutFlickerTimer = 0.22;
     }
+    G.notifyCombatHud();
   }
 
   function triggerBlackout() {
@@ -503,13 +524,16 @@ window.ZS = window.ZS || {};
   }
 
   function updateRepairBays(dt) {
+    const auraAdd = (DATA.PLATEAU_BONUS && DATA.PLATEAU_BONUS.auraAdd) || 0.5;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (!st || st.id !== 'repair_bay') continue;
         const def = DATA.ITEMS.repair_bay;
         const prof = G.getStructLevelProfile(def, st.level || 1);
-        const rad = prof.auraRadius || def.aura.radius;
+        const t = G.getTerrainAt ? G.getTerrainAt(x, y) : null;
+        const onPlateau = !!(t && t.kind === 'plateau');
+        const rad = (prof.auraRadius || def.aura.radius) + (onPlateau ? auraAdd : 0);
         const regen = (prof.regenPerSec || def.aura.regenPerSec) * dt;
 
         for (let ny = Math.max(0, Math.floor(y - rad)); ny <= Math.min(N - 1, Math.ceil(y + rad)); ny++) {
@@ -544,7 +568,7 @@ window.ZS = window.ZS || {};
         for (let i = 0; i < state.zombies.length; i++) {
           const z = state.zombies[i];
           const d = Math.hypot(z.x - hcx, z.y - hcy);
-          if (d <= wpn.range && d < bestDist) {
+          if (d <= wpn.range && d < bestDist && (!G.hasDirectLineOfSight || G.hasDirectLineOfSight(hcx, hcy, z.x, z.y))) {
             bestDist = d;
             bestIdx = i;
           }
@@ -619,6 +643,8 @@ window.ZS = window.ZS || {};
       // Acquire target via 22x22 spatial zombie buckets
       if (G._zombieBucketsDirty) rebuildZombieSpatialBuckets();
       const range = eff.range;
+      const minRange = eff.minRange || def.minRange || 0;
+      const isIndirect = def.id === 'missile_pod' || def.id === 'emp_coil' || def.projType === 'rocket' || def.projType === 'emp';
       const rMinX = Math.max(0, Math.floor(cx - range));
       const rMaxX = Math.min(N - 1, Math.floor(cx + range));
       const rMinY = Math.max(0, Math.floor(cy - range));
@@ -634,7 +660,11 @@ window.ZS = window.ZS || {};
           while (i !== -1) {
             const z = state.zombies[i];
             const d = Math.hypot(z.x - cx, z.y - cy);
-            if (d <= range) {
+            if (
+              d <= range &&
+              !(minRange > 0 && d < minRange) &&
+              (isIndirect || !G.hasDirectLineOfSight || G.hasDirectLineOfSight(cx, cy, z.x, z.y))
+            ) {
               // Priority table for sniper (boss > spitter > shocker > brute > leaper > runner > walker), else closest to HQ / turret
               const hqDist = Math.hypot(z.x - hqCx, z.y - hqCy);
               const score = def.targetMode === 'strongest'
@@ -679,15 +709,92 @@ window.ZS = window.ZS || {};
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (!st || st.id === 'command_hq') continue;
-        updateOneDefender(st, x, y, 0, false);
+        const terrainElev = G.getTerrainElevationAt ? G.getTerrainElevationAt(x + 0.5, y + 0.5) : 0;
+        updateOneDefender(st, x, y, terrainElev, false);
         if (st.mounted) {
           const wallDef = DATA.ITEMS[st.id];
           const wallProf = wallDef ? G.getStructLevelProfile(wallDef, st.level || 2) : null;
-          const mBaseZ = (wallProf && wallProf.mountBaseZ) || 15.2;
+          const mBaseZ = terrainElev + ((wallProf && wallProf.mountBaseZ) || 15.2);
           updateOneDefender(st.mounted, x, y, mBaseZ, true);
         }
       }
     }
+  }
+
+  function spawnSingleRocketProjectile(sourceUid, cx, cy, zOff, txGoal, tyGoal, dmgPerRocket, critChance, splashR, isLv3, tubeIdx) {
+    const isCrit = Math.random() < (critChance || 0);
+    const finalDmg = dmgPerRocket * (isCrit ? 1.65 : 1.0);
+    const angle = Math.atan2(tyGoal - cy, txGoal - cx);
+    const perpX = -Math.sin(angle);
+    const perpY = Math.cos(angle);
+    const latOff = (((tubeIdx || 0) % 3) - 1) * 0.09;
+    const sx = cx + perpX * latOff;
+    const sy = cy + perpY * latOff;
+    const launchZ = 17.5 + (zOff || 0);
+    const targetZ = G.getTerrainElevationAt ? G.getTerrainElevationAt(txGoal, tyGoal) : 0;
+    const dist = Math.hypot(txGoal - sx, tyGoal - sy);
+    const flightDur = Math.max(0.48, Math.min(0.76, 0.34 + dist * 0.052));
+    const peakZ = Math.max(58, Math.min(72, 48 + dist * 2.6 + Math.max(launchZ, targetZ) * 0.45));
+
+    ZS.Audio.playShoot('rocket');
+    G.spawnMuzzleFlash(sx + Math.cos(angle) * 0.24, sy + 0.12 + Math.sin(angle) * 0.16, launchZ, angle, '#FF9F43', 1.15);
+    G.spawnBurstParticles(sx, sy, launchZ, '#CBD5E1', 3);
+
+    state.projectiles.push({
+      kind: 'rocket',
+      sourceUid,
+      startX: sx,
+      startY: sy,
+      startZ: launchZ,
+      x: sx,
+      y: sy,
+      z: launchZ,
+      targetX: txGoal,
+      targetY: tyGoal,
+      targetZ,
+      peakZ,
+      damage: finalDmg,
+      isCrit,
+      splash: splashR,
+      isLv3: !!isLv3,
+      life: flightDur,
+      maxLife: flightDur,
+      smokeAcc: 0
+    });
+  }
+
+  function computeSalvoImpactPoint(cx, cy, anchorX, anchorY, minR, maxR, scatter, k, count) {
+    let tx = anchorX;
+    let ty = anchorY;
+    if (scatter > 0.01) {
+      if (k === 0) {
+        const ang = Math.random() * Math.PI * 2;
+        const r = scatter * 0.25 * Math.random();
+        tx += Math.cos(ang) * r;
+        ty += Math.sin(ang) * r;
+      } else {
+        const baseA = k * 2.39996 + (Math.random() - 0.5) * 0.45;
+        const frac = Math.sqrt(k / Math.max(1, count - 1));
+        const r = scatter * (0.45 + 0.55 * frac);
+        tx += Math.cos(baseA) * r;
+        ty += Math.sin(baseA) * r;
+      }
+    }
+    tx = Math.max(0.6, Math.min(N - 0.6, tx));
+    ty = Math.max(0.6, Math.min(N - 0.6, ty));
+    const dx = tx - cx;
+    const dy = ty - cy;
+    const d = Math.hypot(dx, dy);
+    if (minR > 0 && d < minR) {
+      const safeAng = d > 1e-4 ? Math.atan2(dy, dx) : Math.atan2(anchorY - cy, anchorX - cx);
+      tx = Math.max(0.6, Math.min(N - 0.6, cx + Math.cos(safeAng) * (minR + 0.05)));
+      ty = Math.max(0.6, Math.min(N - 0.6, cy + Math.sin(safeAng) * (minR + 0.05)));
+    } else if (maxR > 0 && d > maxR + 0.5) {
+      const ang = Math.atan2(dy, dx);
+      tx = Math.max(0.6, Math.min(N - 0.6, cx + Math.cos(ang) * (maxR + 0.5)));
+      ty = Math.max(0.6, Math.min(N - 0.6, cy + Math.sin(ang) * (maxR + 0.5)));
+    }
+    return { x: tx, y: ty };
   }
 
   function updateBurstQueue(dt) {
@@ -696,6 +803,22 @@ window.ZS = window.ZS || {};
       b.delay -= dt;
       if (b.delay <= 0) {
         state.burstQueue.splice(i, 1);
+        if (b.kind === 'rocket_salvo') {
+          spawnSingleRocketProjectile(
+            b.sourceUid,
+            b.cx,
+            b.cy,
+            b.zOff,
+            b.targetX,
+            b.targetY,
+            b.damage,
+            b.critChance,
+            b.splash,
+            b.isLv3,
+            b.tubeIdx
+          );
+          continue;
+        }
         const a = b.angle + (Math.random() - 0.5) * 0.08;
         const spd = 18;
         const bz = b.z !== undefined ? b.z : 9.0;
@@ -745,6 +868,40 @@ window.ZS = window.ZS || {};
     const sourceUid = st && st.id !== 'command_hq' ? st.uid : null;
     const zOff = mountBaseZ || 0;
 
+    if (def.id === 'missile_pod' || def.projType === 'rocket') {
+      const salvoCount = eff.salvoCount || def.salvoCount || 2;
+      const scatter = eff.salvoScatter != null ? eff.salvoScatter : (def.salvoScatter != null ? def.salvoScatter : 0.25);
+      const minR = eff.minRange || def.minRange || 2.2;
+      const maxR = eff.range || def.range || 8.0;
+      const splashR = eff.splashRadius !== undefined ? eff.splashRadius : (def.splashRadius || 1.20);
+      const isLv3 = (eff.level || 1) >= 3;
+      const anchorX = Math.max(0.6, Math.min(N - 0.6, target.x));
+      const anchorY = Math.max(0.6, Math.min(N - 0.6, target.y));
+
+      const p0 = computeSalvoImpactPoint(cx, cy, anchorX, anchorY, minR, maxR, scatter, 0, salvoCount);
+      spawnSingleRocketProjectile(sourceUid, cx, cy, zOff, p0.x, p0.y, eff.damage, eff.critChance, splashR, isLv3, 0);
+
+      for (let k = 1; k < salvoCount; k++) {
+        const pk = computeSalvoImpactPoint(cx, cy, anchorX, anchorY, minR, maxR, scatter, k, salvoCount);
+        state.burstQueue.push({
+          kind: 'rocket_salvo',
+          delay: k * 0.07,
+          sourceUid,
+          cx,
+          cy,
+          zOff,
+          targetX: pk.x,
+          targetY: pk.y,
+          damage: eff.damage,
+          critChance: eff.critChance,
+          splash: splashR,
+          isLv3,
+          tubeIdx: k
+        });
+      }
+      return;
+    }
+
     const isCrit = Math.random() < eff.critChance;
     const finalDmg = eff.damage * (isCrit ? 1.65 : 1.0);
     const angle = Math.atan2(target.y - cy, target.x - cx);
@@ -764,8 +921,6 @@ window.ZS = window.ZS || {};
       const vDist = lvNow >= 3 ? 0.62 : 0.50;
       const vZ = (lvNow >= 2 ? 10.1 : 7.5) + 5.0 + zOff;
       G.spawnMuzzleFlash(cx + Math.cos(angle) * vDist, cy + Math.sin(angle) * vDist, vZ, angle, '#FFE8B6', 1.0);
-    } else if (def.id === 'missile_pod') {
-      G.spawnMuzzleFlash(cx + Math.cos(angle) * 0.22, cy + 0.22 + Math.sin(angle) * 0.14, 14.5 + zOff, angle, '#FF8A47', 1.3);
     }
 
     if (def.projType === 'emp') {
@@ -986,7 +1141,11 @@ window.ZS = window.ZS || {};
 
   function triggerShockerEmp(cx, cy, radius, duration) {
     const rad = radius || 2.1;
-    const dur = duration || 3.0;
+    const rawDur = duration || 3.0;
+    const arcOverdrive = G.isArcOverdriveActive ? G.isArcOverdriveActive() : false;
+    const div = G.getDivisionDef ? G.getDivisionDef() : null;
+    const empMult = arcOverdrive && div && div.overdriveEmpDurationMult != null ? div.overdriveEmpDurationMult : 1.0;
+    const dur = +(rawDur * empMult).toFixed(3);
     state.projectiles.push({
       kind: 'emp_ring',
       x: cx,
@@ -1023,15 +1182,102 @@ window.ZS = window.ZS || {};
     if (newlyStunned && G.invalidateStatsCache) G.invalidateStatsCache();
   }
 
+  function detonateRocketImpact(p) {
+    const ix = p.targetX;
+    const iy = p.targetY;
+    const impElev = p.targetZ || 0;
+    const splashR = p.splash || 1.20;
+    ZS.Audio.playExplosion();
+    G.spawnBurstParticles(ix, iy, impElev + 4, '#FF8A3D', p.isLv3 ? 7 : 6);
+    state.flares.push({ x: ix, y: iy, radius: p.isLv3 ? 2.0 : 1.7, life: 0.18 });
+    if (state.groundDecals.length >= 45) {
+      state.groundDecals.shift();
+    }
+    state.groundDecals.push({
+      kind: 'crater_crack',
+      x: ix,
+      y: iy,
+      radius: Math.min(0.65, splashR * 0.36),
+      seed: Math.random() * 10,
+      life: 4.0,
+      maxLife: 4.0
+    });
+    state.projectiles.push({
+      kind: 'ring',
+      x: ix,
+      y: iy,
+      radius: splashR,
+      color: p.isLv3 ? '#FF6B4A' : '#FF9F43',
+      life: 0.24,
+      maxLife: 0.24
+    });
+    for (let k = state.zombies.length - 1; k >= 0; k--) {
+      const zk = state.zombies[k];
+      if (!zk) continue;
+      const dist = Math.hypot(zk.x - ix, zk.y - iy);
+      if (dist <= splashR) {
+        const vuln = isZombieOnLv3RazorPad(zk) ? 1.15 : 1.0;
+        const falloff = dist <= 0.45 ? 1.0 : Math.max(0.45, 1 - (dist / splashR) * 0.45);
+        G.damageZombie(k, p.damage * vuln * falloff, '#FF9F43', p.isCrit, p.sourceUid);
+      }
+    }
+  }
+
   function updateProjectiles(dt) {
     for (let i = state.projectiles.length - 1; i >= 0; i--) {
       const p = state.projectiles[i];
       p.life -= dt;
+      if (p.kind === 'rocket') {
+        const maxL = p.maxLife || 0.6;
+        const u = Math.max(0, Math.min(1, 1 - Math.max(0, p.life) / maxL));
+        const sZ = p.startZ != null ? p.startZ : 18;
+        const tZ = p.targetZ != null ? p.targetZ : 0;
+        const linZ = sZ + (tZ - sZ) * u;
+        const lift = Math.max(24, (p.peakZ || 62) - Math.max(sZ, tZ));
+        p.x = p.startX + (p.targetX - p.startX) * u;
+        p.y = p.startY + (p.targetY - p.startY) * u;
+        p.z = linZ + 4 * lift * u * (1 - u);
+        p.smokeAcc = (p.smokeAcc || 0) + dt;
+        if (p.smokeAcc >= 0.055 && p.life > 0) {
+          p.smokeAcc = 0;
+          if (state.particles.length < 240) {
+            const locElev = G.getTerrainElevationAt ? G.getTerrainElevationAt(p.x, p.y) : 0;
+            state.particles.push({
+              kind: 'dust',
+              x: p.x,
+              y: p.y,
+              z: Math.max(2, p.z - locElev),
+              vx: (Math.random() - 0.5) * 0.45,
+              vy: (Math.random() - 0.5) * 0.45,
+              vz: 3.0 + Math.random() * 4.0,
+              color: Math.random() < 0.5 ? '#CBD5E1' : '#94A3B8',
+              size: 2.0 + Math.random() * 1.4,
+              life: 0.34,
+              maxLife: 0.34
+            });
+          }
+        }
+        if (p.life <= 0) {
+          p.x = p.targetX;
+          p.y = p.targetY;
+          detonateRocketImpact(p);
+          state.projectiles.splice(i, 1);
+        }
+        continue;
+      }
       if (p.kind === 'acid_glob') {
         const maxL = p.maxLife || 0.4;
         const progress = Math.min(1, 1 - Math.max(0, p.life) / maxL);
         p.x = p.startX + (p.targetX - p.startX) * progress;
         p.y = p.startY + (p.targetY - p.startY) * progress;
+        const gtx = Math.floor(p.x);
+        const gty = Math.floor(p.y);
+        const gt = state.terrainGrid && state.terrainGrid[gty] && state.terrainGrid[gty][gtx];
+        if (gt && gt.kind === 'rock' && gt.isPeak) {
+          G.spawnBurstParticles(p.x, p.y, 18, DATA.PALETTE.mutantAcid || '#C8F542', 6);
+          state.projectiles.splice(i, 1);
+          continue;
+        }
         if (p.life <= 0) {
           resolveAcidGlobHit(p);
           state.projectiles.splice(i, 1);
@@ -1058,6 +1304,19 @@ window.ZS = window.ZS || {};
       const prevY = p.y;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+
+      if (G.findFirstPeakOnSegment) {
+        const sTx = p.startX !== undefined ? Math.floor(p.startX) : Math.floor(prevX);
+        const sTy = p.startY !== undefined ? Math.floor(p.startY) : Math.floor(prevY);
+        const hitPeak = G.findFirstPeakOnSegment(prevX, prevY, p.x, p.y, sTx, sTy);
+        if (hitPeak) {
+          const hitX = (prevX + p.x) * 0.5;
+          const hitY = (prevY + p.y) * 0.5;
+          G.spawnBurstParticles(hitX, hitY, 16, '#B8C4D0', 4);
+          state.projectiles.splice(i, 1);
+          continue;
+        }
+      }
 
       const hitList = p.hitUids || [];
 
@@ -1141,14 +1400,21 @@ window.ZS = window.ZS || {};
             const zDef = DATA.ZOMBIES[hitZ.type];
             if (!(zDef && zDef.isBoss)) {
               const vLen = Math.hypot(p.vx, p.vy) || 1;
+              const otx = Math.max(0, Math.min(N - 1, Math.floor(hitZ.x)));
+              const oty = Math.max(0, Math.min(N - 1, Math.floor(hitZ.y)));
               const nx = hitZ.x + (p.vx / vLen) * p.knockback;
               const ny = hitZ.y + (p.vy / vLen) * p.knockback;
               const ntx = Math.floor(nx);
               const nty = Math.floor(ny);
               if (ntx >= 0 && nty >= 0 && ntx < N && nty < N) {
+                const terrainOk =
+                  (ntx === otx && nty === oty) ||
+                  !ZS.Pathfinding ||
+                  !ZS.Pathfinding.canTraverseTerrainStep ||
+                  ZS.Pathfinding.canTraverseTerrainStep(state.terrainGrid, otx, oty, ntx, nty);
                 const blk = state.structGrid[nty] && state.structGrid[nty][ntx];
                 const bDef = blk ? (blk.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[blk.id]) : null;
-                if (!blk || (bDef && bDef.passable)) {
+                if (terrainOk && (!blk || (bDef && bDef.passable))) {
                   hitZ.x = nx;
                   hitZ.y = ny;
                   G.spawnBurstParticles(nx, ny, 2, '#C8BFA8', 4);

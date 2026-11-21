@@ -79,23 +79,29 @@ window.ZS = window.ZS || {};
       return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>야간전력 소모</span>`, cls: 'tag-power' };
     }
     if (def.subType === 'power') {
-      if (def.nightGen > 0) {
+      const prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, 1) : def;
+      const pStats = ZS.Game.getTerrainPowerStats ? ZS.Game.getTerrainPowerStats(def.id, prof, -1, -1) : prof;
+      if ((pStats.nightGen || def.nightGen) > 0) {
         return {
-          html: `${ozIcon('res-power', 13, 'icon-power')}<span>밤+${def.nightGen}/s · 낮+${def.dayCharge}</span>`,
+          html: `${ozIcon('res-power', 13, 'icon-power')}<span>밤+${pStats.nightGen || def.nightGen}/s · 낮+${Math.round(pStats.dayCharge)}</span>`,
           cls: 'tag-power'
         };
       }
       return {
-        html: `${ozIcon('phase-day', 13, 'icon-coin')}<span>낮+${def.dayCharge}</span>${ozIcon('res-power', 13, 'icon-power')}<span>· 용량+${def.powerCap}</span>`,
+        html: `${ozIcon('phase-day', 13, 'icon-coin')}<span>낮+${Math.round(pStats.dayCharge)}</span>${ozIcon('res-power', 13, 'icon-power')}<span>· 용량+${pStats.powerCap}</span>`,
         cls: 'tag-power'
       };
     }
     if (def.subType === 'housing') {
+      const st = ZS.Game.state;
+      const spawnLv = def.id === 'field_tent' && st && st.freeVouchers && st.freeVouchers.shelter_pod > 0 ? 3 : 1;
+      const prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, spawnLv) : def;
+      const popVal = prof.popCap != null ? prof.popCap : def.popCap;
       if (preview && preview.isDiminished) {
-        return { html: `${ozIcon('res-agent', 13)}<span>수용+${def.popCap} · +${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
+        return { html: `${ozIcon('res-agent', 13)}<span>수용+${popVal} · +${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
       }
       return {
-        html: `${ozIcon('res-agent', 13)}<span>수용+${def.popCap} ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy}</span>`,
+        html: `${ozIcon('res-agent', 13)}<span>수용+${popVal} ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${prof.cozy != null ? prof.cozy : def.cozy}</span>`,
         cls: 'tag-manned'
       };
     }
@@ -112,7 +118,10 @@ window.ZS = window.ZS || {};
       }
       return { html: `${pwrPrefix}${ozIcon('res-cozy', 13, 'icon-coin')}<span>안락함 +${def.cozy || 0}</span>`, cls: 'tag-cozy' };
     }
-    if (def.subType === 'trap') return { html: `<span>초당 ${def.trapDps} · 둔화 45%</span>`, cls: '' };
+    if (def.subType === 'trap') {
+      const tProf = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, 1) : def;
+      return { html: `<span>초당 ${tProf.trapDps} · 둔화 45%</span>`, cls: '' };
+    }
     if (def.subType === 'gate') return { html: `<span>전술 관문 · 둔화 18%</span>`, cls: '' };
     if (def.id === 'barricade_wall') return { html: `<span>3단 진화 · 반사 15%</span>`, cls: '' };
     return { html: `<span>방호벽 · HP ${def.maxHp}</span>`, cls: '' };
@@ -129,6 +138,7 @@ window.ZS = window.ZS || {};
     const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
     const floorCappedAll = (st.cozyFloorRaw || 0) >= floorCap;
     const sigParts = [
+      st.divisionId || 'mobile_corps',
       st.phase,
       uiState.activeCategory,
       uiState.mode,
@@ -140,11 +150,12 @@ window.ZS = window.ZS || {};
     for (let i = 0; i < items.length; i++) {
       const def = items[i];
       const vCnt = (st.freeVouchers[def.id] || 0) + (def.id === 'field_tent' ? st.freeVouchers.shelter_pod || 0 : 0);
-      const c = def.cost || {};
+      const r1Cnt = (st.divisionRank1Vouchers && st.divisionRank1Vouchers[def.id]) || 0;
+      const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
       const aff = `${st.wood >= (c.wood || 0) ? 1 : 0}${st.scrap >= (c.scrap || 0) ? 1 : 0}${st.coin >= (c.coin || 0) ? 1 : 0}`;
       const preview = ZS.Game.getPlacementCozyPreview ? ZS.Game.getPlacementCozyPreview(def.id) : null;
       const dimFlag = preview && preview.isDiminished ? 1 : 0;
-      sigParts.push(`${def.id}:${vCnt}:${aff}:${dimFlag}`);
+      sigParts.push(`${def.id}:${vCnt}:${r1Cnt}:${aff}:${dimFlag}`);
     }
     const nextSig = sigParts.join('|');
     if (nextSig === lastDockSig && container.childElementCount > 0) {
@@ -186,11 +197,12 @@ window.ZS = window.ZS || {};
       if (bossLocked) {
         costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스 처치</span></span>`;
       } else if (voucherCount > 0) {
-        costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}</span></span>`;
+        const hasR1 = !!(st.divisionRank1Vouchers && (st.divisionRank1Vouchers[def.id] || 0) > 0);
+        costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}${hasR1 ? ' ★' : ''}</span></span>`;
       } else if (hqLockedRaw) {
         costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
       } else {
-        const c = def.cost || {};
+        const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
         if (c.wood) {
           costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', 13, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
         }
@@ -312,13 +324,73 @@ window.ZS = window.ZS || {};
     syncDockAndHudState();
   }
 
+  function getTerrainUiMeta(tCell) {
+    if (!tCell) return null;
+    switch (tCell.kind) {
+      case 'rock':
+        if (tCell.isPeak) {
+          return {
+            title: '산맥 주봉 (험준한 봉우리)',
+            badge: '이동·건설·직사 탄환 차단 · 로켓·EMP·폭격 통과',
+            desc: '높게 솟은 산맥 봉우리입니다. 직사 화기와 산성 침을 가로막지만, 다연장 로켓 포대·EMP 코일·전술 폭격은 산 너머로 타격합니다.',
+            tipText: '산맥 주봉 — 이동·건설·직사 탄환 차단 (로켓·EMP 통과)',
+            tipIcon: 'state-lock',
+            tipIconCls: 'icon-muted'
+          };
+        }
+        return {
+          title: '기슭 암석 (바위)',
+          badge: '설치·통행 불가 · 탄환 통과',
+          desc: '시설 건설이나 이동이 불가능한 천연 바위 장애물입니다. 아군 직사 탄환과 포격은 바위 위로 통과합니다.',
+          tipText: '기슭 암석 — 설치·통행 불가 (탄환 통과)',
+          tipIcon: 'state-lock',
+          tipIconCls: 'icon-muted'
+        };
+      case 'plateau':
+        return {
+          title: '고지대 (절벽 위)',
+          badge: '사거리 +1.0 (성벽 합산 +1.25 상한) · 치명 +8%p · 조명 +1.0 · 오라 +0.5',
+          desc: '높은 절벽 지형으로 좀비는 경사로를 통해서만 접근할 수 있습니다. 전투·조명·오라 시설에 보너스를 줍니다.',
+          tipText: '고지대 — 사거리 +1.0 · 치명 +8%p · 조명 +1.0 · 오라 +0.5',
+          tipIcon: 'nav-recon',
+          tipIconCls: 'icon-coin'
+        };
+      case 'ramp':
+        return {
+          title: '경사로 (오르막)',
+          badge: '가시 함정만 설치 가능 · 좀비 등판 -30% / 하산 +25%',
+          desc: '평지와 고지대를 잇는 경사로입니다. 일반 시설은 건설할 수 없으며 가시 함정만 설치 가능합니다.',
+          tipText: '경사로 — 가시 함정 전용 (등판 -30% / 하산 +25%)',
+          tipIcon: 'nav-recon',
+          tipIconCls: 'icon-muted'
+        };
+      case 'wind': {
+        const isCore = (tCell.tier || 1) >= 2;
+        const pct = isCore ? 70 : 40;
+        const title = isCore ? '강풍 지대 — 돌풍 핵심 (+70%)' : '강풍 지대 (+40%)';
+        return {
+          title,
+          badge: `풍력 터빈 주·야간 발전 +${pct}% (×${(isCore ? 1.7 : 1.4).toFixed(1)})`,
+          desc: isCore
+            ? '산맥 기슭에 바람 에너지가 강하게 집중되는 돌풍 중심 구역입니다. 풍력 터빈의 주·야간 발전량이 +70% 증가합니다.'
+            : '산맥 주변을 따라 자연 바람길이 통과하는 강풍 구역입니다. 풍력 터빈의 주·야간 발전량이 +40% 증가합니다.',
+          tipText: `${title} — 풍력 발전 +${pct}%`,
+          tipIcon: 'hud-wind',
+          tipIconCls: 'icon-heal'
+        };
+      }
+      default:
+        return null;
+    }
+  }
+
   function updateCursorTooltip() {
     const tipEl = document.getElementById('cursor-tooltip');
     if (!tipEl) return;
     const st = ZS.Game.state;
     const hideTip = () => {
       if (lastTipVisible) {
-        tipEl.classList.remove('ok');
+        tipEl.classList.remove('ok', 'info');
         tipEl.classList.add('hidden');
         lastTipVisible = false;
       }
@@ -337,11 +409,13 @@ window.ZS = window.ZS || {};
       return;
     }
 
+    const hoveredTerrain = ZS.Game.getTerrainAt ? ZS.Game.getTerrainAt(tx, ty) : (st.terrainGrid && st.terrainGrid[ty] && st.terrainGrid[ty][tx]);
+    const tKey = hoveredTerrain ? `${hoveredTerrain.kind}:${hoveredTerrain.tier || 0}:${hoveredTerrain.isPeak ? 1 : 0}` : '';
     const moveSrcKey = uiState.movingSource ? `${uiState.movingSource.tx},${uiState.movingSource.ty}` : '';
     const vKey = uiState.selectedItemId
       ? `${st.freeVouchers[uiState.selectedItemId] || 0},${st.freeVouchers.barricade_wall || 0}`
       : '0';
-    const nextKey = `${st.phase}|${uiState.mode}|${uiState.selectedItemId || ''}|${tx},${ty}|${moveSrcKey}|${Math.floor(st.wood)},${Math.floor(st.scrap)},${Math.floor(st.coin)}|${st.popUsed},${st.agents},${st.popCap}|${st.hqLevel}|${st.bossDefeated ? 1 : 0}|${vKey}`;
+    const nextKey = `${st.phase}|${uiState.mode}|${uiState.selectedItemId || ''}|${tx},${ty}|${tKey}|${st.showWindOverlay ? 1 : 0}|${moveSrcKey}|${Math.floor(st.wood)},${Math.floor(st.scrap)},${Math.floor(st.coin)}|${st.popUsed},${st.agents},${st.popCap}|${st.hqLevel}|${st.bossDefeated ? 1 : 0}|${vKey}`;
 
     if (nextKey !== lastTipStateKey) {
       lastTipStateKey = nextKey;
@@ -349,6 +423,33 @@ window.ZS = window.ZS || {};
       let tipKind = 'err';
       let tipIcon = 'state-alert';
       let tipIconCls = 'icon-danger';
+
+      const formatTerrainBuildBonus = (def, tCell, isWallComposite) => {
+        if (!def || !tCell) return null;
+        if (tCell.kind === 'plateau') {
+          if (def.subType === 'manned' || def.subType === 'turret') {
+            return isWallComposite
+              ? '성벽+고지대: 사거리 +1.25 상한 · 치명 +8%p'
+              : '고지대 보너스: 사거리 +1.0 · 치명타 +8%p';
+          }
+          if (
+            def.id === 'led_floodlight' ||
+            def.id === 'repair_bay' ||
+            def.id === 'gas_heater' ||
+            def.subType === 'comfort' ||
+            def.id === 'boss_trophy'
+          ) {
+            return '고지대 보너스: 조명 +1.0 · 오라 반경 +0.5';
+          }
+        } else if (tCell.kind === 'wind' && def.id === 'wind_turbine' && st.showWindOverlay) {
+          return (tCell.tier || 1) >= 2
+            ? '돌풍 핵심 지대 (+70%): 풍력 발전 ×1.7'
+            : '강풍 지대 (+40%): 풍력 발전 ×1.4';
+        } else if (tCell.kind === 'ramp' && def.id === 'razor_pad') {
+          return '경사로 가시 함정 설치 가능 (등판 -30% 감속 중첩)';
+        }
+        return null;
+      };
 
       if (uiState.mode === 'build' && uiState.selectedItemId && ZS.Game.canPlaceItem) {
         const check = ZS.Game.canPlaceItem(uiState.selectedItemId, tx, ty);
@@ -362,7 +463,9 @@ window.ZS = window.ZS || {};
           }
         } else if (check && check.ok && check.mountOnWall && hoveredSt) {
           const wName = ZS.Game.getStructureDisplayName(hoveredSt);
-          const bonusLabel = uiState.selectedItemId === 'led_floodlight' ? '조명 +0.6 · 사기 반경 +0.4' : '사거리 +0.5';
+          const bonusLabel = uiState.selectedItemId === 'led_floodlight'
+            ? (hoveredTerrain && hoveredTerrain.kind === 'plateau' ? '조명 +1.6 · 오라 +0.9' : '조명 +0.6 · 사기 반경 +0.4')
+            : (hoveredTerrain && hoveredTerrain.kind === 'plateau' ? '사거리 +1.25 상한 · 치명 +8%p' : '사거리 +0.5');
           tipText = `${wName} 상부 거치 가능 (${bonusLabel})`;
           tipKind = 'ok';
           tipIcon = 'mount';
@@ -372,22 +475,38 @@ window.ZS = window.ZS || {};
           const uCost = check.underlayCost || { wood: 10, scrap: 12 };
           const vCount = (st.freeVouchers && st.freeVouchers.barricade_wall) || 0;
           const costStr = vCount > 0 ? '보급권 1 소모' : `목재 ${uCost.wood}·철재 ${uCost.scrap}`;
-          tipText = `성벽 자동 하부 승격 (${uName} Lv·숙련 유지, ${costStr})`;
+          const tExtra = hoveredTerrain && hoveredTerrain.kind === 'plateau' ? ' · 고지대 사거리 +1.25 상한' : '';
+          tipText = `성벽 자동 하부 승격 (${uName} Lv·숙련 유지, ${costStr}${tExtra})`;
           tipKind = 'ok';
           tipIcon = 'wall-link';
           tipIconCls = 'icon-heal';
+        } else if (check && check.ok && hoveredTerrain) {
+          const bonusTip = formatTerrainBuildBonus(itemDef, hoveredTerrain, false);
+          if (bonusTip) {
+            tipText = bonusTip;
+            tipKind = 'ok';
+            tipIcon = hoveredTerrain.kind === 'wind' ? 'hud-wind' : 'nav-recon';
+            tipIconCls = 'icon-heal';
+          }
         }
       } else if (uiState.mode === 'move' && uiState.movingSource) {
+        const srcCell = st.structGrid[uiState.movingSource.ty] && st.structGrid[uiState.movingSource.ty][uiState.movingSource.tx];
+        const srcUnit = srcCell && (srcCell.mounted || srcCell);
+        const srcDef = srcUnit ? ZS.DATA.ITEMS[srcUnit.id] : null;
         if (tx <= 0 || ty <= 0 || tx >= N - 1 || ty >= N - 1) {
           tipText = '외곽 진입 구역으로는 시설을 옮길 수 없습니다.';
+        } else if (hoveredTerrain && hoveredTerrain.kind === 'rock') {
+          tipText = '자연 암석(바위) 지형으로는 이동할 수 없습니다.';
+          tipIcon = 'state-lock';
+        } else if (hoveredTerrain && hoveredTerrain.kind === 'ramp' && (!srcDef || srcDef.id !== 'razor_pad')) {
+          tipText = '경사로에는 가시 함정만 배치·이동할 수 있습니다.';
+          tipIcon = 'state-lock';
         } else if (!(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) && st.structGrid[ty] && st.structGrid[ty][tx]) {
-          const srcCell = st.structGrid[uiState.movingSource.ty] && st.structGrid[uiState.movingSource.ty][uiState.movingSource.tx];
-          const srcUnit = srcCell && (srcCell.mounted || srcCell);
-          const srcDef = srcUnit ? ZS.DATA.ITEMS[srcUnit.id] : null;
           const dest = st.structGrid[ty][tx];
           if (srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall') {
             if ((dest.level || 1) >= 2 && !dest.mounted) {
-              tipText = `${ZS.Game.getStructureDisplayName(dest)} 상부에 거치 이동`;
+              const pNote = hoveredTerrain && hoveredTerrain.kind === 'plateau' ? ' (고지대 합산 상한 +1.25)' : '';
+              tipText = `${ZS.Game.getStructureDisplayName(dest)} 상부에 거치 이동${pNote}`;
               tipKind = 'ok';
               tipIcon = 'mount';
               tipIconCls = 'icon-heal';
@@ -400,12 +519,30 @@ window.ZS = window.ZS || {};
           } else {
             tipText = '이미 다른 시설이 설치된 타일입니다.';
           }
+        } else if (hoveredTerrain && srcDef) {
+          const moveBonus = formatTerrainBuildBonus(srcDef, hoveredTerrain, false);
+          if (moveBonus) {
+            tipText = moveBonus;
+            tipKind = 'ok';
+            tipIcon = hoveredTerrain.kind === 'wind' ? 'hud-wind' : 'nav-recon';
+            tipIconCls = 'icon-heal';
+          }
+        }
+      } else if (uiState.mode === 'inspect' && hoveredTerrain && !(st.structGrid[ty] && st.structGrid[ty][tx])) {
+        if (hoveredTerrain.kind !== 'wind' || st.showWindOverlay) {
+          const meta = getTerrainUiMeta(hoveredTerrain);
+          if (meta) {
+            tipText = meta.tipText;
+            tipKind = 'info';
+            tipIcon = meta.tipIcon;
+            tipIconCls = meta.tipIconCls;
+          }
         }
       }
 
       if (!tipText) {
         if (lastTipVisible) {
-          tipEl.classList.remove('ok');
+          tipEl.classList.remove('ok', 'info');
           tipEl.classList.add('hidden');
           lastTipVisible = false;
         }
@@ -414,6 +551,7 @@ window.ZS = window.ZS || {};
 
       tipEl.innerHTML = `${ozIcon(tipIcon, 14, tipIconCls)}<span>${escapeHtml(tipText)}</span>`;
       tipEl.classList.toggle('ok', tipKind === 'ok');
+      tipEl.classList.toggle('info', tipKind === 'info');
       tipEl.classList.remove('hidden');
       lastTipVisible = true;
       cachedTipW = tipEl.offsetWidth || 240;
@@ -679,9 +817,16 @@ window.ZS = window.ZS || {};
     const obj = st.structGrid[ty][tx];
     const fid = st.floorGrid[ty][tx];
     const fDef = fid ? ZS.DATA.ITEMS[fid] : null;
+    const tCell = ZS.Game.getTerrainAt ? ZS.Game.getTerrainAt(tx, ty) : (st.terrainGrid && st.terrainGrid[ty] && st.terrainGrid[ty][tx]);
+    const tMeta = getTerrainUiMeta(tCell);
 
     if (!obj) {
-      if (fDef) {
+      if (tMeta && (tCell.kind !== 'wind' || st.showWindOverlay)) {
+        const floorSuffix = fDef ? ` (바닥: ${escapeHtml(fDef.name)})` : '';
+        const iconId = tCell.kind === 'wind' ? 'hud-wind' : 'nav-recon';
+        const iconCls = tCell.kind === 'wind' ? 'icon-heal' : 'icon-coin';
+        setDetailHtml(`${ozIcon(iconId, 14, iconCls)} <b>[${escapeHtml(tMeta.title)}]</b> ${escapeHtml(tMeta.badge)} — ${escapeHtml(tMeta.desc)}${floorSuffix}`);
+      } else if (fDef) {
         setDetailHtml(`${ozIcon('cat-decor', 14, 'icon-coin')} <b>[${escapeHtml(fDef.name)}]</b> 시공됨 — ${escapeHtml(fDef.desc)}`);
       } else {
         setDetailHtml(`빈 전술 구역 (${tx}, ${ty}) — 하단 도크에서 방벽, 발전기, 숙소 또는 모던 가구를 선택해 배치하세요.`);
@@ -691,6 +836,8 @@ window.ZS = window.ZS || {};
 
     if (obj.id === 'command_hq') {
       const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
+      const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
+      const basePopCap = hqInfo.basePopCap + ((divDef && divDef.basePopCapBonus) || 0);
       const wpnText = hqInfo.weapon
         ? `무장: ${hqInfo.weapon.name}(피해 ${hqInfo.weapon.damage}, 사거리 ${hqInfo.weapon.range})`
         : '무장: 없음(Lv.2 개방)';
@@ -698,7 +845,8 @@ window.ZS = window.ZS || {};
       let actionHtml = '';
       if (st.hqLevel < 4) {
         const nextInfo = ZS.Game.getHqLevelInfo(st.hqLevel + 1);
-        const costHtml = formatInlineCostHtml(nextInfo.cost || {}, 14);
+        const hqCost = upCheck.cost || (ZS.Game.getEffectiveHqUpgradeCost ? ZS.Game.getEffectiveHqUpgradeCost(st.hqLevel + 1) : nextInfo.cost) || {};
+        const costHtml = formatInlineCostHtml(hqCost, 14);
         const disabledAttr = upCheck.ok ? '' : 'disabled';
         actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? `${nextInfo.name} 증축` : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
       } else {
@@ -711,7 +859,7 @@ window.ZS = window.ZS || {};
       const buffTxt = nightBuffs.length > 0 ? ` · 야간보급[${nightBuffs.join(', ')}]` : '';
 
       setDetailHtml(
-        `${ozIcon('hud-hq', 14)} <b>[${escapeHtml(hqInfo.name)} · Lv.${st.hqLevel}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 숙소 ${hqInfo.basePopCap}명 · ${escapeHtml(wpnText)}${escapeHtml(buffTxt)}`,
+        `${ozIcon('hud-hq', 14)} <b>[${escapeHtml(hqInfo.name)} · Lv.${st.hqLevel}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 숙소 ${basePopCap}명 · ${escapeHtml(wpnText)}${escapeHtml(buffTxt)}`,
         actionHtml
       );
 
@@ -765,11 +913,16 @@ window.ZS = window.ZS || {};
         mRankHtml = buildRankWidgetHtml(m, mEff);
         const mPopTxt = mDef.subType === 'manned' ? ` · 요원 ${(mEff.prof && mEff.prof.popUse) || mDef.popUse}명` : '';
         const mAuraTxt = formatAuraStacksText(mEff.auraStacks);
-        mSubStats = `화력 ${mEff.damage.toFixed(1)} · 연사 ${mEff.fireRate.toFixed(2)}/s · 사거리 ${mEff.range.toFixed(1)} (+0.5 고지대) · 치명 ${Math.round(mEff.critChance * 100)}%${mPopTxt}${mAuraTxt}`;
+        const elevVal = mEff.elevRangeBonus != null ? mEff.elevRangeBonus : 0.5;
+        const elevLabel = mEff.onPlateau ? '성벽+고지대 상한' : '고지대';
+        const platCrit = mEff.onPlateau ? ' (고지대 +8%p)' : '';
+        mSubStats = `화력 ${mEff.damage.toFixed(1)} · 연사 ${mEff.fireRate.toFixed(2)}/s · 사거리 ${mEff.range.toFixed(1)} (+${elevVal.toFixed(2).replace(/\.?0+$/, '')} ${elevLabel}) · 치명 ${Math.round(mEff.critChance * 100)}%${platCrit}${mPopTxt}${mAuraTxt}`;
       } else if (mDef && mDef.id === 'led_floodlight') {
         const lr = mEff.lightRadius != null ? mEff.lightRadius : mDef.lightRadius;
-        const ar = (mDef.aura && mDef.aura.radius ? mDef.aura.radius : 2.4) + 0.4;
-        mSubStats = `조명 반경 ${lr.toFixed(1)} (+0.6) · 사기 오라 ${ar.toFixed(1)} (+0.4) · 안락함 +${mDef.cozy || 0}`;
+        const ar = mEff.auraRadius != null ? mEff.auraRadius : ((mDef.aura && mDef.aura.radius ? mDef.aura.radius : 2.4) + 0.4);
+        const lBonus = Math.max(0, lr - (mDef.lightRadius || 0));
+        const aBonus = Math.max(0, ar - ((mDef.aura && mDef.aura.radius) || 2.4));
+        mSubStats = `조명 반경 ${lr.toFixed(1)} (+${lBonus.toFixed(1)}) · 사기 오라 ${ar.toFixed(1)} (+${aBonus.toFixed(1)}) · 안락함 +${mDef.cozy || 0}`;
       } else {
         mSubStats = mDef ? escapeHtml(mDef.desc) : '';
       }
@@ -780,7 +933,7 @@ window.ZS = window.ZS || {};
         if (mLv >= 3) {
           topUpHtml = `<span class="cost-chip free">◆◆◆ Lv.3 MAX</span>`;
         } else {
-          const topCost = ZS.Game.getUpgradeCost(mDef, mLv) || {};
+          const topCost = (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(mDef, mLv) : ZS.Game.getUpgradeCost(mDef, mLv)) || {};
           const topCostHtml = formatInlineCostHtml(topCost, 13);
           const upCls = mLv + 1 === 3 && !topCheck.hqCapped ? 'icon-max' : '';
           const inner = topCheck.hqCapped
@@ -796,7 +949,7 @@ window.ZS = window.ZS || {};
       if (lv >= wallMaxLv) {
         wallUpHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
       } else if (wallCheck) {
-        const wCost = wallCheck.cost || ZS.Game.getUpgradeCost(def, lv) || {};
+        const wCost = wallCheck.cost || (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(def, lv) : ZS.Game.getUpgradeCost(def, lv)) || {};
         const wCostHtml = formatInlineCostHtml(wCost, 13);
         const nextWallProf = ZS.Game.getStructLevelProfile(def, lv + 1);
         const wInner = wallCheck.hqCapped
@@ -805,7 +958,9 @@ window.ZS = window.ZS || {};
         wallUpHtml = `<button id="btn-comp-up-wall" class="detail-upgrade-btn" ${wallCheck.ok ? '' : 'disabled'} title="${escapeHtml(wallCheck.ok ? '단축키 G로 상부 유지 성벽 승강' : wallCheck.reason)}">${wInner}</button>`;
       }
 
-      const wallStatSummary = `반사 ${Math.round((wallProf.thornsRatio || 0) * 100)}% (최소 ${wallProf.thornsMin || 0})`;
+      const wallDiv = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
+      const wallThornsMult = (wallDiv && wallDiv.thornsMult) || 1.0;
+      const wallStatSummary = `반사 ${Math.round((wallProf.thornsRatio || 0) * wallThornsMult * 100)}% (최소 ${Math.round((wallProf.thornsMin || 0) * wallThornsMult)})`;
       const compHtml = `
         <div class="comp-list">
           <div class="comp-row top">
@@ -884,7 +1039,7 @@ window.ZS = window.ZS || {};
           actionHtml = `<span class="cost-chip free" title="${escapeHtml(perk || '')}">◆◆◆ Lv.3 MAX</span>`;
         }
       } else {
-        const cost = ZS.Game.getUpgradeCost(def, lv) || {};
+        const cost = (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(def, lv) : ZS.Game.getUpgradeCost(def, lv)) || {};
         const costHtml = formatInlineCostHtml(cost, 14);
         const upIconCls = lv + 1 === maxLv && !upCheck.hqCapped ? 'icon-max' : '';
         const nextProfBtn = ZS.Game.getStructLevelProfile(def, lv + 1);
@@ -909,33 +1064,43 @@ window.ZS = window.ZS || {};
         ? `${ozIcon('res-power', 13, 'icon-power')}대기 -${eff.powerIdle}/s, 사격 -${eff.powerShot}`
         : `${ozIcon('res-agent', 13)}요원 ${curPopUse}명`;
       const auraInfo = formatAuraStacksText(eff.auraStacks);
+      const tBonusHint = eff.onPlateau ? ' · ★고지대(사거리+1.0, 치명+8%p)' : '';
+      const rangeLabel = eff.minRange > 0 ? `${eff.minRange.toFixed(1)}~${eff.range.toFixed(1)}` : eff.range.toFixed(1);
+      const splashTxt = eff.splashRadius > 0 ? ` · 폭발 ${eff.splashRadius.toFixed(2)}` : '';
+      const dmgLabel = (eff.salvoCount || 1) > 1 ? `${eff.damage.toFixed(1)}×${eff.salvoCount}발` : eff.damage.toFixed(1);
       let nextPreview = '';
       if (lv < 3) {
         const nextEff = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
         const nextPopHint = def.subType === 'manned' && lv + 1 === 3 ? ' · 요원 2명' : '';
+        const nextDmgLabel = (nextEff.salvoCount || 1) > 1 ? `${nextEff.damage.toFixed(1)}×${nextEff.salvoCount}발` : nextEff.damage.toFixed(1);
         const perkHint = lv + 1 === 3 && nextEff.perkLabel ? ` · ★${escapeHtml(nextEff.perkLabel.split(' (')[0])}` : '';
-        nextPreview = ` → [Lv.${lv + 1}: 화력 ${nextEff.damage.toFixed(1)} · 연사 ${nextEff.fireRate.toFixed(2)}/s${nextPopHint}${perkHint}]`;
+        nextPreview = ` → [Lv.${lv + 1}: 화력 ${nextDmgLabel} · 연사 ${nextEff.fireRate.toFixed(2)}/s${nextPopHint}${perkHint}]`;
       } else if (eff.perkLabel) {
         nextPreview = ` · ★${escapeHtml(eff.perkLabel)}`;
       }
       setDetailHtml(
-        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${eff.damage.toFixed(1)} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${eff.range.toFixed(1)} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${auraInfo}${nextPreview}`,
+        `${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)} Lv.${lv}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 화력 ${dmgLabel} · 연사 ${eff.fireRate.toFixed(2)}/s · 사거리 ${rangeLabel}${splashTxt} · 치명 ${Math.round(eff.critChance * 100)}% (${pwrInfo})${auraInfo}${tBonusHint}${nextPreview}`,
         actionHtml
       );
     } else if (ZS.Game.isUpgradeableDef(def)) {
       const prof = ZS.Game.getStructLevelProfile(def, lv);
       const dispName = ZS.Game.getStructureDisplayName(obj);
+      const isPlateau = !!(tCell && tCell.kind === 'plateau');
+      const onWindZone = !!(def.id === 'wind_turbine' && tCell && tCell.kind === 'wind');
+      const windPct = onWindZone ? ((tCell.tier || 1) >= 2 ? 70 : 40) : 0;
+      const divDef2 = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
+      const thornsMult2 = (divDef2 && divDef2.thornsMult) || 1.0;
       let statSummary = '';
       if (def.subType === 'wall') {
         const parts = [];
         if (prof.thornsRatio > 0) {
-          parts.push(`피해 반사 ${Math.round(prof.thornsRatio * 100)}% (최소 ${prof.thornsMin || 0})`);
+          parts.push(`피해 반사 ${Math.round(prof.thornsRatio * thornsMult2 * 100)}% (최소 ${Math.round((prof.thornsMin || 0) * thornsMult2)})`);
         }
         if (def.id === 'barricade_wall') {
           if (lv === 1) {
             parts.push('초소·포탑·조명 거치 불가 — [U] 헤스코 전술 방벽 업그레이드 시 상부 거치 해금');
           } else {
-            parts.push('상부 거치 가능 (사거리 +0.5)');
+            parts.push(isPlateau ? '상부 거치 가능 (고지대 합산 상한 +1.25)' : '상부 거치 가능 (사거리 +0.5)');
           }
         }
         if (prof.perkLabel) parts.push(`★${escapeHtml(prof.perkLabel)}`);
@@ -943,21 +1108,31 @@ window.ZS = window.ZS || {};
       } else if (def.subType === 'gate') {
         const slowPct = Math.round((1 - (prof.gateSlowFactor || 0.75)) * 100);
         const slowRad = prof.gateSlowRadius || 1.15;
-        statSummary = `전술 관문 · 주변 둔화 ${slowPct}% (반경 ${slowRad}칸)${prof.thornsRatio > 0 ? ` · 반사 ${Math.round(prof.thornsRatio * 100)}% (최소 ${prof.thornsMin || 4})` : ''}`;
+        statSummary = `전술 관문 · 주변 둔화 ${slowPct}% (반경 ${slowRad}칸)${prof.thornsRatio > 0 ? ` · 반사 ${Math.round(prof.thornsRatio * thornsMult2 * 100)}% (최소 ${Math.round((prof.thornsMin || 4) * thornsMult2)})` : ''}`;
       } else if (def.id === 'razor_pad') {
         const vulnTxt = prof.vulnMult > 1 ? ` · 받는피해 +${Math.round((prof.vulnMult - 1) * 100)}%` : '';
-        statSummary = `지속피해 ${prof.trapDps}/s · 마모 ${prof.trapWear}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${vulnTxt}`;
+        const rampTxt = tCell && tCell.kind === 'ramp' ? ' · ★경사로 배치(감속 중첩)' : '';
+        statSummary = `지속피해 ${prof.trapDps}/s · 마모 ${prof.trapWear}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${vulnTxt}${rampTxt}`;
       } else if (def.id === 'repair_bay') {
-        const lightTxt = prof.lightRadius > 0 ? ` · 야간 조명 ${prof.lightRadius}칸` : '';
-        statSummary = `${ozIcon('act-repair', 13, 'icon-heal')}수리 반경 ${prof.auraRadius}칸 · 회복 +${prof.regenPerSec} HP/s · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}${lightTxt}`;
+        const bayEff = ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(obj, tx, ty) : null;
+        const auraR = bayEff && bayEff.auraRadius ? bayEff.auraRadius : prof.auraRadius;
+        const lightR = bayEff && bayEff.lightRadius != null ? bayEff.lightRadius : prof.lightRadius;
+        const lightTxt = lightR > 0 ? ` · 야간 조명 ${lightR.toFixed(1)}칸` : '';
+        const platTxt = isPlateau ? ' · ★고지대(오라+0.5/조명+1.0)' : '';
+        statSummary = `${ozIcon('act-repair', 13, 'icon-heal')}수리 반경 ${auraR.toFixed(1)}칸 · 회복 +${prof.regenPerSec} HP/s · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}${lightTxt}${platTxt}`;
       } else if (def.subType === 'power') {
-        const nightTxt = prof.nightGen > 0 ? ` · 야간 +${prof.nightGen.toFixed(2)}/s` : '';
-        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${prof.dayCharge}${nightTxt} · 저장 용량 +${prof.powerCap}`;
+        const pwrEff = ZS.Game.getTerrainPowerStats ? ZS.Game.getTerrainPowerStats(def.id, prof, tx, ty) : prof;
+        const nightTxt = pwrEff.nightGen > 0 ? ` · 야간 +${pwrEff.nightGen.toFixed(2)}/s` : '';
+        const windTxt = onWindZone ? ` · ★강풍지대 +${windPct}%` : '';
+        statSummary = `${ozIcon('res-power', 13, 'icon-power')}주간 충전 +${pwrEff.dayCharge}${nightTxt} · 저장 용량 +${pwrEff.powerCap}${windTxt}`;
       } else if (def.subType === 'housing') {
         statSummary = `${ozIcon('res-agent', 13)}요원 수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }
       if (lv < maxLv) {
         const nextProf = ZS.Game.getStructLevelProfile(def, lv + 1);
+        const nextPwrEff = def.subType === 'power' && ZS.Game.getTerrainPowerStats
+          ? ZS.Game.getTerrainPowerStats(def.id, nextProf, tx, ty)
+          : nextProf;
         const nextDispName = ZS.Game.getStructureDisplayName({ id: def.id, level: lv + 1 });
         const fid2 = st.floorGrid[ty] && st.floorGrid[ty][tx];
         const fDef2 = fid2 ? ZS.DATA.ITEMS[fid2] : null;
@@ -973,8 +1148,8 @@ window.ZS = window.ZS || {};
             ? ` · 피해 ${nextProf.trapDps}/s`
             : def.id === 'repair_bay'
             ? ` · 회복 +${nextProf.regenPerSec}/s`
-            : def.subType === 'power' && nextProf.nightGen > 0
-            ? ` · 밤 +${nextProf.nightGen.toFixed(2)}/s`
+            : def.subType === 'power' && nextPwrEff.nightGen > 0
+            ? ` · 밤 +${nextPwrEff.nightGen.toFixed(2)}/s`
             : def.subType === 'housing'
             ? ` · 수용 +${nextProf.popCap}명`
             : !isTierEvo && lv + 1 === 3 && nextProf.perkLabel
@@ -986,7 +1161,18 @@ window.ZS = window.ZS || {};
       setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${titleText}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | ${statSummary}`, actionHtml);
     } else {
       const dispName = ZS.Game.getStructureDisplayName(obj);
-      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(dispName)}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${escapeHtml(def.desc)}`);
+      const eff = ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(obj, tx, ty) : null;
+      let tExtra = '';
+      if (def.id === 'led_floodlight' && eff) {
+        const arcNote = ZS.Game.isArcOverdriveActive && ZS.Game.isArcOverdriveActive() ? ' · ARC +25%' : '';
+        tExtra = ` · 조명 ${eff.lightRadius.toFixed(1)}칸 · 오라 ${eff.auraRadius.toFixed(1)}칸${arcNote}`;
+      } else if (tCell && tCell.kind === 'plateau' && eff && (eff.lightRadius > 0 || eff.auraRadius > 0)) {
+        const parts = [];
+        if (eff.lightRadius > 0) parts.push(`조명 ${eff.lightRadius.toFixed(1)}`);
+        if (eff.auraRadius > 0) parts.push(`오라 ${eff.auraRadius.toFixed(1)}`);
+        tExtra = ` · ★고지대(${parts.join(', ')})`;
+      }
+      setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(dispName)}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} — ${escapeHtml(def.desc)}${tExtra}`);
     }
 
     const upStructBtn = document.getElementById('btn-upgrade-struct');
