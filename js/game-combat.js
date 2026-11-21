@@ -67,26 +67,26 @@ window.ZS = window.ZS || {};
   function computeWaveHpScale(waveNum) {
     const w = Math.max(1, waveNum || 1);
     if (w <= 10) {
-      return 1 + (w - 1) * 0.16;
+      return 1 + (w - 1) * 0.22;
     }
     if (w <= 20) {
       const d = w - 10;
-      return 2.44 + d * 0.24 + d * d * 0.008;
+      return 2.98 + d * 0.30 + d * d * 0.012;
     }
     const d = w - 20;
-    return 5.64 + d * 0.38 + d * d * 0.015;
+    return 7.18 + d * 0.48 + d * d * 0.020;
   }
 
   function computeBossHpScale(waveNum) {
     const tier = Math.max(1, Math.floor((waveNum || 5) / 5));
     const quad = Math.max(0, tier - 2);
-    return 1 + (tier - 1) * 0.65 + quad * quad * 0.28;
+    return 1 + (tier - 1) * 0.80 + quad * quad * 0.35;
   }
 
   function buildWaveQueue(waveNum, sideWeights, bossSide) {
     const q = [];
     const hpScale = computeWaveHpScale(waveNum);
-    const countBase = Math.round(9 + waveNum * 3.8 + Math.max(0, waveNum - 12) * 1.4);
+    const countBase = Math.round(11 + waveNum * 4.8 + Math.max(0, waveNum - 8) * 1.8);
     const sidePool = allocateSidesByWeights(countBase, sideWeights);
 
     const wSpitter = waveNum >= 4 ? Math.min(0.14, 0.05 + (waveNum - 4) * 0.012) : 0;
@@ -221,7 +221,7 @@ window.ZS = window.ZS || {};
       hp: maxHp,
       maxHp,
       speed: def.speed,
-      damage: Math.round(def.damage * (1 + (state.wave - 1) * 0.06)),
+      damage: Math.round(def.damage * (1 + (state.wave - 1) * 0.09)),
       attackRate: def.attackRate,
       atkCooldown: 0,
       slowTimer: 0,
@@ -456,7 +456,18 @@ window.ZS = window.ZS || {};
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
           spawnZombie(state.spawnQueue.shift());
-          const baseInterval = Math.max(0.26, 0.92 - state.wave * 0.045);
+          if (state.wave >= 4 && state.spawnQueue.length > 0) {
+            const swarmChance = Math.min(0.45, 0.20 + (state.wave - 4) * 0.025);
+            if (Math.random() < swarmChance) {
+              const extraCount = Math.random() < 0.5 ? 1 : 2;
+              for (let s = 0; s < extraCount; s += 1) {
+                const extraIdx = state.spawnQueue.findIndex((entry) => entry && entry.type !== 'boss');
+                if (extraIdx === -1) break;
+                spawnZombie(state.spawnQueue.splice(extraIdx, 1)[0]);
+              }
+            }
+          }
+          const baseInterval = Math.max(0.20, 0.82 - state.wave * 0.048);
           state.spawnTimer = baseInterval * (0.7 + Math.random() * 0.55);
         }
       }

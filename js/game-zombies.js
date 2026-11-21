@@ -18,8 +18,8 @@ window.ZS = window.ZS || {};
 
   function scaleWaveDrop(rawAmount, waveNum, isBoss) {
     const w = waveNum || 1;
-    if (w < 15 || rawAmount <= 0) return rawAmount;
-    const baseScale = Math.max(0.35, 1 / (1 + (w - 14) * 0.075));
+    if (w < 10 || rawAmount <= 0) return rawAmount;
+    const baseScale = Math.max(0.35, 1 / (1 + (w - 9) * 0.08));
     const scale = isBoss ? Math.max(0.70, baseScale) : baseScale;
     const exact = rawAmount * scale;
     const whole = Math.floor(exact);
@@ -778,9 +778,9 @@ window.ZS = window.ZS || {};
     if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     // 1. Wave clearance rewards + Cozy dividend bonus
-    const woodReward = 38 + clearedWave * 12;
-    const scrapReward = 24 + clearedWave * 7;
-    const baseCoin = 24 + clearedWave * 6;
+    const woodReward = 26 + clearedWave * 9;
+    const scrapReward = 16 + clearedWave * 5;
+    const baseCoin = 16 + clearedWave * 4;
     const bonusCoin = Math.round(baseCoin * state.cozyTier.coinBonus);
     const totalCoin = baseCoin + bonusCoin;
 
@@ -814,11 +814,11 @@ window.ZS = window.ZS || {};
     state.power = Math.min(maxTarget, state.power + state.dayCharge);
     const gainedPower = Math.round(state.power - beforePower);
 
-    // 4. Morning Survivor Arrival (every day below 12 agents, every 2 waves at 12+ agents)
+    // 4. Morning Survivor Arrival (every day below 6 agents, every 2 waves at 6+ agents)
     let arrivedAgent = 0;
     let recruitNote = '';
     if (state.agents < state.popCap) {
-      if (state.agents < 12) {
+      if (state.agents < 6) {
         state.agents += 1;
         arrivedAgent = 1;
         state.agentRecruitProgress = 0;

@@ -253,14 +253,14 @@ window.ZS = window.ZS || {};
       if (lv === 1) {
         salvoCount = 2;
         salvoScatter = 0.25;
-        powerShot = 2.0;
+        powerShot = 2.4;
         splashRadius = 1.20;
       } else if (lv === 2) {
         dmgScale = 26 / 24;
         rateScale = 1.0;
         hpScale = 1.25;
         powerIdle = +(powerIdle * 1.15).toFixed(2);
-        powerShot = 2.6;
+        powerShot = 3.1;
         salvoCount = 3;
         salvoScatter = 0.50;
         splashRadius = 1.20;
@@ -269,7 +269,7 @@ window.ZS = window.ZS || {};
         rateScale = 1.0;
         hpScale = 1.55;
         powerIdle = +(powerIdle * 1.30).toFixed(2);
-        powerShot = 3.4;
+        powerShot = 4.0;
         salvoCount = 6;
         salvoScatter = 0.80;
         splashRadius = 1.20;
@@ -286,7 +286,7 @@ window.ZS = window.ZS || {};
         hpScale = 1.55;
         powerIdle = +(powerIdle * 1.30).toFixed(2);
         if (def.id === 'vulcan_turret') {
-          powerShot = 0.24;
+          powerShot = 0.28;
           critAdd = 0.12;
         } else if (def.id === 'emp_coil') {
           chainCount = 5;
@@ -306,12 +306,12 @@ window.ZS = window.ZS || {};
     } else if (def.id === 'battery_bank') {
       if (lv === 2) {
         hpScale = 1.25;
-        powerCap = 145;
-        dayCharge = 18;
+        powerCap = 135;
+        dayCharge = 10;
       } else if (lv === 3) {
         hpScale = 1.55;
-        powerCap = 205;
-        dayCharge = 28;
+        powerCap = 250;
+        dayCharge = 18;
       }
     } else if (def.id === 'field_tent') {
       if (lv === 2) {
