@@ -231,7 +231,7 @@ window.ZS = window.ZS || {};
   function syncUndergroundToggleButton(st) {
     const btn = document.getElementById('btn-toggle-underground');
     if (!btn || !st) return;
-    const unlocked = !!st.undergroundUnlocked;
+    const unlocked = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
     const isDay = st.phase === 'day';
     const isUg = st.activeLayer === 'underground';
     btn.disabled = !unlocked || !isDay;
@@ -249,7 +249,9 @@ window.ZS = window.ZS || {};
       apChip.textContent = unlocked ? `${Math.floor(st.digAp || 0)} AP` : 'Lv.2';
     }
     btn.title = !unlocked
-      ? '지하 쉘터 B1: 지휘 본부 Lv.2(Wave 20+) 증축 시 개방'
+      ? (st.wave || 1) >= 20
+        ? '지하 쉘터 B1: 먼저 중앙 지휘 본부를 Lv.2로 증축하세요!'
+        : '지하 쉘터 B1: WAVE 20 도달 후 지휘 본부 Lv.2 증축 시 개방'
       : !isDay
       ? '야간 방어 중에는 지하로 이동할 수 없습니다 (주간 전용)'
       : isUg
@@ -779,7 +781,7 @@ window.ZS = window.ZS || {};
       <div class="debug-body">
         <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">${ozIcon('res-coin', 13, 'icon-coin')}<span>+500 자원</span></button>
         <button id="btn-dbg-rp" class="debug-btn" title="연구포인트(RP) 즉시 +20">${ozIcon('res-rp', 13, 'icon-rp')}<span>+20 RP</span></button>
-        <button id="btn-dbg-digap" class="debug-btn" title="지하 B1 개방 및 굴착력 +20 AP 지급">${ozIcon('b1-dig', 13, 'icon-ap')}<span>+20 굴착 AP</span></button>
+        <button id="btn-dbg-digap" class="debug-btn" title="굴착력 +20 AP 지급 (본부 Lv.2 증축 후 사용)">${ozIcon('b1-dig', 13, 'icon-ap')}<span>+20 굴착 AP</span></button>
         <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">${ozIcon('res-power', 13, 'icon-power')}<span>전력 완충/방전</span></button>
         <button id="btn-dbg-pop" class="debug-btn" title="가용 요원 및 임시 숙소 수용량 +2">${ozIcon('res-agent', 13)}<span>요원 +2</span></button>
         <button id="btn-dbg-wave1" class="debug-btn" title="주간 정비 상태에서 웨이브 +1">${ozIcon('act-speed', 13)}<span>웨이브 +1</span></button>

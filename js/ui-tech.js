@@ -76,6 +76,7 @@ window.ZS = window.ZS || {};
     const combatAtFloor = (jobs.combat || 0) <= popUsed;
     const isGameOver = st.phase === 'gameover';
 
+    const b1Open = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
     const roleCards = [
       {
         role: 'combat',
@@ -112,10 +113,10 @@ window.ZS = window.ZS || {};
         count: jobs.prod || 0,
         canMinus: !isGameOver && (jobs.prod || 0) > 0,
         canPlus: !isGameOver && canAdjustRoleUp(st, 'prod'),
-        floorCue: st.undergroundUnlocked
+        floorCue: b1Open
           ? `<span class="job-floor-cue ap-cue"><span>보유 굴착력 ${st.digAp || 0}/${st.digApCap || digCapPreview} AP</span></span>`
           : `<span class="job-floor-cue"><span>본부 Lv.2 증축 시 지하 굴착력(AP) 개방</span></span>`,
-        previewHtml: `새벽 생산 <b class="txt-wood">+${prodWoodPreview} 목재</b> · <b class="txt-scrap">+${prodScrapPreview} 고철</b>${prodCoinPreview > 0 ? ` · <b class="txt-coin">+${prodCoinPreview} 코인</b>` : ''}${st.undergroundUnlocked ? ` · <b class="txt-ap">+${digGainPreview} AP</b> (상한 ${digCapPreview})` : ''}`
+        previewHtml: `새벽 생산 <b class="txt-wood">+${prodWoodPreview} 목재</b> · <b class="txt-scrap">+${prodScrapPreview} 고철</b>${prodCoinPreview > 0 ? ` · <b class="txt-coin">+${prodCoinPreview} 코인</b>` : ''}${b1Open ? ` · <b class="txt-ap">+${digGainPreview} AP</b> (상한 ${digCapPreview})` : ''}`
       }
     ];
 
@@ -211,7 +212,9 @@ window.ZS = window.ZS || {};
             const lvTag = maxLv > 1 && !isMax ? `<span class="tech-lv-chip">Lv.${curLv}/${maxLv}</span>` : '';
 
             let reqHtml = '';
-            if (Array.isArray(t.req) && t.req.length > 0 && check.missingReq) {
+            if (check.lockedByHq) {
+              reqHtml = `<div class="tech-req-line">조건: 지휘 본부 Lv.${check.reqHqLevel || 2} 증축 필요</div>`;
+            } else if (Array.isArray(t.req) && t.req.length > 0 && check.missingReq) {
               const reqNames = t.req.map((rid) => (tree[rid] ? tree[rid].name : rid));
               reqHtml = `<div class="tech-req-line">선행: ${escapeHtml(reqNames.join(' + '))}</div>`;
             }
