@@ -73,26 +73,38 @@ window.ZS = window.ZS || {};
       const d = w - 10;
       return 2.98 + d * 0.30 + d * d * 0.012;
     }
-    const d = w - 20;
-    return 7.18 + d * 0.48 + d * d * 0.020;
+    if (w <= 40) {
+      const d = w - 20;
+      return 7.18 + d * 0.48 + d * d * 0.020;
+    }
+    const d4 = w - 40;
+    return 24.78 + d4 * 0.85 + Math.pow(d4, 1.3) * 0.12;
   }
 
   function computeBossHpScale(waveNum) {
     const tier = Math.max(1, Math.floor((waveNum || 5) / 5));
-    const quad = Math.max(0, tier - 2);
-    return 1 + (tier - 1) * 0.80 + quad * quad * 0.35;
+    if (tier <= 5) {
+      const quad = Math.max(0, tier - 2);
+      return 1 + (tier - 1) * 0.80 + quad * quad * 0.35;
+    }
+    const dt = tier - 5;
+    return 7.35 + dt * 2.80 + Math.pow(dt, 1.35) * 0.65;
   }
 
   function buildWaveQueue(waveNum, sideWeights, bossSide) {
     const q = [];
     const hpScale = computeWaveHpScale(waveNum);
-    const countBase = Math.round(11 + waveNum * 4.8 + Math.max(0, waveNum - 8) * 1.8);
+    const rawCount = 11 + waveNum * 4.8 + Math.max(0, waveNum - 8) * 1.8;
+    const countBase = Math.min(
+      185,
+      Math.round(rawCount <= 165 ? rawCount : 165 + 20 * (1 - Math.exp(-(rawCount - 165) / 85)))
+    );
     const sidePool = allocateSidesByWeights(countBase, sideWeights);
 
-    const wSpitter = waveNum >= 4 ? Math.min(0.14, 0.05 + (waveNum - 4) * 0.012) : 0;
-    const wLeaper = waveNum >= 6 ? Math.min(0.15, 0.06 + (waveNum - 6) * 0.012) : 0;
-    const wShocker = waveNum >= 8 ? Math.min(0.12, 0.05 + (waveNum - 8) * 0.010) : 0;
-    const wBrute = waveNum >= 3 ? Math.min(0.22, (waveNum - 2) * 0.035) : 0;
+    const wSpitter = waveNum >= 4 ? Math.min(0.16, 0.05 + (waveNum - 4) * 0.012) : 0;
+    const wLeaper = waveNum >= 6 ? Math.min(0.16, 0.06 + (waveNum - 6) * 0.012) : 0;
+    const wShocker = waveNum >= 8 ? Math.min(0.15, 0.05 + (waveNum - 8) * 0.010) : 0;
+    const wBrute = waveNum >= 3 ? Math.min(0.24, (waveNum - 2) * 0.035) : 0;
     const wRunner = waveNum >= 2 ? Math.min(0.25, 0.16 + waveNum * 0.012) : 0;
 
     for (let i = 0; i < countBase; i++) {
@@ -213,6 +225,7 @@ window.ZS = window.ZS || {};
     const maxHp = Math.round(def.hp * entry.hpScale);
     const hqCx = DATA.HQ_POS.x + 0.5;
     const hqCy = DATA.HQ_POS.y + 0.5;
+    const dmgWaveScale = 1 + Math.min(state.wave - 1, 29) * 0.09 + Math.max(0, state.wave - 30) * 0.045;
     state.zombies.push({
       uid: G.nextZombieUid++,
       type: entry.type,
@@ -221,7 +234,7 @@ window.ZS = window.ZS || {};
       hp: maxHp,
       maxHp,
       speed: def.speed,
-      damage: Math.round(def.damage * (1 + (state.wave - 1) * 0.09)),
+      damage: Math.round(def.damage * dmgWaveScale),
       attackRate: def.attackRate,
       atkCooldown: 0,
       slowTimer: 0,
@@ -553,7 +566,7 @@ window.ZS = window.ZS || {};
   }
 
   function updateDefenders(dt) {
-    // 1. HQ Roof Auto-Turret (Lv.2~4, unpowered emergency defense)
+    // 1. HQ Roof Auto-Turret (Lv.2~5, unpowered emergency defense; boosted by spare combat agents)
     const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
     if (hq && hq.id === 'command_hq' && hqInfo.weapon) {
@@ -562,7 +575,9 @@ window.ZS = window.ZS || {};
         const wpn = hqInfo.weapon;
         const hcx = DATA.HQ_POS.x + 0.5;
         const hcy = DATA.HQ_POS.y + 0.5;
-        const fireRate = wpn.fireRate * (1.0 + (state.cozyTier ? state.cozyTier.fireRate : 0));
+        const spareCombat = Math.max(0, ((state.jobs && state.jobs.combat) || 0) - (state.popUsed || 0));
+        const spareRateBonus = Math.min(0.25, spareCombat * 0.05);
+        const fireRate = wpn.fireRate * (1.0 + (state.cozyTier ? state.cozyTier.fireRate : 0) + spareRateBonus);
         let bestIdx = -1;
         let bestDist = 1e9;
         for (let i = 0; i < state.zombies.length; i++) {
@@ -581,20 +596,21 @@ window.ZS = window.ZS || {};
           const hqLvNow = state.hqLevel || 2;
           const hqMountX = hqLvNow >= 4 ? DATA.HQ_POS.x + 0.50 : DATA.HQ_POS.x + 0.62;
           const hqMountY = hqLvNow >= 4 ? DATA.HQ_POS.y + 0.50 : DATA.HQ_POS.y + 0.62;
-          const hqLenTiles = hqLvNow >= 4 ? 0.48 : hqLvNow === 3 ? 0.38 : 0.32;
-          const hqMuzzleZ = hqLvNow >= 4 ? 41 : hqLvNow === 3 ? 34.5 : 25;
+          const hqLenTiles = hqLvNow >= 5 ? 0.56 : hqLvNow === 4 ? 0.48 : hqLvNow === 3 ? 0.38 : 0.32;
+          const hqMuzzleZ = hqLvNow >= 5 ? 45.5 : hqLvNow === 4 ? 41 : hqLvNow === 3 ? 34.5 : 25;
           G.spawnMuzzleFlash(
             hqMountX + Math.cos(hq.aimAngle) * hqLenTiles,
             hqMountY + Math.sin(hq.aimAngle) * hqLenTiles,
             hqMuzzleZ,
             hq.aimAngle,
             wpn.color || '#FFE484',
-            hqLvNow >= 4 ? 1.35 : 1.05
+            hqLvNow >= 5 ? 1.55 : hqLvNow >= 4 ? 1.35 : 1.05
           );
           const spd = wpn.speed || 18;
           const hqDmgMult = state.nightConsumables && state.nightConsumables.overpressureAmmo ? 1.20 : 1.0;
           state.projectiles.push({
             kind: 'bullet',
+            projType: wpn.projType,
             x: hcx,
             y: hcy,
             z: hqInfo.maxZ - 4,
@@ -607,7 +623,8 @@ window.ZS = window.ZS || {};
             color: wpn.color || '#FFE484',
             width: wpn.width || 2.0,
             life: 0.65,
-            isHqShot: true
+            isHqShot: true,
+            isHqOmega: wpn.projType === 'hq_omega'
           });
         }
       }
@@ -1362,8 +1379,11 @@ window.ZS = window.ZS || {};
       if (hitIdx !== -1) {
         if (p.splash > 0) {
           ZS.Audio.playExplosion();
-          G.spawnBurstParticles(p.x, p.y, 12, '#ff8a47', p.isHqShot ? 8 : 12);
-          state.flares.push({ x: p.x, y: p.y, radius: p.isHqShot ? 1.5 : 2.3, life: 0.20 });
+          const splashParticleCol = p.isHqOmega ? (DATA.PALETTE.power || '#5EF2FF') : '#ff8a47';
+          const splashRingCol = p.isHqOmega ? (DATA.PALETTE.power || '#5EF2FF') : '#FF9F43';
+          const splashDmgCol = p.isHqOmega ? (DATA.PALETTE.power || '#5EF2FF') : '#ff9f43';
+          G.spawnBurstParticles(p.x, p.y, 12, splashParticleCol, p.isHqOmega ? 12 : p.isHqShot ? 8 : 12);
+          state.flares.push({ x: p.x, y: p.y, radius: p.isHqOmega ? 2.1 : p.isHqShot ? 1.5 : 2.3, life: 0.20 });
           const ringRad = p.splashFlashRadius || p.splashRingLv3 || 0;
           if (ringRad > 0) {
             state.projectiles.push({
@@ -1371,9 +1391,10 @@ window.ZS = window.ZS || {};
               x: p.x,
               y: p.y,
               radius: ringRad,
-              color: '#FF9F43',
-              life: 0.20,
-              maxLife: 0.20
+              color: splashRingCol,
+              fillColor: p.isHqOmega ? 'rgba(94, 242, 255, 0.24)' : 'rgba(255, 159, 67, 0.22)',
+              life: 0.22,
+              maxLife: 0.22
             });
           }
           for (let k = state.zombies.length - 1; k >= 0; k--) {
@@ -1381,7 +1402,7 @@ window.ZS = window.ZS || {};
             const dist = Math.hypot(zk.x - p.x, zk.y - p.y);
             if (dist <= p.splash) {
               const vuln = isZombieOnLv3RazorPad(zk) ? 1.15 : 1.0;
-              G.damageZombie(k, p.damage * vuln * (1 - dist / (p.splash * 1.5)), '#ff9f43', p.isCrit, p.sourceUid);
+              G.damageZombie(k, p.damage * vuln * (1 - dist / (p.splash * 1.5)), splashDmgCol, p.isCrit, p.sourceUid);
             }
           }
           state.projectiles.splice(i, 1);

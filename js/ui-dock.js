@@ -35,11 +35,21 @@ window.ZS = window.ZS || {};
   function getCardLockState(def, st) {
     const bossLocked = !!(def.unlockedByBoss && !st.bossDefeated);
     const voucherCount = (st.freeVouchers[def.id] || 0) + (def.id === 'field_tent' ? st.freeVouchers.shelter_pod || 0 : 0);
-    const reqHq = def.reqHqLevel || 1;
-    const hqLockedRaw = (st.hqLevel || 1) < reqHq;
-    const voucherBypass = hqLockedRaw && !bossLocked && voucherCount > 0;
-    const isLocked = bossLocked || (hqLockedRaw && !voucherBypass);
-    return { bossLocked, voucherCount, reqHq, hqLockedRaw, voucherBypass, isLocked };
+    const reqTechId = ZS.Game.getItemRequiredTech ? ZS.Game.getItemRequiredTech(def.id) : null;
+    const techDef = reqTechId && ZS.DATA.TECH_TREE ? ZS.DATA.TECH_TREE[reqTechId] : null;
+    const techLv = reqTechId && ZS.Game.getTechLevel ? ZS.Game.getTechLevel(reqTechId) : 1;
+    const techLockedRaw = !!(reqTechId && techLv <= 0);
+    const voucherBypass = techLockedRaw && !bossLocked && voucherCount > 0;
+    const isLocked = bossLocked || (techLockedRaw && !voucherBypass);
+    return {
+      bossLocked,
+      voucherCount,
+      reqTechId,
+      reqTechName: techDef ? techDef.name : reqTechId,
+      techLockedRaw,
+      voucherBypass,
+      isLocked
+    };
   }
 
   function selectBuildCard(def) {
@@ -51,14 +61,13 @@ window.ZS = window.ZS || {};
       if (lock.bossLocked) {
         U.showWaveBanner('특수 기념비 잠김', 'WAVE 5 알파 타이탄 변이체를 격파하면 해금됩니다.', 'warn');
       } else {
-        const reqInfo = ZS.Game.getHqLevelInfo(lock.reqHq);
         U.showWaveBanner(
-          `지휘 본부 Lv.${lock.reqHq} 필요`,
-          `[${def.name}] 시설은 지휘 본부를 Lv.${lock.reqHq}(${reqInfo.name})로 증축하면 건설할 수 있습니다.`,
+          `연구 필요: ${lock.reqTechName || '전술 기술'}`,
+          `[${def.name}] 시설은 [인구·연구 (T)] 창에서 [${lock.reqTechName}] 연구 완료 시 건설할 수 있습니다.`,
           'warn'
         );
+        if (U.openTechPopModal) U.openTechPopModal('tech');
       }
-      inspectTileAt(ZS.DATA.HQ_POS.x, ZS.DATA.HQ_POS.y);
       return;
     }
     setToolMode('build', def.id);
@@ -137,6 +146,10 @@ window.ZS = window.ZS || {};
     const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
     const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
     const floorCappedAll = (st.cozyFloorRaw || 0) >= floorCap;
+    const techSig = Object.keys(st.researchedTechs || {})
+      .sort()
+      .map((k) => `${k}:${st.researchedTechs[k]}`)
+      .join(',');
     const sigParts = [
       st.divisionId || 'mobile_corps',
       st.phase,
@@ -145,7 +158,8 @@ window.ZS = window.ZS || {};
       uiState.selectedItemId || '',
       st.hqLevel || 1,
       st.bossDefeated ? 1 : 0,
-      floorCappedAll ? 1 : 0
+      floorCappedAll ? 1 : 0,
+      techSig
     ];
     for (let i = 0; i < items.length; i++) {
       const def = items[i];
@@ -168,7 +182,7 @@ window.ZS = window.ZS || {};
     container.innerHTML = '';
 
     items.forEach((def, idx) => {
-      const { bossLocked, voucherCount, reqHq, hqLockedRaw, voucherBypass, isLocked } = getCardLockState(def, st);
+      const { bossLocked, voucherCount, reqTechName, techLockedRaw, voucherBypass, isLocked } = getCardLockState(def, st);
 
       const card = document.createElement('div');
       card.className =
@@ -187,8 +201,8 @@ window.ZS = window.ZS || {};
         badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스</span></span>`;
       } else if (voucherBypass) {
         badgeHtml = `<span class="card-voucher-badge">${ozIcon('state-voucher', 12, 'icon-coin')}<span>보급 ${voucherCount}</span></span>`;
-      } else if (hqLockedRaw) {
-        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>Lv.${reqHq}</span></span>`;
+      } else if (techLockedRaw) {
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>연구</span></span>`;
       } else if (floorCapped) {
         badgeHtml = `<span class="card-cap-badge">상한</span>`;
       }
@@ -199,8 +213,8 @@ window.ZS = window.ZS || {};
       } else if (voucherCount > 0) {
         const hasR1 = !!(st.divisionRank1Vouchers && (st.divisionRank1Vouchers[def.id] || 0) > 0);
         costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}${hasR1 ? ' ★' : ''}</span></span>`;
-      } else if (hqLockedRaw) {
-        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
+      } else if (techLockedRaw) {
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>${escapeHtml(reqTechName || '연구 필요')}</span></span>`;
       } else {
         const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
         if (c.wood) {
@@ -415,7 +429,9 @@ window.ZS = window.ZS || {};
     const vKey = uiState.selectedItemId
       ? `${st.freeVouchers[uiState.selectedItemId] || 0},${st.freeVouchers.barricade_wall || 0}`
       : '0';
-    const nextKey = `${st.phase}|${uiState.mode}|${uiState.selectedItemId || ''}|${tx},${ty}|${tKey}|${st.showWindOverlay ? 1 : 0}|${moveSrcKey}|${Math.floor(st.wood)},${Math.floor(st.scrap)},${Math.floor(st.coin)}|${st.popUsed},${st.agents},${st.popCap}|${st.hqLevel}|${st.bossDefeated ? 1 : 0}|${vKey}`;
+    const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
+    const techKey = Object.keys(st.researchedTechs || {}).map((k) => `${k}:${st.researchedTechs[k]}`).join(',');
+    const nextKey = `${st.phase}|${uiState.mode}|${uiState.selectedItemId || ''}|${tx},${ty}|${tKey}|${st.showWindOverlay ? 1 : 0}|${moveSrcKey}|${Math.floor(st.wood)},${Math.floor(st.scrap)},${Math.floor(st.coin)}|${st.popUsed},${st.agents},${st.popCap},${jobs.combat}|${st.hqLevel}|${st.bossDefeated ? 1 : 0}|${vKey}|${techKey}`;
 
     if (nextKey !== lastTipStateKey) {
       lastTipStateKey = nextKey;
@@ -836,21 +852,39 @@ window.ZS = window.ZS || {};
 
     if (obj.id === 'command_hq') {
       const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
+      const maxHqLv = (ZS.DATA.HQ_LEVELS && ZS.DATA.HQ_LEVELS.length) || 5;
       const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
       const basePopCap = hqInfo.basePopCap + ((divDef && divDef.basePopCapBonus) || 0);
       const wpnText = hqInfo.weapon
-        ? `무장: ${hqInfo.weapon.name}(피해 ${hqInfo.weapon.damage}, 사거리 ${hqInfo.weapon.range})`
+        ? `무장: ${hqInfo.weapon.name}(피해 ${hqInfo.weapon.damage}, 연사 ${hqInfo.weapon.fireRate}/s, 사거리 ${hqInfo.weapon.range})`
         : '무장: 없음(Lv.2 개방)';
+      const auraParts = [];
+      if (hqInfo.globalAura) {
+        if (hqInfo.globalAura.structHpMult && hqInfo.globalAura.structHpMult > 1) {
+          auraParts.push(`HP +${Math.round((hqInfo.globalAura.structHpMult - 1) * 100)}%`);
+        }
+        if (hqInfo.globalAura.dmgMult && hqInfo.globalAura.dmgMult > 1) {
+          auraParts.push(`화력 +${Math.round((hqInfo.globalAura.dmgMult - 1) * 100)}%`);
+        }
+        if (hqInfo.globalAura.fireRateMult && hqInfo.globalAura.fireRateMult > 1) {
+          auraParts.push(`연사 +${Math.round((hqInfo.globalAura.fireRateMult - 1) * 100)}%`);
+        }
+      }
+      const auraText = auraParts.length > 0 ? ` · 전역 오라[${auraParts.join(' · ')}]` : '';
       const upCheck = ZS.Game.canUpgradeHq();
       let actionHtml = '';
-      if (st.hqLevel < 4) {
+      if (st.hqLevel < maxHqLv) {
         const nextInfo = ZS.Game.getHqLevelInfo(st.hqLevel + 1);
         const hqCost = upCheck.cost || (ZS.Game.getEffectiveHqUpgradeCost ? ZS.Game.getEffectiveHqUpgradeCost(st.hqLevel + 1) : nextInfo.cost) || {};
         const costHtml = formatInlineCostHtml(hqCost, 14);
         const disabledAttr = upCheck.ok ? '' : 'disabled';
-        actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? `${nextInfo.name} 증축` : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
+        if (upCheck.lockedByWave) {
+          actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" disabled title="${escapeHtml(upCheck.reason)}">${ozIcon('state-lock', 14, 'icon-muted')}<span>WAVE ${upCheck.reqWave}+ 필요</span>(${costHtml})</button>`;
+        } else {
+          actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? `${nextInfo.name} 증축` : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
+        }
       } else {
-        actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.4)</span>`;
+        actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`;
       }
 
       const nightBuffs = [];
@@ -859,7 +893,7 @@ window.ZS = window.ZS || {};
       const buffTxt = nightBuffs.length > 0 ? ` · 야간보급[${nightBuffs.join(', ')}]` : '';
 
       setDetailHtml(
-        `${ozIcon('hud-hq', 14)} <b>[${escapeHtml(hqInfo.name)} · Lv.${st.hqLevel}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 숙소 ${basePopCap}명 · ${escapeHtml(wpnText)}${escapeHtml(buffTxt)}`,
+        `${ozIcon('hud-hq', 14)} <b>[${escapeHtml(hqInfo.name)} · Lv.${st.hqLevel}]</b> HP ${Math.ceil(obj.hp)}/${obj.maxHp} | 충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 수용 ${basePopCap}명 · 과학자 +${hqInfo.baseRpPerScientist || 2}RP · ${escapeHtml(wpnText)}${escapeHtml(auraText)}${escapeHtml(buffTxt)}`,
         actionHtml
       );
 
@@ -935,9 +969,9 @@ window.ZS = window.ZS || {};
         } else {
           const topCost = (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(mDef, mLv) : ZS.Game.getUpgradeCost(mDef, mLv)) || {};
           const topCostHtml = formatInlineCostHtml(topCost, 13);
-          const upCls = mLv + 1 === 3 && !topCheck.hqCapped ? 'icon-max' : '';
-          const inner = topCheck.hqCapped
-            ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>본부 Lv.${topCheck.reqHqLevel} 필요</span>(${topCostHtml})`
+          const upCls = mLv + 1 === 3 && !topCheck.techLocked ? 'icon-max' : '';
+          const inner = topCheck.techLocked
+            ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>연구 [${escapeHtml(topCheck.reqTechName || '필요')}]</span>(${topCostHtml})`
             : `${ozIcon('state-upgrade', 14, upCls)}<span>상부 Lv.${mLv + 1}</span>(${topCostHtml})<span>[U]</span>`;
           topUpHtml = `<button id="btn-comp-up-top" class="detail-upgrade-btn" ${topCheck.ok ? '' : 'disabled'} title="${escapeHtml(topCheck.ok ? '단축키 U로 상부 강화' : topCheck.reason)}">${inner}</button>`;
         }
@@ -952,14 +986,15 @@ window.ZS = window.ZS || {};
         const wCost = wallCheck.cost || (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(def, lv) : ZS.Game.getUpgradeCost(def, lv)) || {};
         const wCostHtml = formatInlineCostHtml(wCost, 13);
         const nextWallProf = ZS.Game.getStructLevelProfile(def, lv + 1);
-        const wInner = wallCheck.hqCapped
-          ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>본부 Lv.${wallCheck.reqHqLevel} 필요</span>(${wCostHtml})`
+        const wInner = wallCheck.techLocked
+          ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>연구 [${escapeHtml(wallCheck.reqTechName || '필요')}]</span>(${wCostHtml})`
           : `${ozIcon('wall-upgrade', 14)}<span>${escapeHtml(nextWallProf.levelName || '합금 장갑 성벽')} 업그레이드</span>(${wCostHtml})<span>[G]</span>`;
         wallUpHtml = `<button id="btn-comp-up-wall" class="detail-upgrade-btn" ${wallCheck.ok ? '' : 'disabled'} title="${escapeHtml(wallCheck.ok ? '단축키 G로 상부 유지 성벽 승강' : wallCheck.reason)}">${wInner}</button>`;
       }
 
       const wallDiv = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
-      const wallThornsMult = (wallDiv && wallDiv.thornsMult) || 1.0;
+      const defRepLv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('def_repeat') : 0;
+      const wallThornsMult = ((wallDiv && wallDiv.thornsMult) || 1.0) * (1 + 0.12 * defRepLv);
       const wallStatSummary = `반사 ${Math.round((wallProf.thornsRatio || 0) * wallThornsMult * 100)}% (최소 ${Math.round((wallProf.thornsMin || 0) * wallThornsMult)})`;
       const compHtml = `
         <div class="comp-list">
@@ -1041,10 +1076,10 @@ window.ZS = window.ZS || {};
       } else {
         const cost = (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(def, lv) : ZS.Game.getUpgradeCost(def, lv)) || {};
         const costHtml = formatInlineCostHtml(cost, 14);
-        const upIconCls = lv + 1 === maxLv && !upCheck.hqCapped ? 'icon-max' : '';
+        const upIconCls = lv + 1 === maxLv && !upCheck.techLocked ? 'icon-max' : '';
         const nextProfBtn = ZS.Game.getStructLevelProfile(def, lv + 1);
-        const btnInner = upCheck.hqCapped
-          ? `${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${upCheck.reqHqLevel} 필요</span>(${costHtml})`
+        const btnInner = upCheck.techLocked
+          ? `${ozIcon('state-lock', 14, 'icon-muted')}<span>연구 [${escapeHtml(upCheck.reqTechName || '필요')}]</span>(${costHtml})`
           : isTierEvo
           ? `${ozIcon('state-upgrade', 16, upIconCls)}<span>${escapeHtml(nextProfBtn.levelName || def.name)} 업그레이드</span>(${costHtml})<span>[U]</span>`
           : `${ozIcon('state-upgrade', 16, upIconCls)}<span>Lv.${lv + 1} 강화</span>(${costHtml})<span>[U]</span>`;
@@ -1089,7 +1124,9 @@ window.ZS = window.ZS || {};
       const onWindZone = !!(def.id === 'wind_turbine' && tCell && tCell.kind === 'wind');
       const windPct = onWindZone ? ((tCell.tier || 1) >= 2 ? 70 : 40) : 0;
       const divDef2 = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
-      const thornsMult2 = (divDef2 && divDef2.thornsMult) || 1.0;
+      const defRepLv2 = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('def_repeat') : 0;
+      const defRepMult2 = 1 + 0.12 * defRepLv2;
+      const thornsMult2 = ((divDef2 && divDef2.thornsMult) || 1.0) * defRepMult2;
       let statSummary = '';
       if (def.subType === 'wall') {
         const parts = [];
@@ -1112,7 +1149,8 @@ window.ZS = window.ZS || {};
       } else if (def.id === 'razor_pad') {
         const vulnTxt = prof.vulnMult > 1 ? ` · 받는피해 +${Math.round((prof.vulnMult - 1) * 100)}%` : '';
         const rampTxt = tCell && tCell.kind === 'ramp' ? ' · ★경사로 배치(감속 중첩)' : '';
-        statSummary = `지속피해 ${prof.trapDps}/s · 마모 ${prof.trapWear}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${vulnTxt}${rampTxt}`;
+        const effTrapDps = +(prof.trapDps * defRepMult2).toFixed(1);
+        statSummary = `지속피해 ${effTrapDps}/s · 마모 ${prof.trapWear}/s · 둔화 ${Math.round((1 - prof.slowFactor) * 100)}%${vulnTxt}${rampTxt}`;
       } else if (def.id === 'repair_bay') {
         const bayEff = ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(obj, tx, ty) : null;
         const auraR = bayEff && bayEff.auraRadius ? bayEff.auraRadius : prof.auraRadius;

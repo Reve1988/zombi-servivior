@@ -213,7 +213,7 @@ window.ZS = window.ZS || {};
           const def = st.id === 'command_hq' ? DATA.HQ_STATS : DATA.ITEMS[st.id];
           if (!(def && def.passable)) {
             const hqLv = state.hqLevel || 1;
-            const hqOccH = hqLv === 1 ? 18 : hqLv === 2 ? 26 : hqLv === 3 ? 36 : 46;
+            const hqOccH = hqLv === 1 ? 18 : hqLv === 2 ? 26 : hqLv === 3 ? 36 : hqLv === 4 ? 46 : 54;
             const structH = st.id === 'command_hq' ? hqOccH : R.getStructVisualTopZ(st.id, st.level || 1);
             const topPos = Iso.projectTo(sx + 0.5, sy + 0.5, structH, _occTop);
             const botPos = Iso.projectTo(sx + 1, sy + 1, 0, _occBot);
@@ -989,7 +989,7 @@ window.ZS = window.ZS || {};
           const alpha = Math.max(0, p.life / (p.maxLife || 0.2));
           ctx.save();
           ctx.globalAlpha = alpha * 0.85;
-          R.drawIsoCircle(ctx, p.x, p.y, p.radius || 0.8, p.color || '#FF9F43', 'rgba(255, 159, 67, 0.22)');
+          R.drawIsoCircle(ctx, p.x, p.y, p.radius || 0.8, p.color || '#FF9F43', p.fillColor || 'rgba(255, 159, 67, 0.22)');
           ctx.restore();
           continue;
         }
@@ -1053,6 +1053,35 @@ window.ZS = window.ZS || {};
 
         const cur = Iso.gridToScreen(p.x, p.y, p.z || 12);
         if (cur.x < -pad || cur.x > vp.w + pad || cur.y < -pad || cur.y > vp.h + pad) continue;
+        if (p.isHqOmega || p.projType === 'hq_omega') {
+          const tail = Iso.gridToScreen(p.x - p.vx * 0.06, p.y - p.vy * 0.06, p.z || 44);
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(94, 242, 255, 0.38)';
+          ctx.lineWidth = 7.2 * zScale;
+          ctx.beginPath();
+          ctx.moveTo(tail.x, tail.y);
+          ctx.lineTo(cur.x, cur.y);
+          ctx.stroke();
+          ctx.strokeStyle = '#5EF2FF';
+          ctx.lineWidth = (p.width || 3.4) * zScale;
+          ctx.beginPath();
+          ctx.moveTo(tail.x, tail.y);
+          ctx.lineTo(cur.x, cur.y);
+          ctx.stroke();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1.45 * zScale;
+          ctx.beginPath();
+          ctx.moveTo(tail.x * 0.35 + cur.x * 0.65, tail.y * 0.35 + cur.y * 0.65);
+          ctx.lineTo(cur.x, cur.y);
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cur.x, cur.y, 2.3 * zScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
         const prev = Iso.gridToScreen(p.x - p.vx * 0.035, p.y - p.vy * 0.035, p.z || 12);
         ctx.strokeStyle = p.color || '#ffe484';
         ctx.lineWidth = (p.width || 2.2) * zScale;

@@ -274,8 +274,20 @@ window.ZS = window.ZS || {};
       syncNightPhaseAndPowerHud(st);
     }
 
-    // Population display
-    document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
+    // Population (3-job) & Research Points (RP) display
+    const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
+    const popEl = document.getElementById('res-pop');
+    if (popEl) {
+      popEl.innerHTML = `${st.agents}/${st.popCap} <span class="pop-cap">(전${jobs.combat} 연${jobs.research} 생${jobs.prod})</span>`;
+    }
+    const popPillEl = document.getElementById('pop-pill');
+    if (popPillEl) {
+      popPillEl.title = `작전 요원 ${st.agents}/${st.popCap}명 (초소 배치 ${st.popUsed}/${jobs.combat} · 연구 ${jobs.research} · 생산 ${jobs.prod}) — 클릭하여 직무 분배 [T]`;
+    }
+    const rpEl = document.getElementById('res-rp');
+    if (rpEl) {
+      rpEl.textContent = `${Math.floor(st.rp || 0)} RP`;
+    }
 
     // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip (dirty-memoized)
     const tier = st.cozyTier;
@@ -433,6 +445,10 @@ window.ZS = window.ZS || {};
     }
     if (!document.getElementById('trader-modal').classList.contains('hidden')) {
       U.renderTraderModal();
+    }
+    const techModal = document.getElementById('tech-pop-modal');
+    if (techModal && !techModal.classList.contains('hidden') && U.renderTechPopModal) {
+      U.renderTechPopModal();
     }
     U.updateCursorTooltip();
   }
@@ -642,10 +658,22 @@ window.ZS = window.ZS || {};
     document.getElementById('res-wood').textContent = Math.floor(st.wood);
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
-    const nextPopSig = `${st.popUsed}/${st.agents}/${st.popCap}`;
+    const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
+    const nextPopSig = `${st.popUsed}/${st.agents}/${st.popCap}/${jobs.combat}/${jobs.research}/${jobs.prod}/${Math.floor(st.rp || 0)}`;
     if (nextPopSig !== lastPopSig) {
       lastPopSig = nextPopSig;
-      document.getElementById('res-pop').innerHTML = `${st.popUsed} / ${st.agents} <span class="pop-cap">(숙소 ${st.popCap})</span>`;
+      const popEl = document.getElementById('res-pop');
+      if (popEl) {
+        popEl.innerHTML = `${st.agents}/${st.popCap} <span class="pop-cap">(전${jobs.combat} 연${jobs.research} 생${jobs.prod})</span>`;
+      }
+      const rpEl = document.getElementById('res-rp');
+      if (rpEl) {
+        rpEl.textContent = `${Math.floor(st.rp || 0)} RP`;
+      }
+      const techModal = document.getElementById('tech-pop-modal');
+      if (techModal && !techModal.classList.contains('hidden') && U.renderTechPopModal) {
+        U.renderTechPopModal();
+      }
     }
     document.getElementById('res-cozy').textContent = `Lv.${st.cozyTier.level}`;
 
@@ -702,10 +730,12 @@ window.ZS = window.ZS || {};
       </div>
       <div class="debug-body">
         <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">${ozIcon('res-coin', 13, 'icon-coin')}<span>+500 자원</span></button>
+        <button id="btn-dbg-rp" class="debug-btn" title="연구포인트(RP) 즉시 +20">${ozIcon('res-rp', 13, 'icon-rp')}<span>+20 RP</span></button>
         <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">${ozIcon('res-power', 13, 'icon-power')}<span>전력 완충/방전</span></button>
         <button id="btn-dbg-pop" class="debug-btn" title="가용 요원 및 임시 숙소 수용량 +2">${ozIcon('res-agent', 13)}<span>요원 +2</span></button>
         <button id="btn-dbg-wave1" class="debug-btn" title="주간 정비 상태에서 웨이브 +1">${ozIcon('act-speed', 13)}<span>웨이브 +1</span></button>
         <button id="btn-dbg-wave5" class="debug-btn" title="주간 정비 상태에서 웨이브 +5 (보스전 등)">${ozIcon('act-speed', 13)}<span>+5</span></button>
+        <button id="btn-dbg-wave10" class="debug-btn" title="주간 정비 상태에서 웨이브 +10 (본부 웨이브 게이트 검증)">${ozIcon('act-speed', 13)}<span>웨이브 +10</span></button>
         <button id="btn-dbg-xp" class="debug-btn" title="조회 중인 초소·포탑에 숙련도 +20 XP 즉시 부여">${ozIcon('state-rank', 13, 'icon-coin')}<span>선택 시설 XP +20</span></button>
       </div>
     `;
@@ -723,10 +753,12 @@ window.ZS = window.ZS || {};
       if (el) el.addEventListener('click', fn);
     };
     bind('btn-dbg-res', () => ZS.Game.debugAddResources(500));
+    bind('btn-dbg-rp', () => ZS.Game.debugAddRp && ZS.Game.debugAddRp(20));
     bind('btn-dbg-pwr', () => ZS.Game.debugTogglePower());
     bind('btn-dbg-pop', () => ZS.Game.debugAddAgents(2));
     bind('btn-dbg-wave1', () => ZS.Game.debugAdvanceWave(1));
     bind('btn-dbg-wave5', () => ZS.Game.debugAdvanceWave(5));
+    bind('btn-dbg-wave10', () => ZS.Game.debugAdvanceWave(10));
     bind('btn-dbg-xp', () => {
       const sel = uiState.inspectedTile;
       if (sel) {

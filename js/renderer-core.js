@@ -3424,7 +3424,7 @@ window.ZS = window.ZS || {};
 
   function getStructVisualTopZ(id, level) {
     switch (id) {
-      case 'command_hq': return level >= 3 ? 46 : level === 2 ? 34 : 30;
+      case 'command_hq': return level >= 5 ? 56 : level === 4 ? 48 : level >= 3 ? 40 : level === 2 ? 34 : 36;
       case 'barricade_wall': return level >= 3 ? 27.7 : level === 2 ? 14 : 10.9;
       case 'tactical_gate': return [16.5, 26.5, 28.0][Math.min(3, Math.max(1, level || 1)) - 1];
       case 'hesco_wall': return level >= 3 ? 19 : 14;

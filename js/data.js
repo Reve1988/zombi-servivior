@@ -173,56 +173,57 @@ ZS.DATA = (function () {
     rampFlagstone: '#7E786E'
   };
 
+  // Structures & upgrades unlock via the 5-branch RP Tech Tree (NOT reqHqLevel)
   const WALL_TIERS = {
-    1: { level: 1, name: '철조망 바리케이드', reqHqLevel: 1, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
-    2: { level: 2, name: '헤스코 전술 방벽', reqHqLevel: 2, upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
-    3: { level: 3, name: '합금 장갑 성벽', reqHqLevel: 3, upCost: { wood: 6, scrap: 18, coin: 6 }, maxHp: 640, thornsRatio: 0.35, thornsMin: 8, allowWallMount: true, mountBaseZ: 25.4, topZ: 27.7 }
+    1: { level: 1, name: '철조망 바리케이드', reqTech: null, cost: { wood: 6, scrap: 2 }, maxHp: 180, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, mountBaseZ: 0, topZ: 10.9 },
+    2: { level: 2, name: '헤스코 전술 방벽', reqTech: 'def_t1', upCost: { wood: 8, scrap: 6 }, maxHp: 360, thornsRatio: 0, thornsMin: 0, allowWallMount: true, mountBaseZ: 15.2, topZ: 14.0 },
+    3: { level: 3, name: '합금 장갑 성벽', reqTech: 'def_t2', upCost: { wood: 6, scrap: 18, coin: 6 }, maxHp: 640, thornsRatio: 0.35, thornsMin: 8, allowWallMount: true, mountBaseZ: 25.4, topZ: 27.7 }
   };
 
   const SOLAR_TIERS = {
-    1: { level: 1, name: '소형 태양광 패널', reqHqLevel: 1, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 28, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
-    2: { level: 2, name: '중형 태양광 패널', reqHqLevel: 2, upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 56, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
-    3: { level: 3, name: '태양광 발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 100, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
-    4: { level: 4, name: '태양광 발전소', reqHqLevel: 4, upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 165, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
+    1: { level: 1, name: '소형 태양광 패널', reqTech: null, cost: { wood: 10, scrap: 20 }, maxHp: 135, dayCharge: 28, nightGen: 0, powerCap: 15, cozy: 1, cozyGroup: 'infra_solar', topZ: 12 },
+    2: { level: 2, name: '중형 태양광 패널', reqTech: 'inf_tier2', upCost: { wood: 6, scrap: 34, coin: 10 }, maxHp: 195, dayCharge: 56, nightGen: 0, powerCap: 28, cozy: 3, cozyGroup: 'infra_solar', topZ: 17 },
+    3: { level: 3, name: '태양광 발전기', reqTech: 'inf_tier3', upCost: { wood: 8, scrap: 56, coin: 24 }, maxHp: 270, dayCharge: 100, nightGen: 0, powerCap: 45, cozy: 5, cozyGroup: 'infra_solar', topZ: 24 },
+    4: { level: 4, name: '태양광 발전소', reqTech: 'inf_tier4', upCost: { wood: 10, scrap: 92, coin: 48 }, maxHp: 370, dayCharge: 165, nightGen: 0, powerCap: 75, cozy: 8, cozyGroup: 'infra_solar', topZ: 34 }
   };
 
   const WIND_TIERS = {
-    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'infra_wind', topZ: 34 },
-    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 6, scrap: 32, coin: 10 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'infra_wind', topZ: 46 },
-    3: { level: 3, name: '중형 풍력발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 54, coin: 24 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'infra_wind', topZ: 60 },
-    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 10, scrap: 88, coin: 46 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'infra_wind', topZ: 74 }
+    1: { level: 1, name: '마이크로 풍력발전기', reqTech: null, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'infra_wind', topZ: 34 },
+    2: { level: 2, name: '소형 풍력발전기', reqTech: 'inf_tier2', upCost: { wood: 6, scrap: 32, coin: 10 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'infra_wind', topZ: 46 },
+    3: { level: 3, name: '중형 풍력발전기', reqTech: 'inf_tier3', upCost: { wood: 8, scrap: 54, coin: 24 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'infra_wind', topZ: 60 },
+    4: { level: 4, name: '대형 풍력발전기', reqTech: 'inf_tier4', upCost: { wood: 10, scrap: 88, coin: 46 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'infra_wind', topZ: 74 }
   };
 
   const BATTERY_TIERS = {
-    1: { level: 1, name: '소형 야전 배터리 팩', reqHqLevel: 1, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 60, dayCharge: 4, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
-    2: { level: 2, name: '중형 배터리 팩', reqHqLevel: 2, upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 135, dayCharge: 10, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
-    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqHqLevel: 3, upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 250, dayCharge: 18, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
-    4: { level: 4, name: '초전도 에너지 코어', reqHqLevel: 4, upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 410, dayCharge: 30, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
+    1: { level: 1, name: '소형 야전 배터리 팩', reqTech: null, cost: { wood: 6, scrap: 18 }, maxHp: 165, powerCap: 60, dayCharge: 4, nightGen: 0, cozy: 1, cozyGroup: 'infra_battery', topZ: 14 },
+    2: { level: 2, name: '중형 배터리 팩', reqTech: 'inf_tier2', upCost: { wood: 4, scrap: 30, coin: 12 }, maxHp: 230, powerCap: 135, dayCharge: 10, nightGen: 0, cozy: 2, cozyGroup: 'infra_battery', topZ: 22 },
+    3: { level: 3, name: '리튬 ESS 배터리 뱅크', reqTech: 'inf_tier3', upCost: { wood: 6, scrap: 48, coin: 26 }, maxHp: 300, powerCap: 250, dayCharge: 18, nightGen: 0, cozy: 4, cozyGroup: 'infra_battery', topZ: 33 },
+    4: { level: 4, name: '초전도 에너지 코어', reqTech: 'inf_tier4', upCost: { wood: 8, scrap: 82, coin: 48 }, maxHp: 400, powerCap: 410, dayCharge: 30, nightGen: 0, cozy: 7, cozyGroup: 'infra_battery', topZ: 40 }
   };
 
   const BARRACKS_TIERS = {
-    1: { level: 1, name: '전술 돔 막사', reqHqLevel: 1, cost: { wood: 24, scrap: 8 }, maxHp: 170, popCap: 1, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
-    2: { level: 2, name: '확장형 야전 막사', reqHqLevel: 2, upCost: { wood: 12, scrap: 24, coin: 12 }, maxHp: 230, popCap: 2, cozy: 10, cozyGroup: 'infra_housing', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
-    3: { level: 3, name: '모듈러 컨테이너 숙소', reqHqLevel: 3, upCost: { wood: 14, scrap: 44, coin: 26 }, maxHp: 310, popCap: 4, cozy: 18, cozyGroup: 'infra_housing', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
-    4: { level: 4, name: '강화 작전 생활관', reqHqLevel: 4, upCost: { wood: 18, scrap: 74, coin: 46 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
+    1: { level: 1, name: '전술 돔 막사', reqTech: null, cost: { wood: 24, scrap: 8 }, maxHp: 170, popCap: 1, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
+    2: { level: 2, name: '확장형 야전 막사', reqTech: 'inf_tier2', upCost: { wood: 12, scrap: 24, coin: 12 }, maxHp: 230, popCap: 2, cozy: 10, cozyGroup: 'infra_housing', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
+    3: { level: 3, name: '모듈러 컨테이너 숙소', reqTech: 'inf_tier3', upCost: { wood: 14, scrap: 44, coin: 26 }, maxHp: 310, popCap: 4, cozy: 18, cozyGroup: 'infra_housing', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
+    4: { level: 4, name: '강화 작전 생활관', reqTech: 'inf_tier4', upCost: { wood: 18, scrap: 74, coin: 46 }, maxHp: 420, popCap: 6, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
   };
 
   const GATE_TIERS = {
-    1: { level: 1, name: '철조망 바리케이드 통문', reqHqLevel: 1, cost: { wood: 6, scrap: 8 }, maxHp: 240, gateSlowRadius: 1.15, gateSlowFactor: 0.82, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, topZ: 16.5 },
-    2: { level: 2, name: '전술 방호 게이트', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 6 }, maxHp: 480, gateSlowRadius: 1.15, gateSlowFactor: 0.75, thornsRatio: 0, thornsMin: 0, allowWallMount: false, topZ: 26.5 },
-    3: { level: 3, name: '전자식 쇼크 게이트', reqHqLevel: 3, upCost: { wood: 12, scrap: 28, coin: 18 }, maxHp: 880, gateSlowRadius: 1.25, gateSlowFactor: 0.60, thornsRatio: 0.35, thornsMin: 8, allowWallMount: false, topZ: 28.0 }
+    1: { level: 1, name: '철조망 바리케이드 통문', reqTech: null, cost: { wood: 6, scrap: 8 }, maxHp: 240, gateSlowRadius: 1.15, gateSlowFactor: 0.82, thornsRatio: 0.15, thornsMin: 4, allowWallMount: false, topZ: 16.5 },
+    2: { level: 2, name: '전술 방호 게이트', reqTech: 'def_t1', upCost: { wood: 8, scrap: 14, coin: 6 }, maxHp: 480, gateSlowRadius: 1.15, gateSlowFactor: 0.75, thornsRatio: 0, thornsMin: 0, allowWallMount: false, topZ: 26.5 },
+    3: { level: 3, name: '전자식 쇼크 게이트', reqTech: 'def_t2', upCost: { wood: 12, scrap: 28, coin: 18 }, maxHp: 880, gateSlowRadius: 1.25, gateSlowFactor: 0.60, thornsRatio: 0.35, thornsMin: 8, allowWallMount: false, topZ: 28.0 }
   };
 
   const TRAP_TIERS = {
-    1: { level: 1, name: '강철 스파이크 트랩', reqHqLevel: 1, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 5.4 },
-    2: { level: 2, name: '중장갑 피스톤 스파이크 트랩', reqHqLevel: 2, upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 5.8 },
-    3: { level: 3, name: '고전압 피에조 스파이크 트랩', reqHqLevel: 3, upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 6.45 }
+    1: { level: 1, name: '강철 스파이크 트랩', reqTech: null, cost: { wood: 6, scrap: 10 }, maxHp: 180, trapDps: 11, trapWear: 3.2, slowFactor: 0.55, vulnMult: 1.0, topZ: 5.4 },
+    2: { level: 2, name: '중장갑 피스톤 스파이크 트랩', reqTech: 'def_t1', upCost: { wood: 8, scrap: 14, coin: 8 }, maxHp: 270, trapDps: 19, trapWear: 2.4, slowFactor: 0.48, vulnMult: 1.0, topZ: 5.8 },
+    3: { level: 3, name: '고전압 피에조 스파이크 트랩', reqTech: 'def_t2', upCost: { wood: 10, scrap: 22, coin: 20 }, maxHp: 390, trapDps: 30, trapWear: 2.0, slowFactor: 0.40, vulnMult: 1.15, topZ: 6.45 }
   };
 
   const REPAIR_TIERS = {
-    1: { level: 1, name: '현장 수리 거치대', reqHqLevel: 1, cost: { wood: 10, scrap: 14 }, maxHp: 165, auraRadius: 2.2, regenPerSec: 2.5, cozy: 5, cozyGroup: 'repair_t1', lightRadius: 0, topZ: 18 },
-    2: { level: 2, name: '필드 로봇 정비 베이', reqHqLevel: 2, upCost: { wood: 8, scrap: 18, coin: 12 }, maxHp: 230, auraRadius: 2.6, regenPerSec: 5.0, cozy: 9, cozyGroup: 'repair_t2', lightRadius: 0, topZ: 25 },
-    3: { level: 3, name: '나노 드론 정비소', reqHqLevel: 3, upCost: { wood: 12, scrap: 32, coin: 24 }, maxHp: 320, auraRadius: 3.2, regenPerSec: 9.5, cozy: 15, cozyGroup: 'repair_t3', lightRadius: 2.2, lightColor: 'rgba(74, 222, 128, 0.32)', topZ: 30 }
+    1: { level: 1, name: '현장 수리 거치대', reqTech: null, cost: { wood: 10, scrap: 14 }, maxHp: 165, auraRadius: 2.2, regenPerSec: 2.5, cozy: 5, cozyGroup: 'repair_t1', lightRadius: 0, topZ: 18 },
+    2: { level: 2, name: '필드 로봇 정비 베이', reqTech: 'inf_tier2', upCost: { wood: 8, scrap: 18, coin: 12 }, maxHp: 230, auraRadius: 2.6, regenPerSec: 5.0, cozy: 9, cozyGroup: 'repair_t2', lightRadius: 0, topZ: 25 },
+    3: { level: 3, name: '나노 드론 정비소', reqTech: 'inf_tier3', upCost: { wood: 12, scrap: 32, coin: 24 }, maxHp: 320, auraRadius: 3.2, regenPerSec: 9.5, cozy: 15, cozyGroup: 'repair_t3', lightRadius: 2.2, lightColor: 'rgba(74, 222, 128, 0.32)', topZ: 30 }
   };
 
   const TIER_MAPS = {
@@ -313,94 +314,339 @@ ZS.DATA = (function () {
     maxHp: 800,
     basePowerCap: 70,
     baseDayCharge: 32,
-    basePopCap: 2,
-    startingAgents: 2
+    basePopCap: 4,
+    startingAgents: 3
   },
 
   HQ_LEVELS: [
     {
       level: 1,
+      reqWave: 1,
       name: '임시 지휘소',
       cost: null,
       maxHp: 800,
       basePowerCap: 70,
       baseDayCharge: 32,
-      basePopCap: 2,
-      structUpgradeCap: 1,
+      basePopCap: 4,
+      baseRpPerScientist: 2,
+      structUpgradeCap: 3,
       maxZ: 36,
       hpBarWidth: 38,
-      weapon: null
+      weapon: null,
+      globalAura: null
     },
     {
       level: 2,
+      reqWave: 20,
       name: '전술 작전 본부',
-      cost: { wood: 90, scrap: 70, coin: 45 },
-      maxHp: 1150,
-      basePowerCap: 95,
-      baseDayCharge: 42,
-      basePopCap: 3,
-      structUpgradeCap: 2,
-      maxZ: 30,
+      cost: { wood: 140, scrap: 120, coin: 85 },
+      maxHp: 1350,
+      basePowerCap: 105,
+      baseDayCharge: 46,
+      basePopCap: 5,
+      baseRpPerScientist: 3,
+      structUpgradeCap: 3,
+      maxZ: 34,
       hpBarWidth: 41,
+      unlocksUnderground: true,
+      bonusDigAp: 16,
       weapon: {
         name: '경기관총',
         range: 5.0,
-        damage: 16,
-        fireRate: 2.2,
+        damage: 20,
+        fireRate: 2.3,
         projType: 'hq_lmg',
         color: '#FFE484',
         width: 1.8,
         speed: 19,
         splashRadius: 0
-      }
+      },
+      globalAura: { structHpMult: 1.08 }
     },
     {
       level: 3,
+      reqWave: 40,
       name: '통합 요새 사령부',
-      cost: { wood: 170, scrap: 140, coin: 95 },
-      maxHp: 1600,
-      basePowerCap: 125,
-      baseDayCharge: 55,
-      basePopCap: 4,
+      cost: { wood: 260, scrap: 240, coin: 170 },
+      maxHp: 2100,
+      basePowerCap: 145,
+      baseDayCharge: 64,
+      basePopCap: 6,
+      baseRpPerScientist: 4,
       structUpgradeCap: 3,
-      maxZ: 38,
+      maxZ: 40,
       hpBarWidth: 44,
       weapon: {
         name: '중기관총',
         range: 5.8,
-        damage: 26,
-        fireRate: 2.8,
+        damage: 34,
+        fireRate: 2.9,
         projType: 'hq_hmg',
         color: '#FFE484',
         width: 2.4,
         speed: 20,
         splashRadius: 0
-      }
+      },
+      globalAura: { structHpMult: 1.18, dmgMult: 1.10 }
     },
     {
       level: 4,
+      reqWave: 60,
       name: '이지스 코어 사령부',
-      cost: { wood: 280, scrap: 240, coin: 170 },
-      maxHp: 2200,
-      basePowerCap: 165,
-      baseDayCharge: 72,
-      basePopCap: 5,
+      cost: { wood: 420, scrap: 400, coin: 300 },
+      maxHp: 3100,
+      basePowerCap: 195,
+      baseDayCharge: 88,
+      basePopCap: 8,
+      baseRpPerScientist: 5,
       structUpgradeCap: 3,
       maxZ: 48,
       hpBarWidth: 46,
       weapon: {
         name: '이지스 트윈캐논',
         range: 6.5,
-        damage: 38,
+        damage: 52,
         fireRate: 3.5,
         projType: 'hq_aegis',
         color: '#FF9F43',
         width: 3.0,
         speed: 17,
-        splashRadius: 0.8
-      }
+        splashRadius: 0.85
+      },
+      globalAura: { structHpMult: 1.30, dmgMult: 1.20, fireRateMult: 1.08 }
+    },
+    {
+      level: 5,
+      reqWave: 80,
+      name: '오메가 시타델 사령부',
+      cost: { wood: 650, scrap: 640, coin: 520 },
+      maxHp: 4600,
+      basePowerCap: 260,
+      baseDayCharge: 120,
+      basePopCap: 10,
+      baseRpPerScientist: 7,
+      structUpgradeCap: 3,
+      maxZ: 56,
+      hpBarWidth: 50,
+      weapon: {
+        name: '오메가 레일화포',
+        range: 7.8,
+        damage: 92,
+        fireRate: 3.8,
+        projType: 'hq_omega',
+        color: '#5EF2FF',
+        width: 3.4,
+        speed: 22,
+        splashRadius: 1.35
+      },
+      globalAura: { structHpMult: 1.45, dmgMult: 1.35, fireRateMult: 1.15 }
     }
   ],
+
+  // 5-Branch RP Tech Tree (replaces legacy reqHqLevel build & upgrade locks)
+  TECH_BRANCHES: [
+    { id: 'defense_eng', name: '방어선 공학', desc: '성벽·게이트·트랩 진화 및 복합 장갑 연구', accent: '#4ADE80' },
+    { id: 'infantry_weap', name: '보병 화기 개량', desc: '저격탑 해금 및 무전력 요원 초소 2·3단계 개량', accent: '#FACC15' },
+    { id: 'auto_turret', name: '자동화 화력 공학', desc: '발칸·로켓·EMP 자동포탑 해금 및 관제 강화', accent: '#FF9F43' },
+    { id: 'power_infra', name: '전력·인프라 공학', desc: '발전·배터리·숙소·정비소 2~4단계 진화', accent: '#C084FC' },
+    { id: 'bunker_eng', name: '지하 쉘터 공학', desc: '심부 굴착·고급 설비·레이저 파쇄기 연구', accent: '#F59E0B' }
+  ],
+
+  TECH_ORDER: [
+    'def_t1', 'def_t2', 'def_repeat',
+    'inf_sniper', 'inf_lv2', 'inf_lv3', 'inf_repeat',
+    'tur_vulcan', 'tur_lv2', 'tur_missile', 'tur_emp', 'tur_lv3', 'tur_repeat',
+    'inf_tier2', 'inf_tier3', 'inf_tier4', 'infra_repeat',
+    'b1_drill_1', 'b1_gadgets_adv', 'b1_drill_2'
+  ],
+
+  // Note: Branch 4 repeatable ESS tech uses ID 'infra_repeat' to stay distinct from Branch 2 'inf_repeat'
+  TECH_TREE: {
+    def_t1: {
+      id: 'def_t1',
+      branch: 'defense_eng',
+      name: '중장갑 방어선 1단계',
+      costRp: 4,
+      maxLv: 1,
+      req: [],
+      desc: '성벽(헤스코 방벽·상부 거치 & 하부 보강), 전술 게이트, 피스톤 트랩 Lv.2 해금'
+    },
+    def_t2: {
+      id: 'def_t2',
+      branch: 'defense_eng',
+      name: '고압·반사 방어선 2단계',
+      costRp: 10,
+      maxLv: 1,
+      req: ['def_t1'],
+      desc: '합금 장갑 성벽, 전자식 쇼크 게이트, 고전압 피에조 트랩 Lv.3 해금'
+    },
+    def_repeat: {
+      id: 'def_repeat',
+      branch: 'defense_eng',
+      name: '초고강도 복합 장갑 연구',
+      costRp: 14,
+      costStep: 8,
+      maxLv: 5,
+      req: ['def_t2'],
+      desc: '레벨당 성벽·게이트·트랩 HP +15% & 근접 반사·트랩 피해 +12%'
+    },
+    inf_sniper: {
+      id: 'inf_sniper',
+      branch: 'infantry_weap',
+      name: '대물 저격 체계',
+      costRp: 4,
+      maxLv: 1,
+      req: [],
+      desc: '대물 저격 감시탑(무전력 장거리 초소) 건설 해금'
+    },
+    inf_lv2: {
+      id: 'inf_lv2',
+      branch: 'infantry_weap',
+      name: '전술 화기 개량 Lv.2',
+      costRp: 7,
+      maxLv: 1,
+      req: ['inf_sniper'],
+      desc: '모든 요원 초소(소총·샷건·저격탑) Lv.2 강화 해금'
+    },
+    inf_lv3: {
+      id: 'inf_lv3',
+      branch: 'infantry_weap',
+      name: '특수 작전 화기 Lv.3',
+      costRp: 15,
+      maxLv: 1,
+      req: ['inf_lv2'],
+      desc: '모든 요원 초소 Lv.3 특수 개조(2점사·중산탄·관통탄) 해금'
+    },
+    inf_repeat: {
+      id: 'inf_repeat',
+      branch: 'infantry_weap',
+      name: '고관통 정밀 탄약',
+      costRp: 16,
+      costStep: 9,
+      maxLv: 5,
+      req: ['inf_lv3'],
+      desc: '레벨당 모든 요원 초소 공격력 +12% & 치명타율 +3%p'
+    },
+    tur_vulcan: {
+      id: 'tur_vulcan',
+      branch: 'auto_turret',
+      name: '무인 발칸 오토터렛',
+      costRp: 5,
+      maxLv: 1,
+      req: [],
+      desc: 'CIWS 발칸 오토터렛 건설 해금'
+    },
+    tur_lv2: {
+      id: 'tur_lv2',
+      branch: 'auto_turret',
+      name: '자동 포탑 화력 강화 Lv.2',
+      costRp: 9,
+      maxLv: 1,
+      req: ['tur_vulcan'],
+      desc: '모든 자동 포탑(발칸·로켓·EMP) Lv.2 강화 해금'
+    },
+    tur_missile: {
+      id: 'tur_missile',
+      branch: 'auto_turret',
+      name: '고각 다연장 로켓 체계',
+      costRp: 12,
+      maxLv: 1,
+      req: ['tur_vulcan'],
+      desc: '다연장 로켓 포대(산맥 너머 광역 곡사 포격) 건설 해금'
+    },
+    tur_emp: {
+      id: 'tur_emp',
+      branch: 'auto_turret',
+      name: '고압 테슬라 EMP 방전',
+      costRp: 16,
+      maxLv: 1,
+      req: ['tur_missile'],
+      desc: '테슬라 EMP 파일런(연쇄 전격·둔화) 건설 해금'
+    },
+    tur_lv3: {
+      id: 'tur_lv3',
+      branch: 'auto_turret',
+      name: '초전도 오토터렛 특전 Lv.3',
+      costRp: 20,
+      maxLv: 1,
+      req: ['tur_lv2', 'tur_missile'],
+      desc: '모든 자동 포탑 Lv.3 특수 개조(초전도 급탄·6연장·5연쇄) 해금'
+    },
+    tur_repeat: {
+      id: 'tur_repeat',
+      branch: 'auto_turret',
+      name: '고효율 화력 관제',
+      costRp: 18,
+      costStep: 10,
+      maxLv: 5,
+      req: ['tur_lv3'],
+      desc: '레벨당 모든 자동 포탑 공격력 +12% & 사격 전력 소모 -6%'
+    },
+    inf_tier2: {
+      id: 'inf_tier2',
+      branch: 'power_infra',
+      name: '기지 인프라 2단계 진화',
+      costRp: 5,
+      maxLv: 1,
+      req: [],
+      desc: '태양광·풍력·배터리·야전 막사·정비 베이 Lv.2 업그레이드 해금'
+    },
+    inf_tier3: {
+      id: 'inf_tier3',
+      branch: 'power_infra',
+      name: '기지 인프라 3단계 진화',
+      costRp: 12,
+      maxLv: 1,
+      req: ['inf_tier2'],
+      desc: '태양광·풍력·리튬 ESS·모듈러 숙소·나노 정비소 Lv.3 해금'
+    },
+    inf_tier4: {
+      id: 'inf_tier4',
+      branch: 'power_infra',
+      name: '초전도 인프라 4단계',
+      costRp: 22,
+      maxLv: 1,
+      req: ['inf_tier3'],
+      desc: '태양광 발전소·대형 풍력·초전도 코어·작전 생활관 Lv.4 해금'
+    },
+    infra_repeat: {
+      id: 'infra_repeat',
+      branch: 'power_infra',
+      name: '고밀도 ESS 전력망',
+      costRp: 16,
+      costStep: 9,
+      maxLv: 5,
+      req: ['inf_tier4'],
+      desc: '레벨당 본부·태양광·풍력·배터리 주간 충전량 및 전력 용량 +10%'
+    },
+    b1_drill_1: {
+      id: 'b1_drill_1',
+      branch: 'bunker_eng',
+      name: '심부 굴착 공법',
+      costRp: 8,
+      maxLv: 1,
+      req: [],
+      desc: '생산요원 굴착력 3→4 AP/명 · 이월 상한 +8 · 매몰 전리품 +25%'
+    },
+    b1_gadgets_adv: {
+      id: 'b1_gadgets_adv',
+      branch: 'bunker_eng',
+      name: '고급 쉘터 설비 인가',
+      costRp: 14,
+      maxLv: 1,
+      req: ['b1_drill_1'],
+      desc: '지하 쉘터(Stage 3) 고급 가젯 및 심층 지원 설비 인가'
+    },
+    b1_drill_2: {
+      id: 'b1_drill_2',
+      branch: 'bunker_eng',
+      name: '레이저 암반 파쇄기',
+      costRp: 20,
+      maxLv: 1,
+      req: ['b1_gadgets_adv'],
+      desc: '심부 현무암 굴착 AP 3→2 소모 · 기지 전역 RP 획득량 +15%'
+    }
+  },
 
   COZY_TIERS: [
     { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.06 },
@@ -458,6 +704,7 @@ ZS.DATA = (function () {
     bossGlobalBonus: 4.0
   },
 
+  // Note: Base items & upgrades unlock via the 5-branch RP Tech Tree (NOT reqHqLevel)
   ITEMS: {
     // ================= FLOORS (layer: 'floor') =================
     asphalt: {
@@ -488,7 +735,7 @@ ZS.DATA = (function () {
       name: '모던 테라스 타일',
       category: 'decor',
       layer: 'floor',
-      reqHqLevel: 2,
+      reqHqLevel: 1,
       cost: { wood: 5, coin: 4 },
       cozy: 4,
       cozyGroup: 'floor_lounge',
@@ -500,7 +747,7 @@ ZS.DATA = (function () {
       name: '전술 해저드 패드',
       category: 'decor',
       layer: 'floor',
-      reqHqLevel: 3,
+      reqHqLevel: 1,
       cost: { scrap: 4, coin: 5 },
       cozy: 3,
       cozyGroup: 'floor_hazard',
@@ -596,7 +843,7 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'manned',
-      reqHqLevel: 2,
+      reqTech: 'inf_sniper',
       cost: { wood: 30, scrap: 24 },
       popUse: 1,
       maxHp: 195,
@@ -605,7 +852,7 @@ ZS.DATA = (function () {
       fireRate: 0.65,
       targetMode: 'strongest',
       projType: 'sniper',
-      desc: '[요원 1명 · 무전력] 철골 감시탑 위 저격수가 장거리에서 고체력 표적을 우선 저격합니다.'
+      desc: '[요원 1명 · 무전력 · 연구 해금] 철골 감시탑 위 저격수가 장거리에서 고체력 표적을 우선 저격합니다.'
     },
 
     // ================= DEFENSE: AUTO TURRETS (Pop: 0, Night Power Drain) =================
@@ -615,7 +862,7 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
-      reqHqLevel: 2,
+      reqTech: 'tur_vulcan',
       cost: { wood: 8, scrap: 36 },
       requiresPower: true,
       powerIdle: 0.70,
@@ -627,7 +874,7 @@ ZS.DATA = (function () {
       projType: 'vulcan',
       canMountOnWall: true,
       mountTopOffset: 12,
-      desc: '[전력 소모] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
+      desc: '[전력 소모 · 연구 해금] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
     },
     missile_pod: {
       id: 'missile_pod',
@@ -635,7 +882,7 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
-      reqHqLevel: 3,
+      reqTech: 'tur_missile',
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
       powerIdle: 1.05,
@@ -649,7 +896,7 @@ ZS.DATA = (function () {
       splashRadius: 1.20,
       fireRate: 0.48,
       projType: 'rocket',
-      desc: '[전력 소모 · 다연장 곡사] 산맥 너머 적군에 고각 로켓을 연속 일제 발사(2→3→6발)해 광역 제압합니다. (최소 사거리 2.2 · 정전 시 정지)'
+      desc: '[전력 소모 · 다연장 곡사 · 연구 해금] 산맥 너머 적군에 고각 로켓을 연속 일제 발사(2→3→6발)해 광역 제압합니다. (최소 사거리 2.2 · 정전 시 정지)'
     },
     emp_coil: {
       id: 'emp_coil',
@@ -657,7 +904,7 @@ ZS.DATA = (function () {
       category: 'defense',
       layer: 'struct',
       subType: 'turret',
-      reqHqLevel: 4,
+      reqTech: 'tur_emp',
       cost: { wood: 10, scrap: 52, coin: 15 },
       requiresPower: true,
       powerIdle: 1.25,
@@ -669,7 +916,7 @@ ZS.DATA = (function () {
       slowDuration: 1.6,
       fireRate: 0.95,
       projType: 'emp',
-      desc: '[전력 소모] 최대 3기 좀비에게 연쇄 고압 전격을 날리고 이동속도를 크게 둔화시킵니다.'
+      desc: '[전력 소모 · 연구 해금] 최대 3기 좀비에게 연쇄 고압 전격을 날리고 이동속도를 크게 둔화시킵니다.'
     },
 
     // ================= INFRASTRUCTURE: POWER & HOUSING (4-Tier Evolution) =================
@@ -687,7 +934,7 @@ ZS.DATA = (function () {
       powerCap: 15,
       cozy: 1,
       cozyGroup: 'solar_t1',
-      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 본부 증축 시 태양광 발전소(+165)까지 진화합니다.'
+      desc: '[주간 고효율 발전 · 4단 진화] 낮 전환 시 배터리를 대량 충전합니다(야간 발전 0/s). 인프라 연구 시 태양광 발전소(+165)까지 진화합니다.'
     },
     wind_turbine: {
       id: 'wind_turbine',
@@ -703,7 +950,7 @@ ZS.DATA = (function () {
       powerCap: 10,
       cozy: 1,
       cozyGroup: 'wind_t1',
-      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 본부 증축 시 대형 풍력발전기(+3.80/s)까지 진화합니다. [강풍 레이어 V]로 산맥 주변의 강풍(+40%)·돌풍(+70%) 지대를 찾아 배치할 수 있습니다.'
+      desc: '[24시간 풍력 · 4단 진화] 야간에도 초당 +0.65씩 실시간 전력을 공급하며, 인프라 연구 시 대형 풍력발전기(+3.80/s)까지 진화합니다. [강풍 레이어 V]로 산맥 주변의 강풍(+40%)·돌풍(+70%) 지대를 찾아 배치할 수 있습니다.'
     },
     battery_bank: {
       id: 'battery_bank',
@@ -719,7 +966,7 @@ ZS.DATA = (function () {
       powerCap: 60,
       cozy: 1,
       cozyGroup: 'battery_t1',
-      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 초전도 에너지 코어(+410)까지 진화합니다.'
+      desc: '[전력 저장 · 4단 진화] 최대 전력 저장량을 확장하고 보조 충전을 제공합니다. 인프라 연구 시 초전도 에너지 코어(+410)까지 진화합니다.'
     },
     field_tent: {
       id: 'field_tent',
@@ -735,7 +982,7 @@ ZS.DATA = (function () {
       cozyGroup: 'housing_t1',
       lightRadius: 1.8,
       lightColor: 'rgba(255, 206, 112, 0.34)',
-      desc: '[요원 숙소 · 4단 진화] 요원 수용량을 확장하고 매일 아침 신규 요원이 합류합니다. 모듈러 숙소·강화 작전 생활관(+6명)으로 진화합니다.'
+      desc: '[요원 숙소 · 4단 진화] 요원 수용량을 확장하고 매일 아침 신규 요원이 합류합니다. 인프라 연구 시 모듈러 숙소·강화 작전 생활관(+6명)으로 진화합니다.'
     },
     repair_bay: {
       id: 'repair_bay',
@@ -810,7 +1057,7 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      reqHqLevel: 2,
+      reqHqLevel: 1,
       cost: { scrap: 14, coin: 18 },
       maxHp: 165,
       cozy: 13,
@@ -826,7 +1073,7 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      reqHqLevel: 3,
+      reqHqLevel: 1,
       cost: { wood: 18, coin: 14 },
       maxHp: 135,
       cozy: 15,
@@ -839,7 +1086,7 @@ ZS.DATA = (function () {
       category: 'decor',
       layer: 'struct',
       subType: 'decor',
-      reqHqLevel: 4,
+      reqHqLevel: 1,
       cost: { scrap: 12, coin: 26 },
       requiresPower: true,
       powerIdle: 0.25,
@@ -1071,6 +1318,16 @@ ZS.DATA = (function () {
       coinCost: 44,
       type: 'free_item',
       itemId: 'emp_coil'
+    },
+    {
+      id: 'research_disk',
+      name: '전술 연구 데이터 디스크',
+      svgIcon: 'res-rp',
+      svgColorCls: 'icon-rp',
+      desc: '외부 연구소에서 암호 해독한 전술 데이터 디스크. 즉시 연구포인트 +5 RP를 획득합니다.',
+      coinCost: 28,
+      type: 'rp',
+      amount: 5
     }
   ],
 

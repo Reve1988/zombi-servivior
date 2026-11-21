@@ -38,7 +38,7 @@ window.ZS = window.ZS || {};
       const savedN = parsed.structGrid.length;
       const N = ZS.DATA.GRID_SIZE;
       if (savedN !== N && savedN !== 22 && savedN !== 18) return null;
-      const hqLv = Math.max(1, Math.min(4, Number(parsed.hqLevel) || 1));
+      const hqLv = Math.max(1, Math.min(5, Number(parsed.hqLevel) || 1));
       const phaseLabel = parsed.phase === 'night' ? '야간 방어' : '주간 정비';
       const wavePad = String(Math.floor(waveNum)).padStart(2, '0');
       const divId = (parsed.divisionId && ZS.DATA.DIVISIONS && ZS.DATA.DIVISIONS[parsed.divisionId])
@@ -68,6 +68,10 @@ window.ZS = window.ZS || {};
   function isDivisionModalOpen() {
     const modal = document.getElementById('division-modal');
     return !!(modal && !modal.classList.contains('hidden'));
+  }
+
+  function isTechModalOpen() {
+    return !!(U.isTechPopModalOpen && U.isTechPopModalOpen());
   }
 
   function closeDivisionModal() {
@@ -326,6 +330,7 @@ window.ZS = window.ZS || {};
       uiState.pointerClient.inside = false;
       document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
       document.getElementById('trader-modal')?.classList.add('hidden');
+      if (U.closeTechPopModal) U.closeTechPopModal();
       U.updateCursorTooltip();
       refreshMainMenuState();
     } else {
@@ -493,7 +498,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) return;
       if (e.button === 2 || e.button === 1 || (e.button === 0 && keys['Space'])) {
         isPanning = true;
         panStart.x = e.clientX;
@@ -521,7 +526,7 @@ window.ZS = window.ZS || {};
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) {
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) {
         uiState.pointerClient.inside = false;
         uiState.hoverTile = null;
         U.updateCursorTooltip();
@@ -560,7 +565,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener(
       'wheel',
       (e) => {
-        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
+        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.91;
         ZS.Iso.zoomAtScreen(factor, e.clientX, e.clientY);
@@ -621,6 +626,10 @@ window.ZS = window.ZS || {};
           guideEl.classList.add('hidden');
           return;
         }
+        if (isTechModalOpen()) {
+          if (U.closeTechPopModal) U.closeTechPopModal();
+          return;
+        }
         if (uiState.mainMenuOpen) {
           if (uiState.menuOptionsOpen) setMenuOptionsOpen(false);
           return;
@@ -637,10 +646,16 @@ window.ZS = window.ZS || {};
       keys[e.code] = true;
       const activeTag = document.activeElement && document.activeElement.tagName;
       const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      if (!isTyping && e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSettingsOpen(false);
+        if (U.toggleTechPopModal) U.toggleTechPopModal('all');
+        return;
+      }
       if (!isTyping && /^Digit([1-9])$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const traderHidden = !traderEl || traderEl.classList.contains('hidden');
         const guideHidden = !guideEl || guideEl.classList.contains('hidden');
-        if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden) {
+        if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden && !isTechModalOpen()) {
           const slotIdx = Number(RegExp.$1) - 1;
           const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
           if (items[slotIdx]) {
@@ -747,6 +762,46 @@ window.ZS = window.ZS || {};
     });
     document.getElementById('btn-refresh-trader').addEventListener('click', () => {
       ZS.Game.refreshTraderOffers(true);
+    });
+
+    const openTech = (focusArea) => {
+      setSettingsOpen(false);
+      if (U.openTechPopModal) U.openTechPopModal(focusArea);
+    };
+    const popPillEl = document.getElementById('pop-pill');
+    if (popPillEl) {
+      popPillEl.addEventListener('click', () => openTech('pop'));
+      popPillEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          openTech('pop');
+        }
+      });
+    }
+    const rpPillEl = document.getElementById('rp-pill');
+    if (rpPillEl) {
+      rpPillEl.addEventListener('click', () => openTech('tech'));
+      rpPillEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          openTech('tech');
+        }
+      });
+    }
+    const openTechBtn = document.getElementById('btn-open-tech');
+    if (openTechBtn) {
+      openTechBtn.addEventListener('click', () => {
+        setSettingsOpen(false);
+        if (U.toggleTechPopModal) U.toggleTechPopModal('all');
+      });
+    }
+    document.getElementById('btn-close-tech')?.addEventListener('click', () => {
+      if (U.closeTechPopModal) U.closeTechPopModal();
+    });
+    document.getElementById('tech-pop-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'tech-pop-modal') {
+        if (U.closeTechPopModal) U.closeTechPopModal();
+      }
     });
 
     document.getElementById('btn-repair-all').addEventListener('click', () => {
