@@ -1142,6 +1142,40 @@ window.ZS = window.ZS || {};
       upgradeAnimTimer: 0
     };
 
+    // Starter free 5x5 razor-wire barricade perimeter surrounding the 3x3 HQ plaza
+    const wallDef = DATA.ITEMS && DATA.ITEMS.barricade_wall;
+    if (wallDef) {
+      const wallProf = G.getStructLevelProfile ? G.getStructLevelProfile(wallDef, 1) : null;
+      const wallMaxHp = (wallProf && wallProf.baseMaxHp) || wallDef.maxHp || 180;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== 2) continue;
+          const wx = hx + dx;
+          const wy = hy + dy;
+          if (wx > 0 && wy > 0 && wx < N - 1 && wy < N - 1 && !state.structGrid[wy][wx]) {
+            state.structGrid[wy][wx] = {
+              uid: G.nextStructUid++,
+              id: 'barricade_wall',
+              level: 1,
+              xp: 0,
+              rank: 0,
+              kills: 0,
+              usedVoucher: true,
+              invested: { wood: 0, scrap: 0, coin: 0 },
+              hp: wallMaxHp,
+              maxHp: wallMaxHp,
+              cooldown: 0,
+              aimAngle: 0,
+              buildAnimTimer: 0,
+              upgradeAnimTimer: 0,
+              promoAnimTimer: 0,
+              fallAnimTimer: 0
+            };
+          }
+        }
+      }
+    }
+
     G.recalculateBaseStats(true);
     state.cozyTierUpTimer = 0;
     state.power = state.powerCap;
