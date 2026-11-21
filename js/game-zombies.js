@@ -923,19 +923,33 @@ window.ZS = window.ZS || {};
   }
 
   function triggerGameOver() {
+    if (state.phase === 'gameover') return;
     state.phase = 'gameover';
     if (state.activeLayer === 'underground') {
       state.activeLayer = 'surface';
       if (ZS.Iso && ZS.Iso.restoreLayerCamera) ZS.Iso.restoreLayerCamera('surface');
       if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
     }
+    const divId = state.divisionId || 'mobile_corps';
+    const preMeta = G.getCommanderMeta ? G.getCommanderMeta() : null;
+    const preRec = preMeta && preMeta.divisions ? preMeta.divisions[divId] : null;
+    state.gameOverPrevBestWave = (preRec && preRec.bestWave) || 0;
     if (G.recordDivisionProgress) {
-      G.recordDivisionProgress(state.divisionId, state.wave, !!(state.bossDefeated && state.wave >= 20));
+      G.recordDivisionProgress(divId, state.wave, !!(state.bossDefeated && state.wave >= 20));
+    }
+    try {
+      if (G.getSaveKey && typeof localStorage !== 'undefined') {
+        localStorage.removeItem(G.getSaveKey());
+      }
+    } catch (e) {
+      // Ignore storage removal errors
     }
     if (G.invalidateStatsCache) G.invalidateStatsCache();
     ZS.Audio.playBlackout();
-    G.banner('지휘 본부 함락 — 작전 실패', `WAVE ${state.wave}에서 방어선이 붕괴했습니다. 상단 [새 작전] 버튼으로 재도전하세요!`, 'danger');
     G.notifyUi();
+    if (ZS._UI && ZS._UI.openGameOverModal) {
+      ZS._UI.openGameOverModal();
+    }
   }
 
   // ================= VFX HELPERS =================
@@ -964,6 +978,7 @@ window.ZS = window.ZS || {};
   }
 
   function spawnZombieDeathVfx(z, zDef) {
+    state.totalKills = (state.totalKills || 0) + 1;
     const sc = (zDef && zDef.scale) || 1.0;
     // 1. ~0.3s collapsing/toppling zombie corpse animation
     state.dyingZombies.push({

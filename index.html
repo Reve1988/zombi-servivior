@@ -611,6 +611,41 @@
     </div>
   </div>
 
+  <!-- Dedicated Game Over Operation Report Modal -->
+  <div id="gameover-modal" class="modal-backdrop gameover-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameover-modal-title">
+    <div class="gameover-plate">
+      <div class="gameover-hazard-strip" aria-hidden="true"></div>
+      <div class="gameover-head">
+        <span class="gameover-alert-badge" aria-hidden="true">
+          <svg class="oz-icon icon-danger" width="24" height="24" viewBox="0 0 24 24"><use href="#oz-state-alert"></use></svg>
+        </span>
+        <div class="gameover-head-copy">
+          <div class="gameover-code-line">OPERATION FAILED · 지휘 본부 함락</div>
+          <h2 id="gameover-modal-title" class="gameover-title">작전 실패 — 방어선 붕괴</h2>
+          <p id="gameover-modal-sub" class="gameover-sub">WAVE 01 방어전 중 지휘 본부가 파괴되었습니다.</p>
+        </div>
+      </div>
+
+      <div id="gameover-unlock-box" class="gameover-unlock-box hidden"></div>
+      <div id="gameover-stats-grid" class="gameover-stats-grid"></div>
+
+      <div class="gameover-actions">
+        <button id="btn-gameover-title" class="gameover-btn secondary" type="button">
+          <svg class="oz-icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-hud-hq"></use></svg>
+          <span>타이틀 메뉴</span>
+        </button>
+        <button id="btn-gameover-division" class="gameover-btn secondary" type="button">
+          <svg class="oz-icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-cat-defense"></use></svg>
+          <span>분과 변경 · 새 작전</span>
+        </button>
+        <button id="btn-gameover-retry" class="gameover-btn primary" type="button">
+          <svg class="oz-icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-sys-reset"></use></svg>
+          <span>같은 분과로 재출격</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Custom Tactical Confirmation Modal (#65: Replaces window.confirm) -->
   <div id="confirm-modal" class="modal-backdrop confirm-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
     <div class="confirm-card">
