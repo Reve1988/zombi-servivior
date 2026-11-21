@@ -325,7 +325,7 @@ window.ZS = window.ZS || {};
       lastTipStateKey = '';
     };
 
-    if (!uiState.pointerClient.inside || !uiState.hoverTile || st.phase !== 'day') {
+    if (uiState.mainMenuOpen || !uiState.pointerClient.inside || !uiState.hoverTile || st.phase !== 'day') {
       hideTip();
       return;
     }

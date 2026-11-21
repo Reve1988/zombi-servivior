@@ -11,6 +11,7 @@ window.ZS = window.ZS || {};
   let isLeftPainting = false;
   let lastPaintKey = '';
   let panStart = { x: 0, y: 0 };
+  let pendingConfirmAction = null;
 
   function resizeCanvas() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -21,6 +22,217 @@ window.ZS = window.ZS || {};
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = true;
     ZS.Iso.setViewport(w, h);
+  }
+
+  // ================= SAVE SUMMARY & TITLE MAIN MENU (#65) =================
+  function getSavedOperationInfo() {
+    try {
+      const saveKey = ZS.Game.getSaveKey ? ZS.Game.getSaveKey() : 'outpost_zero_save_v1';
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(saveKey) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.phase === 'gameover') return null;
+      const waveNum = Number(parsed.wave);
+      if (!Number.isFinite(waveNum) || waveNum < 1) return null;
+      if (!Array.isArray(parsed.structGrid) || !Array.isArray(parsed.floorGrid)) return null;
+      const savedN = parsed.structGrid.length;
+      const N = ZS.DATA.GRID_SIZE;
+      if (savedN !== N && savedN !== 18) return null;
+      const hqLv = Math.max(1, Math.min(4, Number(parsed.hqLevel) || 1));
+      const phaseLabel = parsed.phase === 'night' ? '야간 방어' : '주간 정비';
+      const wavePad = String(Math.floor(waveNum)).padStart(2, '0');
+      return {
+        wave: Math.floor(waveNum),
+        wavePad,
+        hqLevel: hqLv,
+        phase: parsed.phase || 'day',
+        phaseLabel,
+        summaryText: `WAVE ${wavePad} · ${phaseLabel} · 본부 Lv.${hqLv}`
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isConfirmModalOpen() {
+    const modal = document.getElementById('confirm-modal');
+    return !!(modal && !modal.classList.contains('hidden'));
+  }
+
+  function closeConfirmModal() {
+    const modal = document.getElementById('confirm-modal');
+    if (modal) modal.classList.add('hidden');
+    pendingConfirmAction = null;
+  }
+
+  function openConfirmModal(opts) {
+    const o = opts || {};
+    const modal = document.getElementById('confirm-modal');
+    if (!modal) {
+      if (typeof o.onAccept === 'function') o.onAccept();
+      return;
+    }
+    const titleEl = document.getElementById('confirm-modal-title');
+    const descEl = document.getElementById('confirm-modal-desc');
+    const acceptLabelEl = document.getElementById('confirm-accept-label');
+    if (titleEl) titleEl.textContent = o.title || '새 작전 개시 확인';
+    if (descEl) descEl.textContent = o.desc || '현재 진행 중인 작전을 초기화하고 WAVE 01부터 새 작전을 시작할까요?';
+    if (acceptLabelEl) acceptLabelEl.textContent = o.acceptText || '새 작전 개시';
+    pendingConfirmAction = typeof o.onAccept === 'function' ? o.onAccept : null;
+    modal.classList.remove('hidden');
+  }
+
+  function setMenuOptionsOpen(open) {
+    uiState.menuOptionsOpen = !!open;
+    const drawer = document.getElementById('menu-options-drawer');
+    const btn = document.getElementById('btn-menu-options');
+    if (drawer) drawer.classList.toggle('hidden', !uiState.menuOptionsOpen);
+    if (btn) {
+      btn.setAttribute('aria-expanded', uiState.menuOptionsOpen ? 'true' : 'false');
+      btn.classList.toggle('active', uiState.menuOptionsOpen);
+    }
+  }
+
+  function syncSettingsButtons() {
+    const muted = ZS.Audio.isMuted ? ZS.Audio.isMuted() : false;
+    const soundHtml = `${ozIcon(muted ? 'sys-sound-off' : 'sys-sound-on', 16)}<span>${muted ? '효과음 꺼짐' : '효과음 켜짐'}</span>`;
+    const soundBtn = document.getElementById('btn-sound');
+    if (soundBtn) {
+      soundBtn.innerHTML = soundHtml;
+      soundBtn.classList.toggle('toggle-off', !!muted);
+    }
+    const menuSoundBtn = document.getElementById('btn-menu-sound');
+    if (menuSoundBtn) {
+      menuSoundBtn.innerHTML = soundHtml;
+      menuSoundBtn.classList.toggle('toggle-off', !!muted);
+    }
+
+    const shakeOn = ZS.Game.isScreenShakeEnabled ? ZS.Game.isScreenShakeEnabled() : true;
+    const shakeHtml = `${ozIcon(shakeOn ? 'sys-shake-on' : 'sys-shake-off', 16)}<span>${shakeOn ? '화면 흔들림 ON' : '화면 흔들림 OFF'}</span>`;
+    const shakeBtn = document.getElementById('btn-shake');
+    if (shakeBtn) {
+      shakeBtn.innerHTML = shakeHtml;
+      shakeBtn.classList.toggle('toggle-off', !shakeOn);
+    }
+    const menuShakeBtn = document.getElementById('btn-menu-shake');
+    if (menuShakeBtn) {
+      menuShakeBtn.innerHTML = shakeHtml;
+      menuShakeBtn.classList.toggle('toggle-off', !shakeOn);
+    }
+  }
+
+  function refreshMainMenuState() {
+    const info = getSavedOperationInfo();
+    const contBtn = document.getElementById('btn-menu-continue');
+    const contSub = document.getElementById('menu-continue-sub');
+    const newBtn = document.getElementById('btn-menu-new');
+    const newSub = document.getElementById('menu-new-sub');
+
+    if (info) {
+      if (contBtn) {
+        contBtn.disabled = false;
+        contBtn.classList.add('primary-gold');
+      }
+      if (contSub) contSub.textContent = info.summaryText;
+      if (newBtn) newBtn.classList.remove('primary-gold');
+      if (newSub) newSub.textContent = '기존 작전을 초기화하고 WAVE 01부터 새로 지휘';
+    } else {
+      if (contBtn) {
+        contBtn.disabled = true;
+        contBtn.classList.remove('primary-gold');
+      }
+      if (contSub) contSub.textContent = '저장된 작전 기록 없음';
+      if (newBtn) newBtn.classList.add('primary-gold');
+      if (newSub) newSub.textContent = 'WAVE 01부터 새로운 전초기지 지휘 개시';
+    }
+    syncSettingsButtons();
+  }
+
+  function setMainMenuOpen(open) {
+    const flag = !!open;
+    uiState.mainMenuOpen = flag;
+    document.body.classList.toggle('main-menu-active', flag);
+    const menuEl = document.getElementById('main-menu');
+    if (menuEl) menuEl.classList.toggle('hidden', !flag);
+
+    if (flag) {
+      isPanning = false;
+      isLeftPainting = false;
+      Object.keys(keys).forEach((k) => {
+        keys[k] = false;
+      });
+      uiState.hoverTile = null;
+      uiState.inspectedTile = null;
+      uiState.movingSource = null;
+      uiState.activeSkill = null;
+      uiState.pointerClient.inside = false;
+      document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
+      document.getElementById('trader-modal')?.classList.add('hidden');
+      U.updateCursorTooltip();
+      refreshMainMenuState();
+    } else {
+      setMenuOptionsOpen(false);
+      U.updateHud();
+    }
+  }
+
+  function resumeSavedOperation() {
+    const info = getSavedOperationInfo();
+    if (!info) return;
+    if (ZS.Game.state.phase === 'gameover') {
+      ZS.Game.loadGame();
+    }
+    uiState.inspectedTile = null;
+    U.setToolMode('inspect');
+    ZS.Iso.resetCamera();
+    setMainMenuOpen(false);
+    if (ZS.Audio.playBuild) ZS.Audio.playBuild();
+  }
+
+  function executeStartNewOperation() {
+    closeConfirmModal();
+    uiState.inspectedTile = null;
+    U.setToolMode('inspect');
+    ZS.Iso.resetCamera();
+    setMainMenuOpen(false);
+    ZS.Game.clearSaveAndReset();
+    U.showWaveBanner(
+      'Dead-End Defense 지휘권 인수 완료',
+      '낮 동안 방어선·발전기·모던 쉘터를 구축하고 [웨이브 시작]을 눌러 야간 방어에 돌입하세요!',
+      'info'
+    );
+    if (ZS.Audio.playBuild) ZS.Audio.playBuild();
+  }
+
+  function beginNewOperationFlow() {
+    const info = getSavedOperationInfo();
+    if (!info) {
+      executeStartNewOperation();
+      return;
+    }
+    openConfirmModal({
+      title: '새 작전 개시 확인',
+      desc: `현재 진행 중인 작전(WAVE ${info.wavePad})을 초기화하고 WAVE 01부터 새 작전을 시작할까요?`,
+      acceptText: '새 작전 개시',
+      onAccept: executeStartNewOperation
+    });
+  }
+
+  function returnToTitleMenu() {
+    const st = ZS.Game.state;
+    const saveFn = ZS.Game.saveGame || (ZS._Game && ZS._Game.saveGame);
+    if (st.phase !== 'gameover' && saveFn) {
+      saveFn();
+    }
+    closeConfirmModal();
+    document.getElementById('settings-popover')?.classList.add('hidden');
+    const settingsBtn = document.getElementById('btn-settings');
+    if (settingsBtn) {
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      settingsBtn.classList.remove('active');
+    }
+    ZS.Iso.resetCamera();
+    setMainMenuOpen(true);
   }
 
   // ================= INPUT HANDLING =================
@@ -113,6 +325,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
+      if (uiState.mainMenuOpen || isConfirmModalOpen()) return;
       if (e.button === 2 || e.button === 1 || (e.button === 0 && keys['Space'])) {
         isPanning = true;
         panStart.x = e.clientX;
@@ -140,6 +353,13 @@ window.ZS = window.ZS || {};
     });
 
     window.addEventListener('mousemove', (e) => {
+      if (uiState.mainMenuOpen || isConfirmModalOpen()) {
+        uiState.pointerClient.inside = false;
+        uiState.hoverTile = null;
+        U.updateCursorTooltip();
+        return;
+      }
+
       if (isPanning) {
         const dx = e.clientX - panStart.x;
         const dy = e.clientY - panStart.y;
@@ -172,6 +392,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener(
       'wheel',
       (e) => {
+        if (uiState.mainMenuOpen || isConfirmModalOpen()) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.91;
         ZS.Iso.zoomAtScreen(factor, e.clientX, e.clientY);
@@ -216,18 +437,37 @@ window.ZS = window.ZS || {};
     }
 
     window.addEventListener('keydown', (e) => {
-      keys[e.code] = true;
-      const activeTag = document.activeElement && document.activeElement.tagName;
-      const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      const guideEl = document.getElementById('guide-modal');
+      const traderEl = document.getElementById('trader-modal');
+
       if (e.code === 'Escape') {
+        if (isConfirmModalOpen()) {
+          closeConfirmModal();
+          return;
+        }
+        if (guideEl && !guideEl.classList.contains('hidden')) {
+          guideEl.classList.add('hidden');
+          return;
+        }
+        if (uiState.mainMenuOpen) {
+          if (uiState.menuOptionsOpen) setMenuOptionsOpen(false);
+          return;
+        }
         setSettingsOpen(false);
         uiState.inspectedTile = null;
         U.setToolMode('inspect');
-        document.getElementById('trader-modal').classList.add('hidden');
-        document.getElementById('guide-modal').classList.add('hidden');
-      } else if (!isTyping && /^Digit([1-9])$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const traderHidden = document.getElementById('trader-modal').classList.contains('hidden');
-        const guideHidden = document.getElementById('guide-modal').classList.contains('hidden');
+        traderEl?.classList.add('hidden');
+        return;
+      }
+
+      if (uiState.mainMenuOpen || isConfirmModalOpen()) return;
+
+      keys[e.code] = true;
+      const activeTag = document.activeElement && document.activeElement.tagName;
+      const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      if (!isTyping && /^Digit([1-9])$/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const traderHidden = !traderEl || traderEl.classList.contains('hidden');
+        const guideHidden = !guideEl || guideEl.classList.contains('hidden');
         if (ZS.Game.state.phase === 'day' && traderHidden && guideHidden) {
           const slotIdx = Number(RegExp.$1) - 1;
           const items = Object.values(ZS.DATA.ITEMS).filter((def) => def.category === uiState.activeCategory);
@@ -348,36 +588,30 @@ window.ZS = window.ZS || {};
       else U.updateHud();
     });
 
-    const soundBtn = document.getElementById('btn-sound');
-    if (soundBtn) {
-      const syncSoundBtn = (muted) => {
-        soundBtn.innerHTML = `${ozIcon(muted ? 'sys-sound-off' : 'sys-sound-on', 16)}<span>${muted ? '효과음 꺼짐' : '효과음 켜짐'}</span>`;
-        soundBtn.classList.toggle('toggle-off', !!muted);
-      };
-      syncSoundBtn(ZS.Audio.isMuted ? ZS.Audio.isMuted() : false);
-      soundBtn.addEventListener('click', () => {
-        const muted = ZS.Audio.toggleMute();
-        syncSoundBtn(muted);
-      });
-    }
+    const handleToggleSound = () => {
+      ZS.Audio.toggleMute();
+      syncSettingsButtons();
+    };
 
-    const shakeBtn = document.getElementById('btn-shake');
-    if (shakeBtn && ZS.Game.isScreenShakeEnabled) {
-      const syncShakeBtn = () => {
-        const on = ZS.Game.isScreenShakeEnabled();
-        shakeBtn.innerHTML = `${ozIcon(on ? 'sys-shake-on' : 'sys-shake-off', 16)}<span>${on ? '화면 흔들림 ON' : '화면 흔들림 OFF'}</span>`;
-        shakeBtn.classList.toggle('toggle-off', !on);
-      };
-      syncShakeBtn();
-      shakeBtn.addEventListener('click', () => {
-        const on = ZS.Game.toggleScreenShake();
-        syncShakeBtn();
+    const handleToggleShake = (showToast) => {
+      const on = ZS.Game.toggleScreenShake();
+      syncSettingsButtons();
+      if (showToast && !uiState.mainMenuOpen) {
         U.showWaveBanner(
           on ? '화면 흔들림 켜짐' : '화면 흔들림 꺼짐',
           on ? '폭격·보스 등장·본부 피격 시 미세한 진동 피드백이 재생됩니다.' : '카메라 화면 흔들림 연출이 비활성화되었습니다.',
           'info'
         );
-      });
+      }
+    };
+
+    syncSettingsButtons();
+    document.getElementById('btn-sound')?.addEventListener('click', handleToggleSound);
+    document.getElementById('btn-menu-sound')?.addEventListener('click', handleToggleSound);
+
+    if (ZS.Game.isScreenShakeEnabled) {
+      document.getElementById('btn-shake')?.addEventListener('click', () => handleToggleShake(true));
+      document.getElementById('btn-menu-shake')?.addEventListener('click', () => handleToggleShake(false));
     }
 
     const hqBoxEl = document.getElementById('hud-hq-box');
@@ -409,13 +643,48 @@ window.ZS = window.ZS || {};
       document.getElementById('guide-modal').classList.add('hidden');
     });
 
+    document.getElementById('btn-return-title')?.addEventListener('click', () => {
+      setSettingsOpen(false);
+      returnToTitleMenu();
+    });
+
     document.getElementById('btn-reset').addEventListener('click', () => {
       setSettingsOpen(false);
-      if (confirm('현재 기지를 초기화하고 WAVE 1부터 새 작전을 시작할까요?')) {
-        uiState.inspectedTile = null;
-        U.setToolMode('inspect');
-        ZS.Iso.resetCamera();
-        ZS.Game.clearSaveAndReset();
+      const st = ZS.Game.state;
+      const curWavePad = String(Math.max(1, Math.floor(st.wave || 1))).padStart(2, '0');
+      openConfirmModal({
+        title: '새 작전 초기화 확인',
+        desc: `현재 진행 중인 기지(WAVE ${curWavePad})를 초기화하고 WAVE 01부터 새 작전을 시작할까요?`,
+        acceptText: '새 작전 개시',
+        onAccept: executeStartNewOperation
+      });
+    });
+
+    // Title Main Menu & Custom Confirm Modal Controls (#65)
+    document.getElementById('btn-menu-continue')?.addEventListener('click', () => {
+      resumeSavedOperation();
+    });
+    document.getElementById('btn-menu-new')?.addEventListener('click', () => {
+      beginNewOperationFlow();
+    });
+    document.getElementById('btn-menu-options')?.addEventListener('click', () => {
+      setMenuOptionsOpen(!uiState.menuOptionsOpen);
+    });
+    document.getElementById('btn-menu-guide')?.addEventListener('click', () => {
+      document.getElementById('guide-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-confirm-cancel')?.addEventListener('click', () => {
+      closeConfirmModal();
+    });
+    document.getElementById('btn-confirm-accept')?.addEventListener('click', () => {
+      const fn = pendingConfirmAction;
+      closeConfirmModal();
+      if (typeof fn === 'function') fn();
+    });
+    document.getElementById('confirm-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'confirm-modal') {
+        closeConfirmModal();
       }
     });
   }
@@ -442,20 +711,22 @@ window.ZS = window.ZS || {};
     const rawDt = Math.min(0.05, Math.max(0.001, (nowMs - lastFrameMs) / 1000));
     lastFrameMs = nowMs;
 
-    // Smooth WASD / Arrow camera pan
-    const panSpd = 380 * rawDt;
-    if (keys['KeyW'] || keys['ArrowUp']) ZS.Iso.panByScreen(0, panSpd);
-    if (keys['KeyS'] || keys['ArrowDown']) ZS.Iso.panByScreen(0, -panSpd);
-    if (keys['KeyA'] || keys['ArrowLeft']) ZS.Iso.panByScreen(panSpd, 0);
-    if (keys['KeyD'] || keys['ArrowRight']) ZS.Iso.panByScreen(-panSpd, 0);
+    if (!uiState.mainMenuOpen) {
+      // Smooth WASD / Arrow camera pan
+      const panSpd = 380 * rawDt;
+      if (keys['KeyW'] || keys['ArrowUp']) ZS.Iso.panByScreen(0, panSpd);
+      if (keys['KeyS'] || keys['ArrowDown']) ZS.Iso.panByScreen(0, -panSpd);
+      if (keys['KeyA'] || keys['ArrowLeft']) ZS.Iso.panByScreen(panSpd, 0);
+      if (keys['KeyD'] || keys['ArrowRight']) ZS.Iso.panByScreen(-panSpd, 0);
 
-    ZS.Game.update(rawDt);
+      ZS.Game.update(rawDt);
 
-    if (ZS.Game.state.phase === 'night') {
-      hudTick += rawDt;
-      if (hudTick >= 0.16) {
-        hudTick = 0;
-        U.updateLiveNightNumbers();
+      if (ZS.Game.state.phase === 'night') {
+        hudTick += rawDt;
+        if (hudTick >= 0.16) {
+          hudTick = 0;
+          U.updateLiveNightNumbers();
+        }
       }
     }
 
@@ -537,15 +808,19 @@ window.ZS = window.ZS || {};
     const env = ZS.Game.getEnvInfo ? ZS.Game.getEnvInfo() : { isDevBuild: false, isDevEnvironment: false, isDebugMode: false };
     const ver = ZS.DATA.VERSION || 'v0.5.1';
     const hudVer = document.getElementById('hud-version');
+    const menuVer = document.getElementById('menu-version');
     const guideVer = document.getElementById('guide-version');
-    if (hudVer) {
+    const applyVersionLabel = (el) => {
+      if (!el) return;
       if (env.isDevBuild) {
         const shaLabel = env.commitSha ? `DEV · #${env.commitSha}` : 'DEV';
-        hudVer.innerHTML = `<span>${ver}</span><span class="dev-build-badge" title="develop 스테이징 빌드 (세이브 격리됨)">${shaLabel}</span>`;
+        el.innerHTML = `<span>${ver}</span><span class="dev-build-badge" title="develop 스테이징 빌드 (세이브 격리됨)">${shaLabel}</span>`;
       } else {
-        hudVer.textContent = ver;
+        el.textContent = ver;
       }
-    }
+    };
+    applyVersionLabel(hudVer);
+    applyVersionLabel(menuVer);
     if (guideVer) guideVer.textContent = ver;
     document.title = env.isDevBuild
       ? '[DEV] Dead-End Defense — 스테이징 검수 빌드'
@@ -559,23 +834,44 @@ window.ZS = window.ZS || {};
       onWaveBanner: U.showWaveBanner
     });
 
-    if (!ZS.Game.loadGame()) {
+    const initialSave = getSavedOperationInfo();
+    if (!initialSave || !ZS.Game.loadGame()) {
+      const saveKey = ZS.Game.getSaveKey ? ZS.Game.getSaveKey() : 'outpost_zero_save_v1';
+      let prevRawSave = null;
+      try {
+        prevRawSave = typeof localStorage !== 'undefined' ? localStorage.getItem(saveKey) : null;
+      } catch (e) {}
       ZS.Game.initNewGame();
-      U.showWaveBanner(
-        'Dead-End Defense 지휘권 인수 완료',
-        '낮 동안 방어선·발전기·모던 쉘터를 구축하고 [웨이브 시작]을 눌러 야간 방어에 돌입하세요!',
-        'info'
-      );
+      try {
+        if (prevRawSave == null) {
+          localStorage.removeItem(saveKey);
+        } else {
+          localStorage.setItem(saveKey, prevRawSave);
+        }
+      } catch (e) {}
     }
 
     U.renderCategoryTabs();
     U.updateHud();
     bindEvents();
+    setMainMenuOpen(true);
     requestAnimationFrame(loop);
   }
 
   Object.assign(U, {
     resizeCanvas,
+    getSavedOperationInfo,
+    isConfirmModalOpen,
+    openConfirmModal,
+    closeConfirmModal,
+    setMenuOptionsOpen,
+    syncSettingsButtons,
+    refreshMainMenuState,
+    setMainMenuOpen,
+    resumeSavedOperation,
+    beginNewOperationFlow,
+    executeStartNewOperation,
+    returnToTitleMenu,
     handleRemoveTile,
     handlePrimaryTileAction,
     bindEvents,
