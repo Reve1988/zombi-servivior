@@ -2340,7 +2340,7 @@ window.ZS = window.ZS || {};
       case 'missile_pod': return 22;
       case 'emp_coil': return 35;
       case 'solar_array': return [12, 17, 24, 34][Math.min(4, Math.max(1, level || 1)) - 1];
-      case 'wind_turbine': return [30, 44, 60, 70][Math.min(4, Math.max(1, level || 1)) - 1];
+      case 'wind_turbine': return [34, 46, 60, 74][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'battery_bank': return [14, 22, 33, 40][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'field_tent': return [16, 19, 22, 32][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'shelter_pod': return 22;
@@ -2650,6 +2650,9 @@ window.ZS = window.ZS || {};
 
   function drawSlantedSolarPanel(ctx, gx, gy, w, d, zBack, zFront, thick, frameHex, cellHex, gridHex, cols, rows, zScale) {
     const Iso = ZS.Iso;
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
+    const mods = Iso.getRenderModifiers();
+    const isPlain = isSil || mods.flash > 0.01;
     const a = Iso.gridToScreen(gx, gy, zBack);
     const b = Iso.gridToScreen(gx + w, gy, zBack);
     const c = Iso.gridToScreen(gx + w, gy + d, zFront);
@@ -2657,32 +2660,122 @@ window.ZS = window.ZS || {};
     const bB = Iso.gridToScreen(gx + w, gy, zBack - thick);
     const cB = Iso.gridToScreen(gx + w, gy + d, zFront - thick);
     const dB = Iso.gridToScreen(gx, gy + d, zFront - thick);
+    const aB = Iso.gridToScreen(gx, gy, zBack - thick);
+
+    // Side & back thickness extrusions of brushed aluminum bezel frame
+    drawPolyFace(ctx, [a, dd, dB, aB], frameHex, 0.88, false, true, zScale);
     drawPolyFace(ctx, [dd, c, cB, dB], frameHex, 0.82, false, true, zScale);
     drawPolyFace(ctx, [c, b, bB, cB], frameHex, 0.66, false, true, zScale);
-    drawPolyFace(ctx, [a, b, c, dd], cellHex, 1.0, false, true, zScale);
-    if (!window.ZS_SILHOUETTE_MODE) {
-      ctx.strokeStyle = Iso.resolveFaceColor(gridHex, 1.0, false, 0) || gridHex;
-      ctx.lineWidth = Math.max(0.75, 0.85 * zScale);
-      for (let i = 1; i < cols; i++) {
-        const sx = gx + (w * i) / cols;
-        const p1 = Iso.gridToScreen(sx, gy, zBack);
-        const p2 = Iso.gridToScreen(sx, gy + d, zFront);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-      }
-      for (let j = 1; j < rows; j++) {
-        const t = j / rows;
-        const sy = gy + d * t;
-        const sz = zBack + (zFront - zBack) * t;
-        const m1 = Iso.gridToScreen(gx, sy, sz);
-        const m2 = Iso.gridToScreen(gx + w, sy, sz);
-        ctx.beginPath();
+
+    // Top metallic bezel rim
+    drawPolyFace(ctx, [a, b, c, dd], frameHex, 1.0, false, true, zScale);
+
+    // Inset dark slate-navy solar cell wafer bed
+    const bX = Math.min(w * 0.08, 0.032);
+    const bY = Math.min(d * 0.08, 0.032);
+    const cX0 = gx + bX;
+    const cX1 = gx + w - bX;
+    const cY0 = gy + bY;
+    const cY1 = gy + d - bY;
+    const cW = Math.max(0.04, cX1 - cX0);
+    const cD = Math.max(0.04, cY1 - cY0);
+    const t0 = bY / Math.max(0.01, d);
+    const t1 = 1 - t0;
+    const zC0 = zBack + (zFront - zBack) * t0 + 0.05;
+    const zC1 = zBack + (zFront - zBack) * t1 + 0.05;
+    const ca = Iso.gridToScreen(cX0, cY0, zC0);
+    const cb = Iso.gridToScreen(cX1, cY0, zC0);
+    const cc = Iso.gridToScreen(cX1, cY1, zC1);
+    const cd = Iso.gridToScreen(cX0, cY1, zC1);
+
+    if (!isPlain) {
+      const topCol = Iso.resolveFaceColor(cellHex, 1.14, false, 0) || cellHex;
+      const botCol = Iso.resolveFaceColor(cellHex, 0.82, false, 0) || cellHex;
+      const grad = ctx.createLinearGradient(ca.x, ca.y, cc.x, cc.y);
+      grad.addColorStop(0, topCol);
+      grad.addColorStop(0.55, Iso.resolveFaceColor(cellHex, 0.98, false, 0) || cellHex);
+      grad.addColorStop(1, botCol);
+      ctx.beginPath();
+      ctx.moveTo(ca.x, ca.y);
+      ctx.lineTo(cb.x, cb.y);
+      ctx.lineTo(cc.x, cc.y);
+      ctx.lineTo(cd.x, cd.y);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(8, 14, 22, 0.55)';
+      ctx.lineWidth = Math.max(0.6, 0.75 * zScale);
+      ctx.stroke();
+    } else {
+      drawPolyFace(ctx, [ca, cb, cc, cd], cellHex, 1.0, false, true, zScale);
+    }
+
+    if (!isPlain) {
+      // Crisp silver-slate cell grid busbars & micro sub-lines
+      const busCol = Iso.resolveFaceColor(gridHex, 1.0, false, 0) || gridHex;
+      const subCol = Iso.resolveFaceColor(gridHex, 0.68, false, 0) || gridHex;
+
+      // Micro horizontal wafer sub-divisions
+      const subRows = rows * 2;
+      ctx.strokeStyle = subCol;
+      ctx.lineWidth = Math.max(0.45, 0.52 * zScale);
+      ctx.beginPath();
+      for (let j = 1; j < subRows; j++) {
+        if (j % 2 === 0) continue;
+        const tf = j / subRows;
+        const sy = cY0 + cD * tf;
+        const sz = zC0 + (zC1 - zC0) * tf;
+        const m1 = Iso.gridToScreen(cX0, sy, sz);
+        const m2 = Iso.gridToScreen(cX1, sy, sz);
         ctx.moveTo(m1.x, m1.y);
         ctx.lineTo(m2.x, m2.y);
-        ctx.stroke();
       }
+      ctx.stroke();
+
+      // Primary silver cell divisions
+      ctx.strokeStyle = busCol;
+      ctx.lineWidth = Math.max(0.7, 0.82 * zScale);
+      ctx.beginPath();
+      for (let i = 1; i < cols; i++) {
+        const sx = cX0 + (cW * i) / cols;
+        const p1 = Iso.gridToScreen(sx, cY0, zC0);
+        const p2 = Iso.gridToScreen(sx, cY1, zC1);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      for (let j = 1; j < rows; j++) {
+        const tf = j / rows;
+        const sy = cY0 + cD * tf;
+        const sz = zC0 + (zC1 - zC0) * tf;
+        const m1 = Iso.gridToScreen(cX0, sy, sz);
+        const m2 = Iso.gridToScreen(cX1, sy, sz);
+        ctx.moveTo(m1.x, m1.y);
+        ctx.lineTo(m2.x, m2.y);
+      }
+      ctx.stroke();
+
+      // Diagonal upper-left tempered glass specular glint streak
+      const g0 = Iso.gridToScreen(cX0 + cW * 0.08, cY0 + cD * 0.28, zC0 + (zC1 - zC0) * 0.28 + 0.06);
+      const g1 = Iso.gridToScreen(cX0 + cW * 0.36, cY0 + cD * 0.06, zC0 + (zC1 - zC0) * 0.06 + 0.06);
+      const g2 = Iso.gridToScreen(cX0 + cW * 0.48, cY0 + cD * 0.06, zC0 + (zC1 - zC0) * 0.06 + 0.06);
+      const g3 = Iso.gridToScreen(cX0 + cW * 0.16, cY0 + cD * 0.38, zC0 + (zC1 - zC0) * 0.38 + 0.06);
+      ctx.fillStyle = 'rgba(220, 240, 255, 0.16)';
+      ctx.beginPath();
+      ctx.moveTo(g0.x, g0.y);
+      ctx.lineTo(g1.x, g1.y);
+      ctx.lineTo(g2.x, g2.y);
+      ctx.lineTo(g3.x, g3.y);
+      ctx.closePath();
+      ctx.fill();
+
+      // Sunlit top-left bezel edge specular highlight
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
+      ctx.lineWidth = Math.max(0.7, 0.85 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(dd.x, dd.y);
+      ctx.lineTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
     }
   }
 
@@ -2880,6 +2973,522 @@ window.ZS = window.ZS || {};
     }
   }
 
+  // ===================== #95 DIORAMA DETAIL KIT (Reusable Bevel, Micro-Surface & Ground Glow Helpers) =====================
+  const _dbA = { x: 0, y: 0 };
+  const _dbB = { x: 0, y: 0 };
+  const _dbC = { x: 0, y: 0 };
+  const _dbD = { x: 0, y: 0 };
+  const _dbBb = { x: 0, y: 0 };
+  const _dbCb = { x: 0, y: 0 };
+  const _dbDb = { x: 0, y: 0 };
+  const _dbLeftQuad = [_dbD, _dbC, _dbCb, _dbDb];
+  const _dbRightQuad = [_dbC, _dbB, _dbBb, _dbCb];
+  const _dbTopQuad = [_dbA, _dbB, _dbC, _dbD];
+
+  function isPlainDetailFallback() {
+    return !!window.ZS_SILHOUETTE_MODE || ZS.Iso.getRenderModifiers().flash > 0.01;
+  }
+
+  function fillShadedGradFace(ctx, pts, hex, topFactor, botFactor, withEdge, zScale) {
+    const Iso = ZS.Iso;
+    const cTop = Iso.resolveFaceColor(hex, topFactor, false, 0);
+    const cBot = Iso.resolveFaceColor(hex, botFactor, false, 0);
+    if (!cTop || !cBot) return;
+    let minY = pts[0].y;
+    let maxY = pts[0].y;
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i].y < minY) minY = pts[i].y;
+      if (pts[i].y > maxY) maxY = pts[i].y;
+    }
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+      else ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.closePath();
+    if (maxY - minY > 1.5) {
+      const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+      grad.addColorStop(0, cTop);
+      grad.addColorStop(1, cBot);
+      ctx.fillStyle = grad;
+    } else {
+      ctx.fillStyle = cTop;
+    }
+    ctx.fill();
+    if (withEdge !== false) {
+      ctx.strokeStyle = 'rgba(10, 14, 20, 0.30)';
+      ctx.lineWidth = Math.max(0.65, 0.78 * zScale);
+      ctx.stroke();
+    }
+  }
+
+  function drawDetailedIsoBox(ctx, gx, gy, z, w, d, h, hex, opts, zScale) {
+    const o = opts || {};
+    if (o.emissive || isPlainDetailFallback()) {
+      drawIsoBox(ctx, gx, gy, z, w, d, h, hex, o, zScale);
+      return;
+    }
+    const Iso = ZS.Iso;
+    const withEdge = o.edge !== false;
+    const noTop = !!o.noTop;
+    const bevel = o.bevel !== false;
+    const groundCrease = !!o.groundCrease;
+    const gradDrop = o.gradDrop != null ? o.gradDrop : 0.085;
+    const zTop = z + h;
+
+    Iso.projectTo(gx, gy, zTop, _dbA);
+    Iso.projectTo(gx + w, gy, zTop, _dbB);
+    Iso.projectTo(gx + w, gy + d, zTop, _dbC);
+    Iso.projectTo(gx, gy + d, zTop, _dbD);
+
+    if (h > 0) {
+      Iso.projectTo(gx + w, gy, z, _dbBb);
+      Iso.projectTo(gx + w, gy + d, z, _dbCb);
+      Iso.projectTo(gx, gy + d, z, _dbDb);
+      // Preserve Top 100% / Left 82% / Right 66% hierarchy with subtle top-to-bottom falloff
+      fillShadedGradFace(ctx, _dbLeftQuad, hex, Math.min(0.86, 0.82 + gradDrop * 0.35), Math.max(0.70, 0.82 - gradDrop), withEdge, zScale);
+      fillShadedGradFace(ctx, _dbRightQuad, hex, Math.min(0.70, 0.66 + gradDrop * 0.30), Math.max(0.54, 0.66 - gradDrop), withEdge, zScale);
+
+      if (groundCrease) {
+        ctx.strokeStyle = 'rgba(6, 10, 16, 0.42)';
+        ctx.lineWidth = Math.max(0.8, 1.05 * zScale);
+        ctx.beginPath();
+        ctx.moveTo(_dbDb.x, _dbDb.y);
+        ctx.lineTo(_dbCb.x, _dbCb.y);
+        ctx.lineTo(_dbBb.x, _dbBb.y);
+        ctx.stroke();
+      }
+    }
+
+    if (!noTop) {
+      const topHex = o.topHex || hex;
+      fillShadedGradFace(ctx, _dbTopQuad, topHex, 1.03, 0.96, withEdge, zScale);
+      if (bevel) {
+        // 1px sunlit top-left specular bevel edge + front V-ridge crisp highlight
+        ctx.strokeStyle = o.bevelColor || 'rgba(255, 255, 255, 0.32)';
+        ctx.lineWidth = Math.max(0.7, 0.88 * zScale);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(_dbD.x, _dbD.y);
+        ctx.lineTo(_dbA.x, _dbA.y);
+        ctx.lineTo(_dbB.x, _dbB.y);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+        ctx.lineWidth = Math.max(0.6, 0.72 * zScale);
+        ctx.beginPath();
+        ctx.moveTo(_dbD.x, _dbD.y);
+        ctx.lineTo(_dbC.x, _dbC.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawDetailedFrustum(ctx, gx, gy, z, w, d, h, inset, hex, opts, zScale) {
+    const o = opts || {};
+    if (o.emissive || isPlainDetailFallback()) {
+      drawFrustum(ctx, gx, gy, z, w, d, h, inset, hex, o, zScale);
+      return;
+    }
+    const Iso = ZS.Iso;
+    const noTop = !!o.noTop;
+    const zTop = z + h;
+    const ix = o.ix != null ? o.ix : inset;
+    const iy = o.iy != null ? o.iy : inset;
+    Iso.projectTo(gx, gy, z, _frB0);
+    Iso.projectTo(gx + w, gy, z, _frB1);
+    Iso.projectTo(gx + w, gy + d, z, _frB2);
+    Iso.projectTo(gx, gy + d, z, _frB3);
+    Iso.projectTo(gx + ix, gy + iy, zTop, _frT0);
+    Iso.projectTo(gx + w - ix, gy + iy, zTop, _frT1);
+    Iso.projectTo(gx + w - ix, gy + d - iy, zTop, _frT2);
+    Iso.projectTo(gx + ix, gy + d - iy, zTop, _frT3);
+
+    drawPolyFace(ctx, _frFace0, hex, 0.94, false, true, zScale);
+    drawPolyFace(ctx, _frFace1, hex, 0.94, false, true, zScale);
+    fillShadedGradFace(ctx, _frFace2, hex, 0.86, 0.75, true, zScale);
+    fillShadedGradFace(ctx, _frFace3, hex, 0.70, 0.59, true, zScale);
+
+    if (o.groundCrease) {
+      ctx.strokeStyle = 'rgba(6, 10, 16, 0.42)';
+      ctx.lineWidth = Math.max(0.8, 1.05 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(_frB3.x, _frB3.y);
+      ctx.lineTo(_frB2.x, _frB2.y);
+      ctx.lineTo(_frB1.x, _frB1.y);
+      ctx.stroke();
+    }
+
+    if (!noTop) {
+      fillShadedGradFace(ctx, _frFaceTop, o.topHex || hex, 1.03, 0.96, true, zScale);
+      if (o.bevel !== false) {
+        ctx.strokeStyle = o.bevelColor || 'rgba(255, 255, 255, 0.30)';
+        ctx.lineWidth = Math.max(0.7, 0.85 * zScale);
+        ctx.beginPath();
+        ctx.moveTo(_frT3.x, _frT3.y);
+        ctx.lineTo(_frT0.x, _frT0.y);
+        ctx.lineTo(_frT1.x, _frT1.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawTaperedCyl(ctx, cx, cy, z, rBot, rTop, h, hex, opts, zScale) {
+    const Iso = ZS.Iso;
+    const o = opts || {};
+    const n = o.n || 14;
+    const em = !!o.emissive;
+    const noTop = !!o.noTop;
+    const topEdge = o.topEdge !== false;
+    const lut = getCylLut(n);
+    const cos = lut.cos;
+    const sin = lut.sin;
+    const zTop = z + h;
+    const isPlain = em || isPlainDetailFallback();
+
+    if (h > 0) {
+      const sideCount = lut.sideCount;
+      const sideK0 = lut.sideK0;
+      const sideK1 = lut.sideK1;
+      const sideShade = lut.sideShade;
+      for (let i = 0; i < sideCount; i++) {
+        const k0 = sideK0[i];
+        const k1 = sideK1[i];
+        Iso.projectTo(cx + cos[k0] * rTop, cy + sin[k0] * rTop, zTop, _cylSideTop0);
+        Iso.projectTo(cx + cos[k1] * rTop, cy + sin[k1] * rTop, zTop, _cylSideTop1);
+        Iso.projectTo(cx + cos[k1] * rBot, cy + sin[k1] * rBot, z, _cylSideBot1);
+        Iso.projectTo(cx + cos[k0] * rBot, cy + sin[k0] * rBot, z, _cylSideBot0);
+        const sh = sideShade[i];
+        if (!isPlain && o.specHighlight && sh > 0.79) {
+          drawPolyFace(ctx, _cylQuad, hex, Math.min(1.04, sh + 0.08), false, false, zScale);
+        } else {
+          drawPolyFace(ctx, _cylQuad, hex, sh, em, false, zScale);
+        }
+      }
+    }
+    if (!noTop) {
+      const topPts = lut.topPts;
+      for (let k = 0; k < n; k++) {
+        Iso.projectTo(cx + cos[k] * rTop, cy + sin[k] * rTop, zTop, topPts[k]);
+      }
+      drawPolyFace(ctx, topPts, hex, 1.0, em, topEdge, zScale);
+    }
+  }
+
+  function drawIsoFaceSeams(ctx, face, gx, gy, z, w, d, h, divisions, seamColor, zScale) {
+    if (isPlainDetailFallback() || divisions <= 1) return;
+    const Iso = ZS.Iso;
+    ctx.strokeStyle = seamColor || 'rgba(12, 18, 26, 0.34)';
+    ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
+    ctx.beginPath();
+    if (face === 'left') {
+      const yFace = gy + d;
+      for (let i = 1; i < divisions; i++) {
+        const sx = gx + (w * i) / divisions;
+        const p0 = Iso.gridToScreen(sx, yFace, z + 0.3);
+        const p1 = Iso.gridToScreen(sx, yFace, z + h - 0.3);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+    } else if (face === 'right') {
+      const xFace = gx + w;
+      for (let i = 1; i < divisions; i++) {
+        const sy = gy + (d * i) / divisions;
+        const p0 = Iso.gridToScreen(xFace, sy, z + 0.3);
+        const p1 = Iso.gridToScreen(xFace, sy, z + h - 0.3);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+    } else if (face === 'topX') {
+      const zTop = z + h;
+      for (let i = 1; i < divisions; i++) {
+        const sx = gx + (w * i) / divisions;
+        const p0 = Iso.gridToScreen(sx, gy + 0.02, zTop);
+        const p1 = Iso.gridToScreen(sx, gy + d - 0.02, zTop);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+    } else if (face === 'topY') {
+      const zTop = z + h;
+      for (let i = 1; i < divisions; i++) {
+        const sy = gy + (d * i) / divisions;
+        const p0 = Iso.gridToScreen(gx + 0.02, sy, zTop);
+        const p1 = Iso.gridToScreen(gx + w - 0.02, sy, zTop);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+    }
+    ctx.stroke();
+  }
+
+  function drawIsoLouvers(ctx, face, gx, gy, z0, span, count, stepZ, zScale) {
+    if (isPlainDetailFallback() || count <= 0) return;
+    const Iso = ZS.Iso;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < count; i++) {
+      const zz = z0 + i * stepZ;
+      const p0 = face === 'left' ? Iso.gridToScreen(gx, gy, zz) : Iso.gridToScreen(gx, gy, zz);
+      const p1 = face === 'left' ? Iso.gridToScreen(gx + span, gy, zz) : Iso.gridToScreen(gx, gy + span, zz);
+      ctx.strokeStyle = 'rgba(10, 15, 22, 0.56)';
+      ctx.lineWidth = Math.max(0.75, 0.95 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.lineWidth = Math.max(0.45, 0.55 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y + 0.7 * zScale);
+      ctx.lineTo(p1.x, p1.y + 0.7 * zScale);
+      ctx.stroke();
+    }
+  }
+
+  function drawIsoCornerRivets(ctx, gx, gy, zTop, w, d, inset, rPx, rivetHex, zScale) {
+    if (isPlainDetailFallback()) return;
+    const Iso = ZS.Iso;
+    const insX = Math.min(w * 0.28, inset || 0.04);
+    const insY = Math.min(d * 0.28, inset || 0.04);
+    const col = Iso.resolveFaceColor(rivetHex || '#DCE5EE', 1.0, false, 0) || '#DCE5EE';
+    const pts = [
+      Iso.gridToScreen(gx + insX, gy + insY, zTop + 0.1),
+      Iso.gridToScreen(gx + w - insX, gy + insY, zTop + 0.1),
+      Iso.gridToScreen(gx + w - insX, gy + d - insY, zTop + 0.1),
+      Iso.gridToScreen(gx + insX, gy + d - insY, zTop + 0.1)
+    ];
+    ctx.fillStyle = 'rgba(10, 14, 20, 0.45)';
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y + 0.4 * zScale, (rPx + 0.25) * zScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = col;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, rPx * zScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawIsoHazardBand(ctx, gx, gy, z, w, d, h, yellowHex, darkHex, stripes, zScale) {
+    const yCol = yellowHex || '#E6B432';
+    const dCol = darkHex || '#232B35';
+    drawIsoBox(ctx, gx, gy, z, w, d, h, yCol, { noTop: true, edge: false }, zScale);
+    if (isPlainDetailFallback()) return;
+    const Iso = ZS.Iso;
+    const nL = Math.max(2, stripes || Math.round(w * 7));
+    const nR = Math.max(2, stripes || Math.round(d * 7));
+    const leftFill = Iso.resolveFaceColor(dCol, 0.82, false, 0) || dCol;
+    const rightFill = Iso.resolveFaceColor(dCol, 0.66, false, 0) || dCol;
+
+    ctx.fillStyle = leftFill;
+    for (let i = 0; i < nL; i++) {
+      const u0 = (i + 0.15) / nL;
+      const u1 = Math.min(1, u0 + 0.42 / nL);
+      const u0b = Math.max(0, u0 - 0.22 / nL);
+      const u1b = Math.max(0, u1 - 0.22 / nL);
+      const p0 = Iso.gridToScreen(gx + w * u0, gy + d, z + h);
+      const p1 = Iso.gridToScreen(gx + w * u1, gy + d, z + h);
+      const p2 = Iso.gridToScreen(gx + w * u1b, gy + d, z);
+      const p3 = Iso.gridToScreen(gx + w * u0b, gy + d, z);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle = rightFill;
+    for (let i = 0; i < nR; i++) {
+      const u0 = (i + 0.15) / nR;
+      const u1 = Math.min(1, u0 + 0.42 / nR);
+      const u0b = Math.max(0, u0 - 0.22 / nR);
+      const u1b = Math.max(0, u1 - 0.22 / nR);
+      const p0 = Iso.gridToScreen(gx + w, gy + d * u0, z + h);
+      const p1 = Iso.gridToScreen(gx + w, gy + d * u1, z + h);
+      const p2 = Iso.gridToScreen(gx + w, gy + d * u1b, z);
+      const p3 = Iso.gridToScreen(gx + w, gy + d * u0b, z);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function drawSandbagCoursesOnBox(ctx, gx, gy, z, w, d, h, courses, colsX, colsY, seamHex, wireRibs, zScale) {
+    if (isPlainDetailFallback()) return;
+    const Iso = ZS.Iso;
+    const cCount = Math.max(2, courses || 4);
+    const seamDark = Iso.resolveFaceColor(seamHex || '#6D5C3E', 0.72, false, 0) || '#4E422C';
+    const seamHi = 'rgba(255, 245, 220, 0.22)';
+    const yL = gy + d;
+    const xR = gx + w;
+
+    // Horizontal course seams + subtle pillow highlight below each seam
+    for (let c = 1; c < cCount; c++) {
+      const zz = z + (h * c) / cCount;
+      const l0 = Iso.gridToScreen(gx + 0.008, yL, zz);
+      const l1 = Iso.gridToScreen(gx + w - 0.008, yL, zz);
+      const r0 = Iso.gridToScreen(xR, gy + 0.008, zz);
+      const r1 = Iso.gridToScreen(xR, gy + d - 0.008, zz);
+
+      ctx.strokeStyle = seamDark;
+      ctx.lineWidth = Math.max(0.85, 1.05 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(l0.x, l0.y);
+      ctx.lineTo(l1.x, l1.y);
+      ctx.moveTo(r1.x, r1.y);
+      ctx.lineTo(r0.x, r0.y);
+      ctx.stroke();
+
+      ctx.strokeStyle = seamHi;
+      ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
+      ctx.beginPath();
+      ctx.moveTo(l0.x, l0.y + 0.85 * zScale);
+      ctx.lineTo(l1.x, l1.y + 0.85 * zScale);
+      ctx.moveTo(r1.x, r1.y + 0.85 * zScale);
+      ctx.lineTo(r0.x, r0.y + 0.85 * zScale);
+      ctx.stroke();
+    }
+
+    // Staggered vertical sandbag joints per course
+    const nX = Math.max(1, colsX || Math.max(1, Math.round(w * 5)));
+    const nY = Math.max(1, colsY || Math.max(1, Math.round(d * 5)));
+    ctx.strokeStyle = seamDark;
+    ctx.lineWidth = Math.max(0.6, 0.72 * zScale);
+    ctx.beginPath();
+    for (let c = 0; c < cCount; c++) {
+      const z0 = z + (h * c) / cCount + 0.25;
+      const z1 = z + (h * (c + 1)) / cCount - 0.25;
+      const off = (c % 2) * 0.5;
+      for (let i = 1; i <= nX; i++) {
+        const u = (i - 0.5 + off) / nX;
+        if (u <= 0.08 || u >= 0.92) continue;
+        const p0 = Iso.gridToScreen(gx + w * u, yL, z0);
+        const p1 = Iso.gridToScreen(gx + w * u, yL, z1);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+      for (let j = 1; j <= nY; j++) {
+        const u = (j - 0.5 + off) / nY;
+        if (u <= 0.08 || u >= 0.92) continue;
+        const p0 = Iso.gridToScreen(xR, gy + d * u, z0);
+        const p1 = Iso.gridToScreen(xR, gy + d * u, z1);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+    }
+    ctx.stroke();
+
+    // Optional galvanized HESCO wire-mesh cage vertical ribs
+    if (wireRibs) {
+      const ribL = Iso.resolveFaceColor('#8C9AA8', 0.88, false, 0) || '#7C8894';
+      const ribR = Iso.resolveFaceColor('#8C9AA8', 0.70, false, 0) || '#646F7A';
+      const rCountX = Math.max(2, Math.round(w * 7));
+      const rCountY = Math.max(2, Math.round(d * 7));
+      ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
+      ctx.strokeStyle = ribL;
+      ctx.beginPath();
+      for (let i = 1; i < rCountX; i++) {
+        const sx = gx + (w * i) / rCountX;
+        const p0 = Iso.gridToScreen(sx, yL, z + 0.2);
+        const p1 = Iso.gridToScreen(sx, yL, z + h - 0.2);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = ribR;
+      ctx.beginPath();
+      for (let j = 1; j < rCountY; j++) {
+        const sy = gy + (d * j) / rCountY;
+        const p0 = Iso.gridToScreen(xR, sy, z + 0.2);
+        const p1 = Iso.gridToScreen(xR, sy, z + h - 0.2);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawGroundGlowPad(ctx, tx, ty, footprint, colorHex, intensity, zScale) {
+    if (window.ZS_SILHOUETTE_MODE) return;
+    const Iso = ZS.Iso;
+    const fp = Math.max(0.45, Math.min(0.98, footprint || 0.86));
+    const pad = (1 - fp) * 0.5;
+    const inten = intensity != null ? intensity : 1.0;
+    const hex = colorHex || '#FFC94A';
+    const zPad = 0.45;
+
+    // 1. Warm radial ground bloom halo around pad (clearly visible in both day & night!)
+    const center = Iso.gridToScreen(tx + 0.5, ty + 0.5, zPad);
+    const glowStamp = getEmissiveGlowStamp(hex);
+    const rx = 38 * fp * zScale;
+    const ry = 19.5 * fp * zScale;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, 0.92 * inten);
+    ctx.drawImage(glowStamp, center.x - rx, center.y - ry, rx * 2, ry * 2);
+    ctx.restore();
+
+    // Soft outer golden isometric aura skirt on ground
+    const oPad = Math.max(0.01, pad - 0.045);
+    const oSpan = 1 - oPad * 2;
+    const oN = Iso.gridToScreen(tx + oPad, ty + oPad, 0.12);
+    const oE = Iso.gridToScreen(tx + oPad + oSpan, ty + oPad, 0.12);
+    const oS = Iso.gridToScreen(tx + oPad + oSpan, ty + oPad + oSpan, 0.12);
+    const oW = Iso.gridToScreen(tx + oPad, ty + oPad + oSpan, 0.12);
+    ctx.save();
+    ctx.fillStyle = hex === '#FFC94A' ? 'rgba(255, 201, 74, 0.16)' : 'rgba(255, 210, 122, 0.14)';
+    ctx.beginPath();
+    ctx.moveTo(oN.x, oN.y);
+    ctx.lineTo(oE.x, oE.y);
+    ctx.lineTo(oS.x, oS.y);
+    ctx.lineTo(oW.x, oW.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // 2. Dark tactical recessed pad slab + warm semantic glowing rim & corner chevrons
+    const x0 = tx + pad;
+    const y0 = ty + pad;
+    drawDetailedIsoBox(ctx, x0, y0, 0.15, fp, fp, 1.05, '#2D3540', { bevel: true, groundCrease: true }, zScale);
+
+    const rimIn = 0.036;
+    const rx0 = x0 + rimIn;
+    const ry0 = y0 + rimIn;
+    const rSpan = fp - rimIn * 2;
+    const zRim = 1.28;
+    const pN = Iso.gridToScreen(rx0, ry0, zRim);
+    const pE = Iso.gridToScreen(rx0 + rSpan, ry0, zRim);
+    const pS = Iso.gridToScreen(rx0 + rSpan, ry0 + rSpan, zRim);
+    const pW = Iso.gridToScreen(rx0, ry0 + rSpan, zRim);
+
+    // Emissive perimeter light channel (registers with emissiveList for night bloom!)
+    drawIsoRibbon(ctx, pN, pE, 0.92, hex, true, zScale);
+    drawIsoRibbon(ctx, pE, pS, 1.02, hex, true, zScale);
+    drawIsoRibbon(ctx, pS, pW, 1.02, hex, true, zScale);
+    drawIsoRibbon(ctx, pW, pN, 0.92, hex, true, zScale);
+
+    // 4 Corner beacon nodes on pad
+    const cOff = 0.012;
+    const cPts = [
+      Iso.gridToScreen(rx0 + cOff, ry0 + cOff, zRim + 0.25),
+      Iso.gridToScreen(rx0 + rSpan - cOff, ry0 + cOff, zRim + 0.25),
+      Iso.gridToScreen(rx0 + rSpan - cOff, ry0 + rSpan - cOff, zRim + 0.25),
+      Iso.gridToScreen(rx0 + cOff, ry0 + rSpan - cOff, zRim + 0.25)
+    ];
+    for (let i = 0; i < 4; i++) {
+      drawIsoDot(ctx, cPts[i], 1.45, '#FFF3D6', true, zScale);
+    }
+  }
+
   function drawEmissivePass(ctx, list, nightAlpha, zScale, viewW, viewH) {
     if (!list || list.length === 0) return;
     const Iso = ZS.Iso;
@@ -3023,6 +3632,15 @@ window.ZS = window.ZS || {};
     drawSawTooth,
     drawZigzagArc,
     drawSandbagRing,
+    drawDetailedIsoBox,
+    drawDetailedFrustum,
+    drawTaperedCyl,
+    drawIsoFaceSeams,
+    drawIsoLouvers,
+    drawIsoCornerRivets,
+    drawIsoHazardBand,
+    drawSandbagCoursesOnBox,
+    drawGroundGlowPad,
     drawEmissivePass
   });
 })();
