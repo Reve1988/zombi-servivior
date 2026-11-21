@@ -2355,8 +2355,7 @@ window.ZS = window.ZS || {};
       }
 
       if (id === 'solar_array') {
-        const onEnergy = !!(state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx] && state.terrainGrid[ty][tx].kind === 'energy');
-        const solarOff = onEnergy ? !!((st.empStunTimer || 0) > 0) : !!(state.isNight || !powered || (st.empStunTimer || 0) > 0);
+        const solarOff = !!(state.isNight || !powered || (st.empStunTimer || 0) > 0);
         const stamp = ensureStructureStamp(`solar|${lv}|${solarOff ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawFullStaticStructBody(sctx, id, lv, 0, 0, isUnpowered, solarOff, P, steelCol, maxAccent, 1.0);
@@ -2409,7 +2408,9 @@ window.ZS = window.ZS || {};
           drawWindTurbineStatic(sctx, 0, 0, lv, P, 1.0);
         });
         blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
-        drawWindTurbineRotors(ctx, tx, ty, lv, timeSec * 2.6 + (tx + ty), P, zScale);
+        const wCell = state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx];
+        const rotorSpeed = wCell && wCell.kind === 'wind' ? (wCell.tier === 2 ? 3.8 : 3.25) : 2.6;
+        drawWindTurbineRotors(ctx, tx, ty, lv, timeSec * rotorSpeed + (tx + ty), P, zScale);
         return;
       }
 
@@ -2642,7 +2643,9 @@ window.ZS = window.ZS || {};
       }
 
       case 'wind_turbine': {
-        const bladeAngle = st.isPreview ? 0.45 + (tx + ty) * 0.4 : timeSec * 2.6 + (tx + ty);
+        const wCell = state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx];
+        const rotorSpeed = wCell && wCell.kind === 'wind' ? (wCell.tier === 2 ? 3.8 : 3.25) : 2.6;
+        const bladeAngle = st.isPreview ? 0.45 + (tx + ty) * 0.4 : timeSec * rotorSpeed + (tx + ty);
         drawWindTurbineStatic(ctx, tx, ty, lv, P, zScale);
         drawWindTurbineRotors(ctx, tx, ty, lv, bladeAngle, P, zScale);
         break;
@@ -2676,9 +2679,8 @@ window.ZS = window.ZS || {};
       }
 
       default: {
-        const onEnergy = id === 'solar_array' && !!(state.terrainGrid && state.terrainGrid[ty] && state.terrainGrid[ty][tx] && state.terrainGrid[ty][tx].kind === 'energy');
         const defaultSolarOff = id === 'solar_array'
-          ? (onEnergy ? !!((st.empStunTimer || 0) > 0) : !!(state.isNight || !powered || (st.empStunTimer || 0) > 0))
+          ? !!(state.isNight || !powered || (st.empStunTimer || 0) > 0)
           : !powered;
         drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, defaultSolarOff, P, steelCol, maxAccent, zScale);
         break;

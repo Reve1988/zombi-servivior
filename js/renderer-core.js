@@ -1217,15 +1217,6 @@ window.ZS = window.ZS || {};
             continue;
           }
 
-          if (tCell && tCell.kind === 'energy') {
-            drawEnergySpotPad(tctx, x, y, tCell, P, isSil, 1.0);
-            if (fid) {
-              drawFloorTile(tctx, x, y, fid, 1.0);
-              drawEnergySpotRimAccent(tctx, x, y, tCell, P, isSil, 1.0);
-            }
-            continue;
-          }
-
           if (fid) {
             drawFloorTile(tctx, x, y, fid, 1.0);
           } else {
@@ -1448,7 +1439,6 @@ window.ZS = window.ZS || {};
     // Lightweight drifting cloud shadows over island terrain (3 pre-baked 96x96 drawImage calls)
     if (!isSil) {
       drawDriftingCloudShadows(ctx, N, state, timeSec, zScale, w, h);
-      drawLiveEnergyWisps(ctx, state, timeSec, zScale, w, h);
     }
 
     // Subtle warm afternoon sunlight wash over the inner base during daytime (pre-baked glow stamp)
@@ -2460,176 +2450,6 @@ window.ZS = window.ZS || {};
     if (dy === 1) return cy >= 0.5 ? highZ : lowZ;
     if (dy === -1) return cy < 0.5 ? highZ : lowZ;
     return lowZ;
-  }
-
-  function drawEnergySpotPad(ctx, x, y, tCell, P, isSil, zScale) {
-    const Iso = ZS.Iso;
-    const isWind = tCell && tCell.subKind === 'wind';
-    if (isSil) {
-      Iso.drawTilePoly(ctx, x, y, 0.2, '#CFD6DC', '#B4BEC8', 0.8);
-      return;
-    }
-
-    const baseFill = isWind ? (P.energyWindBase || '#5C6458') : (P.energyGeoBase || '#4E443B');
-    const rimColor = isWind ? (P.energyWindRim || '#B7C88B') : (P.energyGeoRim || '#E08A3C');
-    const coreColor = isWind ? (P.energyWindCore || '#E3ECC2') : (P.energyGeoCore || '#FFB347');
-    const center = Iso.gridToScreen(x + 0.5, y + 0.5, 0.25);
-
-    ctx.save();
-    // Stepped stone crater / anemometer pad (100% / 82% / 66%, zero cyan)
-    Iso.drawTilePoly(ctx, x + 0.08, y + 0.08, 0.15, baseFill, 'rgba(20, 22, 18, 0.45)', 0.9 * zScale, 0.84, 0.84);
-    ctx.beginPath();
-    ctx.ellipse(center.x, center.y, 17.5 * zScale, 8.75 * zScale, 0, 0, Math.PI * 2);
-    ctx.fillStyle = isWind ? '#4B5449' : '#3C3128';
-    ctx.fill();
-    ctx.strokeStyle = rimColor;
-    ctx.globalAlpha = 0.72;
-    ctx.lineWidth = Math.max(1, 1.3 * zScale);
-    ctx.stroke();
-
-    if (isWind) {
-      // Wind Ridge: carved limestone swirl rings & slipstream chevrons (warm cream-lime, zero cyan)
-      ctx.globalAlpha = 0.78;
-      ctx.strokeStyle = coreColor;
-      ctx.lineWidth = Math.max(1.1, 1.4 * zScale);
-      for (let r = 0; r < 2; r++) {
-        const rx = (12.5 - r * 4.8) * zScale;
-        const ry = rx * 0.5;
-        ctx.beginPath();
-        ctx.ellipse(center.x, center.y, rx, ry, 0, -Math.PI * 0.82 + r * 0.9, Math.PI * 0.28 + r * 0.9);
-        ctx.stroke();
-      }
-      ctx.beginPath();
-      ctx.ellipse(center.x, center.y, 4.2 * zScale, 2.1 * zScale, 0, 0, Math.PI * 2);
-      ctx.fillStyle = coreColor;
-      ctx.fill();
-    } else {
-      // Geothermal Vent: molten amber fissure fractures + glowing core orifice (zero cyan)
-      ctx.globalAlpha = 0.88;
-      ctx.strokeStyle = coreColor;
-      ctx.lineWidth = Math.max(1.2, 1.6 * zScale);
-      const cracks = [
-        [0.18, 0.34, 0.5, 0.5, 0.84, 0.64],
-        [0.32, 0.82, 0.5, 0.5, 0.72, 0.18],
-        [0.24, 0.62, 0.5, 0.5, 0.78, 0.42]
-      ];
-      for (let i = 0; i < cracks.length; i++) {
-        const c = cracks[i];
-        const a = Iso.gridToScreen(x + c[0], y + c[1], 0.35);
-        const m = Iso.gridToScreen(x + c[2], y + c[3], 0.35);
-        const b = Iso.gridToScreen(x + c[4], y + c[5], 0.35);
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(m.x, m.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      }
-      ctx.beginPath();
-      ctx.ellipse(center.x, center.y, 5.4 * zScale, 2.7 * zScale, 0, 0, Math.PI * 2);
-      ctx.fillStyle = '#FFE08A';
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  function drawEnergySpotRimAccent(ctx, x, y, tCell, P, isSil, zScale) {
-    if (isSil) return;
-    const Iso = ZS.Iso;
-    const isWind = tCell && tCell.subKind === 'wind';
-    const rim = isWind ? (P.energyWindCore || '#E3ECC2') : (P.energyGeoCore || '#FFB347');
-    ctx.save();
-    ctx.strokeStyle = rim;
-    ctx.globalAlpha = 0.78;
-    ctx.lineWidth = Math.max(1.1, 1.5 * zScale);
-    const pts = [
-      Iso.gridToScreen(x + 0.08, y + 0.08, 0.45),
-      Iso.gridToScreen(x + 0.92, y + 0.08, 0.45),
-      Iso.gridToScreen(x + 0.92, y + 0.92, 0.45),
-      Iso.gridToScreen(x + 0.08, y + 0.92, 0.45)
-    ];
-    ctx.beginPath();
-    for (let i = 0; i < 4; i++) {
-      const p = pts[i];
-      const n = pts[(i + 1) % 4];
-      const mx = p.x + (n.x - p.x) * 0.24;
-      const my = p.y + (n.y - p.y) * 0.24;
-      const prev = pts[(i + 3) % 4];
-      const px = p.x + (prev.x - p.x) * 0.24;
-      const py = p.y + (prev.y - p.y) * 0.24;
-      ctx.moveTo(px, py);
-      ctx.lineTo(p.x, p.y);
-      ctx.lineTo(mx, my);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawLiveEnergyWisps(ctx, state, timeSec, zScale, viewW, viewH) {
-    const tGrid = state && state.terrainGrid;
-    if (!tGrid) return;
-    const Iso = ZS.Iso;
-    const P = ZS.DATA.PALETTE;
-    const N = ZS.DATA.GRID_SIZE;
-    const pad = 42 * zScale;
-
-    for (let y = 0; y < N; y++) {
-      const row = tGrid[y];
-      if (!row) continue;
-      for (let x = 0; x < N; x++) {
-        const tCell = row[x];
-        if (!tCell || tCell.kind !== 'energy') continue;
-        const c = Iso.gridToScreen(x + 0.5, y + 0.5, 4);
-        if (!isScreenVisible(c.x, c.y, pad, pad, pad, viewW, viewH)) continue;
-
-        const isWind = tCell.subKind === 'wind';
-        const phaseBase = (x * 1.37 + y * 2.13);
-        ctx.save();
-        if (isWind) {
-          ctx.strokeStyle = P.energyWindDust || 'rgba(227, 236, 194, 0.72)';
-          ctx.lineWidth = Math.max(1.0, 1.35 * zScale);
-          for (let k = 0; k < 2; k++) {
-            const u = ((timeSec * 0.52 + phaseBase + k * 0.5) % 1);
-            const alpha = Math.sin(u * Math.PI) * 0.58;
-            if (alpha <= 0.02) continue;
-            const zH = 2.5 + u * 13 + k * 2.5;
-            const sx0 = x + 0.18 + u * 0.42;
-            const sy0 = y + 0.65 - u * 0.36;
-            const p0 = Iso.gridToScreen(sx0, sy0, zH);
-            const p1 = Iso.gridToScreen(sx0 + 0.22, sy0 - 0.14, zH + 1.4);
-            ctx.globalAlpha = alpha;
-            ctx.beginPath();
-            ctx.moveTo(p0.x, p0.y);
-            ctx.quadraticCurveTo((p0.x + p1.x) * 0.5, p0.y - 3.5 * zScale, p1.x, p1.y);
-            ctx.stroke();
-          }
-        } else {
-          const glowCol = P.energyGeoCore || '#FFB347';
-          const hotCol = P.energyGeoHot || '#FFE08A';
-          const pulse = 0.26 + Math.sin(timeSec * 2.6 + phaseBase) * 0.08;
-          const orb = Iso.gridToScreen(x + 0.5, y + 0.5, 1.2);
-          ctx.globalAlpha = pulse;
-          ctx.fillStyle = glowCol;
-          ctx.beginPath();
-          ctx.ellipse(orb.x, orb.y, 13 * zScale, 6.5 * zScale, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          for (let k = 0; k < 3; k++) {
-            const u = ((timeSec * 0.45 + phaseBase + k * 0.33) % 1);
-            const alpha = Math.sin(u * Math.PI) * 0.72;
-            if (alpha <= 0.02) continue;
-            const sway = Math.sin(timeSec * 3.1 + k * 2.1) * 0.08;
-            const ep = Iso.gridToScreen(x + 0.42 + (k - 1) * 0.12 + sway, y + 0.48 + (1 - k) * 0.08, 2 + u * 16);
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = k === 0 ? hotCol : glowCol;
-            const rPx = Math.max(1.1, (2.1 - u * 1.1) * zScale);
-            ctx.beginPath();
-            ctx.arc(ep.x, ep.y, rPx, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        ctx.restore();
-      }
-    }
   }
 
   function ensureRockStamp(variant, P, isSil) {
@@ -4699,8 +4519,6 @@ window.ZS = window.ZS || {};
     ensureTerrainMeta,
     ensureTerrainCache,
     drawEditGridOverlay,
-    drawEnergySpotPad,
-    drawLiveEnergyWisps,
     drawPlateauTile,
     drawRampTile,
     drawRockTile,

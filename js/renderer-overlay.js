@@ -574,12 +574,238 @@ window.ZS = window.ZS || {};
     ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
   }
 
+  function drawWindOverlay(ctx, state, uiState, timeSec, zScale) {
+    const tGrid = state && state.terrainGrid;
+    if (!tGrid || !state.showWindOverlay || uiState.mainMenuOpen) return;
+    const Iso = ZS.Iso;
+    const DATA = ZS.DATA;
+    const N = DATA.GRID_SIZE;
+    const vp = Iso.getViewport ? Iso.getViewport() : { w: 1280, h: 720 };
+    const viewW = vp.w;
+    const viewH = vp.h;
+    const windCells = [];
+    let sumX = 0;
+    let sumY = 0;
+    let windAngle = -0.6;
+
+    for (let y = 0; y < N; y++) {
+      const row = tGrid[y];
+      if (!row) continue;
+      for (let x = 0; x < N; x++) {
+        const tc = row[x];
+        if (!tc || tc.kind !== 'wind') continue;
+        windCells.push({ x, y, tc });
+        sumX += x + 0.5;
+        sumY += y + 0.5;
+        if (tc.windAngle != null) windAngle = tc.windAngle;
+      }
+    }
+    if (windCells.length === 0) return;
+
+    const getWindTier = (x, y) => {
+      if (x < 0 || y < 0 || x >= N || y >= N) return 0;
+      const tc = tGrid[y] && tGrid[y][x];
+      return tc && tc.kind === 'wind' ? (tc.tier || 1) : 0;
+    };
+
+    ctx.save();
+    const zOv = 0.45;
+    const pulse = 0.86 + 0.14 * Math.sin(timeSec * 2.6);
+
+    // 1. 2-tier Wind Zone isometric heatmap (tier 1: emerald +40%, tier 2: golden-chartreuse +70%, 0px cyan)
+    for (let i = 0; i < windCells.length; i++) {
+      const { x, y, tc } = windCells[i];
+      const tier = tc.tier || 1;
+      const pN = Iso.gridToScreen(x, y, zOv);
+      const pE = Iso.gridToScreen(x + 1, y, zOv);
+      const pS = Iso.gridToScreen(x + 1, y + 1, zOv);
+      const pW = Iso.gridToScreen(x, y + 1, zOv);
+
+      ctx.beginPath();
+      ctx.moveTo(pN.x, pN.y);
+      ctx.lineTo(pE.x, pE.y);
+      ctx.lineTo(pS.x, pS.y);
+      ctx.lineTo(pW.x, pW.y);
+      ctx.closePath();
+
+      if (tier >= 2) {
+        ctx.fillStyle = `rgba(250, 204, 21, ${(0.34 * pulse).toFixed(3)})`;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(254, 240, 138, 0.48)';
+        ctx.lineWidth = Math.max(0.8, 1.0 * zScale);
+        ctx.stroke();
+
+        const cN = Iso.gridToScreen(x + 0.22, y + 0.22, zOv + 0.15);
+        const cE = Iso.gridToScreen(x + 0.78, y + 0.22, zOv + 0.15);
+        const cS = Iso.gridToScreen(x + 0.78, y + 0.78, zOv + 0.15);
+        const cW = Iso.gridToScreen(x + 0.22, y + 0.78, zOv + 0.15);
+        ctx.beginPath();
+        ctx.moveTo(cN.x, cN.y);
+        ctx.lineTo(cE.x, cE.y);
+        ctx.lineTo(cS.x, cS.y);
+        ctx.lineTo(cW.x, cW.y);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.24)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.72)';
+        ctx.lineWidth = Math.max(0.9, 1.15 * zScale);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(52, 211, 153, ${(0.23 * pulse).toFixed(3)})`;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(110, 231, 183, 0.36)';
+        ctx.lineWidth = Math.max(0.75, 0.9 * zScale);
+        ctx.stroke();
+      }
+    }
+
+    // 2. Perimeter contour (#6EE7B7 outer edge, #FDE047 core gust edge)
+    const drawEdgeSeg = (x0, y0, x1, y1) => {
+      const a = Iso.gridToScreen(x0, y0, zOv + 0.4);
+      const b = Iso.gridToScreen(x1, y1, zOv + 0.4);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    };
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#6EE7B7';
+    ctx.lineWidth = Math.max(1.6, 2.2 * zScale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < windCells.length; i++) {
+      const { x, y } = windCells[i];
+      if (getWindTier(x, y - 1) === 0) drawEdgeSeg(x, y, x + 1, y);
+      if (getWindTier(x + 1, y) === 0) drawEdgeSeg(x + 1, y, x + 1, y + 1);
+      if (getWindTier(x, y + 1) === 0) drawEdgeSeg(x, y + 1, x + 1, y + 1);
+      if (getWindTier(x - 1, y) === 0) drawEdgeSeg(x, y, x, y + 1);
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#FDE047';
+    ctx.lineWidth = Math.max(1.5, 2.0 * zScale);
+    for (let i = 0; i < windCells.length; i++) {
+      const { x, y, tc } = windCells[i];
+      if ((tc.tier || 1) < 2) continue;
+      if (getWindTier(x, y - 1) < 2) drawEdgeSeg(x, y, x + 1, y);
+      if (getWindTier(x + 1, y) < 2) drawEdgeSeg(x + 1, y, x + 1, y + 1);
+      if (getWindTier(x, y + 1) < 2) drawEdgeSeg(x, y + 1, x + 1, y + 1);
+      if (getWindTier(x - 1, y) < 2) drawEdgeSeg(x, y, x, y + 1);
+    }
+    ctx.stroke();
+
+    // 3. Animated directional wind streamlines
+    const vx = Math.cos(windAngle);
+    const vy = Math.sin(windAngle);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < windCells.length; i++) {
+      const { x, y, tc } = windCells[i];
+      const tier = tc.tier || 1;
+      const phase = ((timeSec * (tier >= 2 ? 0.95 : 0.68) + x * 0.37 + y * 0.53) % 1);
+      const alpha = Math.sin(phase * Math.PI) * (tier >= 2 ? 0.88 : 0.65);
+      if (alpha <= 0.04) continue;
+      const drift = (phase - 0.5) * 0.44;
+      const mx = x + 0.5 + vx * drift;
+      const my = y + 0.5 + vy * drift;
+      const segHalf = tier >= 2 ? 0.24 : 0.19;
+      const zFlow = zOv + 2.6 + tier * 1.4;
+      const s0 = Iso.gridToScreen(mx - vx * segHalf, my - vy * segHalf, zFlow);
+      const s1 = Iso.gridToScreen(mx + vx * segHalf, my + vy * segHalf, zFlow);
+      if (
+        Math.max(s0.x, s1.x) < -40 || Math.min(s0.x, s1.x) > viewW + 40 ||
+        Math.max(s0.y, s1.y) < -40 || Math.min(s0.y, s1.y) > viewH + 40
+      ) continue;
+
+      ctx.strokeStyle = tier >= 2 ? `rgba(254, 249, 195, ${alpha.toFixed(3)})` : `rgba(209, 250, 229, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = Math.max(1.2, (tier >= 2 ? 2.1 : 1.55) * zScale);
+      ctx.beginPath();
+      ctx.moveTo(s0.x, s0.y);
+      ctx.quadraticCurveTo(
+        (s0.x + s1.x) * 0.5,
+        (s0.y + s1.y) * 0.5 - 3.2 * zScale,
+        s1.x,
+        s1.y
+      );
+      ctx.stroke();
+
+      if (tier >= 2) {
+        const dx = s1.x - s0.x;
+        const dy = s1.y - s0.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const aw = 4.2 * zScale;
+        ctx.beginPath();
+        ctx.moveTo(s1.x - ux * aw - uy * aw * 0.55, s1.y - uy * aw + ux * aw * 0.55);
+        ctx.lineTo(s1.x, s1.y);
+        ctx.lineTo(s1.x - ux * aw + uy * aw * 0.55, s1.y - uy * aw - ux * aw * 0.55);
+        ctx.stroke();
+      }
+    }
+
+    // 4. Per-tile percentage labels & Zone summary legend
+    const labelPx = Math.max(12, Math.round(12 * zScale));
+    ctx.font = `800 ${labelPx}px 'Chakra Petch', 'Pretendard', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < windCells.length; i++) {
+      const { x, y, tc } = windCells[i];
+      const tier = tc.tier || 1;
+      if (state.structGrid[y] && state.structGrid[y][x]) continue;
+      if (tier < 2 && ((x + y) & 1) !== 0 && zScale < 0.92) continue;
+      const lp = Iso.gridToScreen(x + 0.5, y + 0.5, zOv + 2.0);
+      if (lp.x < -30 || lp.x > viewW + 30 || lp.y < -20 || lp.y > viewH + 20) continue;
+      const txt = tier >= 2 ? '+70%' : '+40%';
+      ctx.strokeStyle = 'rgba(8, 13, 20, 0.92)';
+      ctx.lineWidth = Math.max(2.6, 3.2 * zScale);
+      ctx.strokeText(txt, lp.x, lp.y);
+      ctx.fillStyle = tier >= 2 ? '#FEF08A' : '#A7F3D0';
+      ctx.fillText(txt, lp.x, lp.y);
+    }
+
+    // Place zone legend pill neatly above the northernmost wind tile so core tiles & turbines stay unobstructed
+    let topTile = windCells[0];
+    for (let i = 1; i < windCells.length; i++) {
+      if (windCells[i].x + windCells[i].y < topTile.x + topTile.y) {
+        topTile = windCells[i];
+      }
+    }
+    const cx = sumX / windCells.length;
+    const badgePos = Iso.gridToScreen((cx + topTile.x + 0.5) * 0.5, topTile.y + 0.15, 22);
+    if (badgePos.x >= -140 && badgePos.x <= viewW + 140 && badgePos.y >= -40 && badgePos.y <= viewH + 40) {
+      const bannerTxt = '강풍 레이어 · 주변 +40% / 중심 +70% (풍력 전용)';
+      ctx.font = "700 12px 'Pretendard', 'Segoe UI', sans-serif";
+      const tw = ctx.measureText(bannerTxt).width;
+      const pw = tw + 18;
+      const ph = 24;
+      const px = Math.round(badgePos.x - pw * 0.5);
+      const py = Math.round(badgePos.y - ph * 0.5);
+      ctx.fillStyle = 'rgba(12, 24, 24, 0.88)';
+      ctx.strokeStyle = '#6EE7B7';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(px, py, pw, ph, 5);
+      } else {
+        ctx.rect(px, py, pw, ph);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ECFDF5';
+      ctx.fillText(bannerTxt, badgePos.x, badgePos.y + 0.5);
+    }
+
+    ctx.restore();
+  }
+
   function drawInfoLayer(ctx, state, uiState, renderList, powered, timeSec, zScale) {
     const Iso = ZS.Iso;
     const DATA = ZS.DATA;
     const P = DATA.PALETTE;
     const N = DATA.GRID_SIZE;
 
+    drawWindOverlay(ctx, state, uiState, timeSec, zScale);
     drawReconOverlay(ctx, state, timeSec, zScale);
 
     const getElev = (gx, gy) => (ZS.Game && ZS.Game.getTerrainElevationAt ? ZS.Game.getTerrainElevationAt(gx, gy) : 0);

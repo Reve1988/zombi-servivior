@@ -79,6 +79,7 @@ window.ZS = window.ZS || {};
     previewPaths: [],
     breachMarkers: [],
     showReconPaths: true,
+    showWindOverlay: false,
     reconNightFadeTimer: 0,
     reconFlashTimer: 0,
 
@@ -678,39 +679,115 @@ window.ZS = window.ZS || {};
       return null;
     }
 
-    // 3) Energy Spots: 3~4 tiles in mid-outer ring (hypot 6..10 from HQ), >= 4 tiles apart, alternating wind/geothermal
-    const energyCandidates = [];
-    for (let y = 2; y <= N - 3; y++) {
-      for (let x = 2; x <= N - 3; x++) {
+    // 3) Single Organic Multi-Tile Wind Zone (10~16 connected flat tiles, 2-tier heatmap)
+    const windSeedCands = [];
+    for (let y = 3; y <= N - 4; y++) {
+      for (let x = 3; x <= N - 4; x++) {
         if (isInsideHqSafeZone(x, y) || grid[y][x] || rampEntries.has(x + ',' + y)) continue;
         const dist = Math.hypot(x - hx, y - hy);
-        if (dist >= 6 && dist <= 10) {
-          energyCandidates.push({ x, y });
+        if (dist >= 5.5 && dist <= 9.5) {
+          windSeedCands.push({ x, y });
         }
       }
     }
-    shuffleWithRng(energyCandidates, rng);
-    const targetEnergy = rng() < 0.55 ? 4 : 3;
-    const chosenEnergy = [];
-    for (let i = 0; i < energyCandidates.length && chosenEnergy.length < targetEnergy; i++) {
-      const cand = energyCandidates[i];
-      let farEnough = true;
-      for (let j = 0; j < chosenEnergy.length; j++) {
-        if (Math.hypot(cand.x - chosenEnergy[j].x, cand.y - chosenEnergy[j].y) < 4) {
-          farEnough = false;
-          break;
+    shuffleWithRng(windSeedCands, rng);
+    const wzCfg = DATA.WIND_ZONE || {};
+    const minWindTiles = wzCfg.minTiles || 10;
+    const maxWindTiles = wzCfg.maxTiles || 16;
+    const targetWindTiles = minWindTiles + Math.floor(rng() * (maxWindTiles - minWindTiles + 1));
+    const windAngle = rng() * Math.PI * 2;
+    const dirCos = Math.cos(windAngle);
+    const dirSin = Math.sin(windAngle);
+    const isValidWindCell = (wx, wy) =>
+      isInsideInnerTerrainBounds(wx, wy) &&
+      !isInsideHqSafeZone(wx, wy) &&
+      !grid[wy][wx] &&
+      !rampEntries.has(wx + ',' + wy);
+
+    let chosenWind = null;
+    const maxWindTries = Math.min(24, windSeedCands.length);
+    const cardDirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let sIdx = 0; sIdx < maxWindTries && !chosenWind; sIdx++) {
+      const root = windSeedCands[sIdx];
+      const cells = [{ x: root.x, y: root.y }];
+      const inSet = new Set([root.x + ',' + root.y]);
+      while (cells.length < targetWindTiles) {
+        const frontier = [];
+        const seenFront = new Set();
+        for (let ci = 0; ci < cells.length; ci++) {
+          const c = cells[ci];
+          for (let k = 0; k < cardDirs.length; k++) {
+            const nx = c.x + cardDirs[k][0];
+            const ny = c.y + cardDirs[k][1];
+            const key = nx + ',' + ny;
+            if (inSet.has(key) || seenFront.has(key) || !isValidWindCell(nx, ny)) continue;
+            seenFront.add(key);
+            let nCount = 0;
+            for (let m = 0; m < cardDirs.length; m++) {
+              if (inSet.has((nx + cardDirs[m][0]) + ',' + (ny + cardDirs[m][1]))) nCount++;
+            }
+            const dx = nx - root.x;
+            const dy = ny - root.y;
+            const align = Math.abs(dx * dirCos + dy * dirSin) * 0.45 - Math.abs(dx * dirSin - dy * dirCos) * 0.35;
+            const score = nCount * 1.15 + align + rng() * 1.35;
+            frontier.push({ x: nx, y: ny, score });
+          }
         }
+        if (frontier.length === 0) break;
+        frontier.sort((a, b) => b.score - a.score);
+        const pickPool = Math.min(3, frontier.length);
+        const chosen = frontier[Math.floor(rng() * pickPool)];
+        cells.push({ x: chosen.x, y: chosen.y });
+        inSet.add(chosen.x + ',' + chosen.y);
       }
-      if (farEnough) chosenEnergy.push(cand);
+      if (cells.length >= targetWindTiles) {
+        chosenWind = cells;
+      }
     }
-    if (chosenEnergy.length < 3) return null;
-    for (let i = 0; i < chosenEnergy.length; i++) {
-      const e = chosenEnergy[i];
-      grid[e.y][e.x] = {
-        kind: 'energy',
+    if (!chosenWind || chosenWind.length < minWindTiles) return null;
+
+    let sumX = 0;
+    let sumY = 0;
+    for (let i = 0; i < chosenWind.length; i++) {
+      sumX += chosenWind[i].x;
+      sumY += chosenWind[i].y;
+    }
+    const cxMean = sumX / chosenWind.length;
+    const cyMean = sumY / chosenWind.length;
+    const windSet = new Set(chosenWind.map((c) => c.x + ',' + c.y));
+    let maxDist = 0.001;
+    for (let i = 0; i < chosenWind.length; i++) {
+      const d = Math.hypot(chosenWind[i].x - cxMean, chosenWind[i].y - cyMean);
+      if (d > maxDist) maxDist = d;
+      chosenWind[i].dist = d;
+    }
+    const diagDirs = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+    for (let i = 0; i < chosenWind.length; i++) {
+      const c = chosenWind[i];
+      let nb = 0;
+      for (let k = 0; k < 4; k++) {
+        if (windSet.has((c.x + cardDirs[k][0]) + ',' + (c.y + cardDirs[k][1]))) nb += 1.0;
+        if (windSet.has((c.x + diagDirs[k][0]) + ',' + (c.y + diagDirs[k][1]))) nb += 0.5;
+      }
+      c.interiorScore = nb - (c.dist / maxDist) * 2.2;
+    }
+    const ranked = chosenWind.slice().sort((a, b) => b.interiorScore - a.interiorScore);
+    const coreTarget = Math.max(3, Math.min(6, Math.round(chosenWind.length * 0.35)));
+    const coreSet = new Set();
+    for (let i = 0; i < coreTarget; i++) {
+      coreSet.add(ranked[i].x + ',' + ranked[i].y);
+    }
+    const outerMult = wzCfg.outerMult || 1.40;
+    const coreMult = wzCfg.coreMult || 1.70;
+    for (let i = 0; i < chosenWind.length; i++) {
+      const c = chosenWind[i];
+      const isCore = coreSet.has(c.x + ',' + c.y);
+      grid[c.y][c.x] = {
+        kind: 'wind',
         elev: 0,
-        subKind: i % 2 === 0 ? 'wind' : 'geothermal',
-        variant: i & 3
+        tier: isCore ? 2 : 1,
+        windMult: isCore ? coreMult : outerMult,
+        windAngle
       };
     }
 
@@ -804,6 +881,7 @@ window.ZS = window.ZS || {};
     state.agents = DATA.HQ_STATS.startingAgents + (divDef.startingAgentsBonus || 0);
     state.debugBonusPopCap = 0;
     state.freeVouchers = divDef.startingVouchers ? { ...divDef.startingVouchers } : {};
+    state.showWindOverlay = false;
     state.traderRefreshCost = 15;
     state.traderRefreshCount = 0;
     state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
@@ -996,6 +1074,18 @@ window.ZS = window.ZS || {};
     return state.showReconPaths;
   }
 
+  function toggleWindOverlay() {
+    state.showWindOverlay = !state.showWindOverlay;
+    notifyUi();
+    return state.showWindOverlay;
+  }
+
+  function setWindOverlay(flag) {
+    state.showWindOverlay = !!flag;
+    notifyUi();
+    return state.showWindOverlay;
+  }
+
   function isCombatVeterancyDef(def) {
     if (!def || def.layer !== 'struct') return false;
     return def.subType === 'manned' || def.subType === 'turret';
@@ -1165,6 +1255,7 @@ window.ZS = window.ZS || {};
         agents: state.agents,
         debugBonusPopCap: state.debugBonusPopCap || 0,
         showReconPaths: state.showReconPaths !== false,
+        showWindOverlay: !!state.showWindOverlay,
         nextWaveIntel: state.nextWaveIntel,
         freeVouchers: state.freeVouchers,
         traderOffers: state.traderOffers,
@@ -1230,7 +1321,22 @@ window.ZS = window.ZS || {};
         for (let ty = 0; ty < N; ty++) {
           for (let tx = 0; tx < N; tx++) {
             const cell = d.terrainGrid[ty][tx];
-            nextTerrainGrid[ty][tx] = cell ? { ...cell } : null;
+            if (!cell) {
+              nextTerrainGrid[ty][tx] = null;
+            } else if (cell.kind === 'energy') {
+              nextTerrainGrid[ty][tx] =
+                cell.subKind === 'wind'
+                  ? {
+                      kind: 'wind',
+                      elev: 0,
+                      tier: 1,
+                      windMult: (DATA.WIND_ZONE && DATA.WIND_ZONE.outerMult) || 1.40,
+                      windAngle: -0.6
+                    }
+                  : null;
+            } else {
+              nextTerrainGrid[ty][tx] = { ...cell };
+            }
           }
         }
         state.terrainSeed = Number(d.terrainSeed) || 0;
@@ -1367,6 +1473,7 @@ window.ZS = window.ZS || {};
       state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
       state.showReconPaths = d.showReconPaths !== undefined ? !!d.showReconPaths : true;
+      state.showWindOverlay = !!d.showWindOverlay;
       state.reconNightFadeTimer = 0;
       state.reconFlashTimer = 0;
       if (savedN === N && d.nextWaveIntel && d.nextWaveIntel.wave === state.wave && Array.isArray(d.nextWaveIntel.plannedQueue)) {
@@ -1611,6 +1718,8 @@ window.ZS = window.ZS || {};
     recomputePreviewPaths,
     recomputeFlow,
     toggleReconPaths,
+    toggleWindOverlay,
+    setWindOverlay,
     isCombatVeterancyDef,
     getVeterancyRankInfo,
     computeRankFromXp,
