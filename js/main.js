@@ -1005,7 +1005,7 @@ window.ZS = window.ZS || {};
     ZS.Iso.resetCamera();
 
     const env = ZS.Game.getEnvInfo ? ZS.Game.getEnvInfo() : { isDevBuild: false, isDevEnvironment: false, isDebugMode: false };
-    const ver = ZS.DATA.VERSION || 'v0.6.0';
+    const ver = ZS.DATA.VERSION || 'v0.7.0';
     const hudVer = document.getElementById('hud-version');
     const menuVer = document.getElementById('menu-version');
     const guideVer = document.getElementById('guide-version');
