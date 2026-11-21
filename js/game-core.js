@@ -698,33 +698,19 @@ window.ZS = window.ZS || {};
       if (!placed && p < 2) return null;
     }
 
-    // 2) Rocks: 1~2 mountain ridges (3~5 connected tiles, center 1~2 isPeak: true) + 2~3 foothill clusters totaling 16~22 tiles
-    const ridgeCount = rng() < 0.25 ? 1 : 2;
-    const clusterCount = ridgeCount === 1 ? 3 : (rng() < 0.35 ? 2 : 3);
-    const minRockTotal = Math.max(16, ridgeCount * 3 + clusterCount * 2);
-    const maxRockTotal = Math.min(22, ridgeCount * 5 + clusterCount * 4);
-    const targetRockTotal = minRockTotal + Math.floor(rng() * (maxRockTotal - minRockTotal + 1));
-
-    const ridgeSizes = new Array(ridgeCount).fill(3);
-    const clusterSizes = new Array(clusterCount).fill(2);
-    let remRocks = targetRockTotal - (ridgeCount * 3 + clusterCount * 2);
-    let guard = 0;
-    while (remRocks > 0 && guard < 80) {
-      guard += 1;
-      const pickRidge = rng() < 0.45;
-      if (pickRidge) {
-        const idx = Math.floor(rng() * ridgeCount);
-        if (ridgeSizes[idx] < 5) {
-          ridgeSizes[idx] += 1;
-          remRocks -= 1;
-        }
-      } else {
-        const idx = Math.floor(rng() * clusterCount);
-        if (clusterSizes[idx] < 4) {
-          clusterSizes[idx] += 1;
-          remRocks -= 1;
-        }
-      }
+    // 2) Rocks: 3~4 abundant mountain ridges (4~7 connected tiles, interior isPeak: true crags) + 2~3 foothill clusters
+    const ridgeCount = rng() < 0.45 ? 3 : 4;
+    const ridgeSizes = [];
+    for (let i = 0; i < ridgeCount; i++) {
+      ridgeSizes.push(4 + Math.floor(rng() * 3));
+    }
+    if (ridgeCount === 3 && rng() < 0.45) {
+      ridgeSizes[0] = Math.min(7, ridgeSizes[0] + 1);
+    }
+    const clusterCount = rng() < 0.5 ? 2 : 3;
+    const clusterSizes = [];
+    for (let i = 0; i < clusterCount; i++) {
+      clusterSizes.push(2 + (rng() < 0.45 ? 1 : 0));
     }
 
     const rockClusterIdGrid = Array.from({ length: N }, () => Array(N).fill(-1));
@@ -742,22 +728,35 @@ window.ZS = window.ZS || {};
       }
       return true;
     };
+    const isValidRidgeCell = (x, y, groupIdx) =>
+      isValidRockCell(x, y, groupIdx) && !(Math.abs(x - hx) <= 3 && Math.abs(y - hy) <= 3);
+
+    const isInQuadrant = (x, y, qIdx) => {
+      if (qIdx === 0) return x < hx && y < hy;
+      if (qIdx === 1) return x >= hx && y < hy;
+      if (qIdx === 2) return x < hx && y >= hy;
+      return x >= hx && y >= hy;
+    };
+    const quadOrder = shuffleWithRng([0, 1, 2, 3], rng);
 
     const rockTopLow = DATA.ROCK_TOP_Z || 16;
     const rockTopPeak = DATA.ROCK_PEAK_TOP_Z || 33;
     let rockTilesPlaced = 0;
     let totalPeaksPlaced = 0;
     let groupIdSeq = 0;
+    const placedRidges = [];
 
-    // 2a) Place mountain ridges (elongated 3~5-tile chains with central 1~2 isPeak: true tiles)
+    // 2a) Place 3~4 mountain ridges (elongated 4~7-tile chains with dense interior isPeak: true crags)
     for (let rIdx = 0; rIdx < ridgeCount; rIdx++) {
       const wantSz = ridgeSizes[rIdx];
       const gId = groupIdSeq++;
+      const targetQuad = quadOrder[rIdx % 4];
       let ridgeCells = null;
-      for (let tries = 0; tries < 140; tries++) {
-        const sx = 3 + Math.floor(rng() * (N - 6));
-        const sy = 3 + Math.floor(rng() * (N - 6));
-        if (!isValidRockCell(sx, sy, gId)) continue;
+      for (let tries = 0; tries < 180; tries++) {
+        const sx = 2 + Math.floor(rng() * (N - 4));
+        const sy = 2 + Math.floor(rng() * (N - 4));
+        if (tries < 110 && !isInQuadrant(sx, sy, targetQuad)) continue;
+        if (!isValidRidgeCell(sx, sy, gId)) continue;
         const chain = [[sx, sy]];
         rockClusterIdGrid[sy][sx] = gId;
         let lastDir = card[Math.floor(rng() * 4)];
@@ -767,7 +766,7 @@ window.ZS = window.ZS || {};
           for (let k = 0; k < 4; k++) {
             const nx = tail[0] + card[k][0];
             const ny = tail[1] + card[k][1];
-            if (!isValidRockCell(nx, ny, gId) || rockClusterIdGrid[ny][nx] === gId) continue;
+            if (!isValidRidgeCell(nx, ny, gId) || rockClusterIdGrid[ny][nx] === gId) continue;
             // Prevent folding back into a 2x2 clump: only 1 cardinal link back into current chain
             let adjInChain = 0;
             for (let m = 0; m < 4; m++) {
@@ -797,17 +796,14 @@ window.ZS = window.ZS || {};
       if (!ridgeCells) return null;
 
       const peakIndices = new Set();
-      if (wantSz === 3) {
-        peakIndices.add(1);
-      } else if (wantSz === 4) {
-        peakIndices.add(1);
-        peakIndices.add(2);
-      } else {
-        // Length 5: middle core [2] + adjacent shoulder [1] or [3] (2 contiguous peaks flanked by foothills)
-        peakIndices.add(2);
-        peakIndices.add(rng() < 0.5 ? 1 : 3);
+      for (let pi = 1; pi <= wantSz - 2; pi++) {
+        peakIndices.add(pi);
+      }
+      if (wantSz === 4 && rng() < 0.5) {
+        peakIndices.add(rng() < 0.5 ? 0 : 3);
       }
 
+      const peakCells = [];
       for (let ci = 0; ci < ridgeCells.length; ci++) {
         const rx = ridgeCells[ci][0];
         const ry = ridgeCells[ci][1];
@@ -821,8 +817,12 @@ window.ZS = window.ZS || {};
           flip: rng() < 0.5 ? 1 : 0
         };
         rockTilesPlaced += 1;
-        if (isPeak) totalPeaksPlaced += 1;
+        if (isPeak) {
+          totalPeaksPlaced += 1;
+          peakCells.push([rx, ry]);
+        }
       }
+      placedRidges.push({ cells: ridgeCells, peakCells });
     }
 
     // 2b) Place 2~3 foothill rock clusters (isPeak: false)
@@ -887,78 +887,148 @@ window.ZS = window.ZS || {};
     }
 
     if (
-      rockTilesPlaced < 16 ||
-      rockTilesPlaced > 22 ||
-      totalPeaksPlaced < 1 ||
+      placedRidges.length < 3 ||
+      totalPeaksPlaced < 8 ||
+      rockTilesPlaced < 18 ||
+      rockTilesPlaced > 34 ||
       foothillClustersPlaced < 2 ||
       foothillClustersPlaced > 3
     ) {
       return null;
     }
 
-    // 3) Single Organic Multi-Tile Wind Zone (10~16 connected flat tiles, 2-tier heatmap)
-    const windSeedCands = [];
-    for (let y = 3; y <= N - 4; y++) {
-      for (let x = 3; x <= N - 4; x++) {
-        if (isInsideHqSafeZone(x, y) || grid[y][x] || rampEntries.has(x + ',' + y)) continue;
-        const dist = Math.hypot(x - hx, y - hy);
-        if (dist >= 5.5 && dist <= 9.5) {
-          windSeedCands.push({ x, y });
-        }
-      }
-    }
-    shuffleWithRng(windSeedCands, rng);
+    // 3) Single Mountain-Anchored Strong Wind Zone (10~16 connected flat tiles wrapping along a mountain ridge)
     const wzCfg = DATA.WIND_ZONE || {};
     const minWindTiles = wzCfg.minTiles || 10;
     const maxWindTiles = wzCfg.maxTiles || 16;
     const targetWindTiles = minWindTiles + Math.floor(rng() * (maxWindTiles - minWindTiles + 1));
-    const windAngle = rng() * Math.PI * 2;
-    const dirCos = Math.cos(windAngle);
-    const dirSin = Math.sin(windAngle);
     const isValidWindCell = (wx, wy) =>
       isInsideInnerTerrainBounds(wx, wy) &&
       !isInsideHqSafeZone(wx, wy) &&
       !grid[wy][wx] &&
       !rampEntries.has(wx + ',' + wy);
 
-    let chosenWind = null;
-    const maxWindTries = Math.min(24, windSeedCands.length);
+    const minChebToCells = (x, y, arr) => {
+      let best = 1e9;
+      for (let i = 0; i < arr.length; i++) {
+        const d = Math.max(Math.abs(x - arr[i][0]), Math.abs(y - arr[i][1]));
+        if (d < best) best = d;
+      }
+      return best;
+    };
+    const minHypotToCells = (x, y, arr) => {
+      let best = 1e9;
+      for (let i = 0; i < arr.length; i++) {
+        const d = Math.hypot(x - arr[i][0], y - arr[i][1]);
+        if (d < best) best = d;
+      }
+      return best;
+    };
+
+    const shuffledRidges = shuffleWithRng(placedRidges.slice(), rng);
+    const preferredRidges = [];
+    const fallbackRidges = [];
+    for (let i = 0; i < shuffledRidges.length; i++) {
+      const r = shuffledRidges[i];
+      let sx = 0;
+      let sy = 0;
+      for (let ci = 0; ci < r.cells.length; ci++) {
+        sx += r.cells[ci][0];
+        sy += r.cells[ci][1];
+      }
+      const distHq = Math.hypot(sx / r.cells.length - hx, sy / r.cells.length - hy);
+      if (distHq >= 5.0 && distHq <= 11.5) preferredRidges.push(r);
+      else fallbackRidges.push(r);
+    }
+    const orderedRidges = preferredRidges.concat(fallbackRidges);
     const cardDirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (let sIdx = 0; sIdx < maxWindTries && !chosenWind; sIdx++) {
-      const root = windSeedCands[sIdx];
-      const cells = [{ x: root.x, y: root.y }];
-      const inSet = new Set([root.x + ',' + root.y]);
-      while (cells.length < targetWindTiles) {
-        const frontier = [];
-        const seenFront = new Set();
-        for (let ci = 0; ci < cells.length; ci++) {
-          const c = cells[ci];
-          for (let k = 0; k < cardDirs.length; k++) {
-            const nx = c.x + cardDirs[k][0];
-            const ny = c.y + cardDirs[k][1];
-            const key = nx + ',' + ny;
-            if (inSet.has(key) || seenFront.has(key) || !isValidWindCell(nx, ny)) continue;
-            seenFront.add(key);
-            let nCount = 0;
-            for (let m = 0; m < cardDirs.length; m++) {
-              if (inSet.has((nx + cardDirs[m][0]) + ',' + (ny + cardDirs[m][1]))) nCount++;
-            }
-            const dx = nx - root.x;
-            const dy = ny - root.y;
-            const align = Math.abs(dx * dirCos + dy * dirSin) * 0.45 - Math.abs(dx * dirSin - dy * dirCos) * 0.35;
-            const score = nCount * 1.15 + align + rng() * 1.35;
-            frontier.push({ x: nx, y: ny, score });
+
+    let chosenWind = null;
+    let chosenRidge = null;
+    let chosenWindAngle = 0;
+    for (let rIdx = 0; rIdx < orderedRidges.length && !chosenWind; rIdx++) {
+      const R = orderedRidges[rIdx];
+      let baseAng = Math.atan2(
+        R.cells[R.cells.length - 1][1] - R.cells[0][1],
+        R.cells[R.cells.length - 1][0] - R.cells[0][0]
+      );
+      if (rng() < 0.5) baseAng += Math.PI;
+      const ridgeWindAngle = baseAng + (rng() - 0.5) * 0.45;
+      const dirCos = Math.cos(ridgeWindAngle);
+      const dirSin = Math.sin(ridgeWindAngle);
+
+      const ridgeSeeds = [];
+      for (let y = 2; y <= N - 3; y++) {
+        for (let x = 2; x <= N - 3; x++) {
+          if (isValidWindCell(x, y) && minChebToCells(x, y, R.peakCells) === 1) {
+            ridgeSeeds.push({ x, y });
           }
         }
-        if (frontier.length === 0) break;
-        frontier.sort((a, b) => b.score - a.score);
-        const pickPool = Math.min(3, frontier.length);
-        const chosen = frontier[Math.floor(rng() * pickPool)];
-        cells.push({ x: chosen.x, y: chosen.y });
-        inSet.add(chosen.x + ',' + chosen.y);
       }
-      if (cells.length >= targetWindTiles) {
-        chosenWind = cells;
+      shuffleWithRng(ridgeSeeds, rng);
+
+      let bestFallback = null;
+      const maxSeedTries = Math.min(16, ridgeSeeds.length);
+      for (let sIdx = 0; sIdx < maxSeedTries; sIdx++) {
+        const root = ridgeSeeds[sIdx];
+        const cells = [{ x: root.x, y: root.y }];
+        const inSet = new Set([root.x + ',' + root.y]);
+        while (cells.length < targetWindTiles) {
+          const frontier = [];
+          const seenFront = new Set();
+          for (let ci = 0; ci < cells.length; ci++) {
+            const c = cells[ci];
+            for (let k = 0; k < cardDirs.length; k++) {
+              const nx = c.x + cardDirs[k][0];
+              const ny = c.y + cardDirs[k][1];
+              const key = nx + ',' + ny;
+              if (inSet.has(key) || seenFront.has(key) || !isValidWindCell(nx, ny)) continue;
+              if (minHypotToCells(nx, ny, R.cells) > 4.2) continue;
+              seenFront.add(key);
+              let nCount = 0;
+              for (let m = 0; m < cardDirs.length; m++) {
+                if (inSet.has((nx + cardDirs[m][0]) + ',' + (ny + cardDirs[m][1]))) nCount++;
+              }
+              const dPeak = minHypotToCells(nx, ny, R.peakCells);
+              const mtnAffinity = Math.max(0, 3.6 - dPeak) * 0.95;
+              const dx = nx - root.x;
+              const dy = ny - root.y;
+              const align = Math.abs(dx * dirCos + dy * dirSin) * 0.40 - Math.abs(dx * dirSin - dy * dirCos) * 0.25;
+              const score = nCount * 1.15 + mtnAffinity + align + rng() * 1.15;
+              frontier.push({ x: nx, y: ny, score });
+            }
+          }
+          if (frontier.length === 0) break;
+          frontier.sort((a, b) => b.score - a.score);
+          const pickPool = Math.min(3, frontier.length);
+          const chosen = frontier[Math.floor(rng() * pickPool)];
+          cells.push({ x: chosen.x, y: chosen.y });
+          inSet.add(chosen.x + ',' + chosen.y);
+        }
+        if (cells.length >= minWindTiles) {
+          let adjPeakCount = 0;
+          let adjRidgeCount = 0;
+          for (let ci = 0; ci < cells.length; ci++) {
+            if (minChebToCells(cells[ci].x, cells[ci].y, R.peakCells) <= 1) adjPeakCount += 1;
+            if (minChebToCells(cells[ci].x, cells[ci].y, R.cells) <= 1) adjRidgeCount += 1;
+          }
+          if (adjPeakCount >= 2 && adjRidgeCount >= 3) {
+            if (cells.length >= targetWindTiles) {
+              chosenWind = cells;
+              chosenRidge = R;
+              chosenWindAngle = ridgeWindAngle;
+              break;
+            }
+            if (!bestFallback || cells.length > bestFallback.cells.length) {
+              bestFallback = { cells, ridge: R, angle: ridgeWindAngle };
+            }
+          }
+        }
+      }
+      if (!chosenWind && bestFallback) {
+        chosenWind = bestFallback.cells;
+        chosenRidge = bestFallback.ridge;
+        chosenWindAngle = bestFallback.angle;
       }
     }
     if (!chosenWind || chosenWind.length < minWindTiles) return null;
@@ -986,7 +1056,8 @@ window.ZS = window.ZS || {};
         if (windSet.has((c.x + cardDirs[k][0]) + ',' + (c.y + cardDirs[k][1]))) nb += 1.0;
         if (windSet.has((c.x + diagDirs[k][0]) + ',' + (c.y + diagDirs[k][1]))) nb += 0.5;
       }
-      c.interiorScore = nb - (c.dist / maxDist) * 2.2;
+      const dPeak = minHypotToCells(c.x, c.y, chosenRidge.peakCells);
+      c.interiorScore = nb - (c.dist / maxDist) * 1.85 + Math.max(0, 2.5 - dPeak) * 0.45;
     }
     const ranked = chosenWind.slice().sort((a, b) => b.interiorScore - a.interiorScore);
     const coreTarget = Math.max(3, Math.min(6, Math.round(chosenWind.length * 0.35)));
@@ -1004,7 +1075,7 @@ window.ZS = window.ZS || {};
         elev: 0,
         tier: isCore ? 2 : 1,
         windMult: isCore ? coreMult : outerMult,
-        windAngle
+        windAngle: chosenWindAngle
       };
     }
 
