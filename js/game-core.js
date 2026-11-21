@@ -50,6 +50,8 @@ window.ZS = window.ZS || {};
     undergroundUnlocked: false,
     digAp: 0,
     digApCap: 24,
+    activeLayer: 'surface',
+    underground: null,
 
     cozyScore: 0,
     cozyFloorRaw: 0,
@@ -528,6 +530,7 @@ window.ZS = window.ZS || {};
   }
 
   function getTerrainElevationAt(gx, gy) {
+    if (state.activeLayer === 'underground') return 0;
     const tx = Math.floor(gx);
     const ty = Math.floor(gy);
     if (tx < 0 || ty < 0 || tx >= N || ty >= N) return 0;
@@ -1321,6 +1324,10 @@ window.ZS = window.ZS || {};
     state.undergroundUnlocked = false;
     state.digAp = 0;
     state.digApCap = 24;
+    state.activeLayer = 'surface';
+    state.underground = G.createDefaultUnderground ? G.createDefaultUnderground() : null;
+    if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
+    if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
     state.freeVouchers = divDef.startingVouchers ? { ...divDef.startingVouchers } : {};
     state.showWindOverlay = false;
     state.traderRefreshCost = 15;
@@ -1550,6 +1557,7 @@ window.ZS = window.ZS || {};
   }
 
   function toggleWindOverlay() {
+    if (state.activeLayer === 'underground') return false;
     state.showWindOverlay = !state.showWindOverlay;
     notifyUi();
     return state.showWindOverlay;
@@ -1735,6 +1743,7 @@ window.ZS = window.ZS || {};
         undergroundUnlocked: !!state.undergroundUnlocked,
         digAp: state.digAp || 0,
         digApCap: state.digApCap || 24,
+        underground: G.serializeUnderground ? G.serializeUnderground() : null,
         showReconPaths: state.showReconPaths !== false,
         showWindOverlay: !!state.showWindOverlay,
         nextWaveIntel: state.nextWaveIntel,
@@ -2030,6 +2039,14 @@ window.ZS = window.ZS || {};
       normalizeJobs();
       state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
+      state.activeLayer = 'surface';
+      if (ZS.Iso && ZS.Iso.resetLayerCameras) ZS.Iso.resetLayerCameras();
+      if (G.deserializeUnderground) {
+        G.deserializeUnderground(d.underground);
+      } else if (G.createDefaultUnderground) {
+        state.underground = G.createDefaultUnderground();
+      }
+      if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
       state.showReconPaths = d.showReconPaths !== undefined ? !!d.showReconPaths : true;
       state.showWindOverlay = !!d.showWindOverlay;
       state.reconNightFadeTimer = 0;

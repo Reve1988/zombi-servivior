@@ -241,6 +241,140 @@ ZS.DATA = (function () {
   VERSION: 'v0.7.0',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
+  B1_SIZE: 23,
+  B1_ELEVATOR_POS: { x: 11, y: 11 },
+  B1_ROCK_Z: 11,
+  B1_WALL_Z: 10,
+  B1_ROOMS: {
+    quarters: {
+      id: 'quarters',
+      name: '생활관',
+      accent: '#E8A848',
+      floorTint: '#656E78',
+      iconId: 'b1-quarters',
+      desc: '작전 요원 주거·휴식 구역 (Stage 3 숙소 설비 배치 가능)'
+    },
+    research_lab: {
+      id: 'research_lab',
+      name: '연구실',
+      accent: '#C084FC',
+      floorTint: '#666E7C',
+      iconId: 'b1-lab',
+      desc: '연구 데이터 분석 및 RP 증폭 구역 (Stage 3 연구 설비 배치 가능)'
+    },
+    supply_depot: {
+      id: 'supply_depot',
+      name: '보급 창고',
+      accent: '#D49A5A',
+      floorTint: '#686F76',
+      iconId: 'b1-supply',
+      desc: '자재·고철 비축 및 공병 제작 구역 (Stage 3 보급 설비 배치 가능)'
+    },
+    lounge: {
+      id: 'lounge',
+      name: '휴게실',
+      accent: '#4ADE80',
+      floorTint: '#626F75',
+      iconId: 'b1-lounge',
+      desc: '생존자 사기 회복 및 안락함 지원 구역 (Stage 3 휴게 가구 배치 가능)'
+    },
+    power_vault: {
+      id: 'power_vault',
+      name: '지하 축전실',
+      accent: '#E07A38',
+      floorTint: '#616B77',
+      iconId: 'b1-vault',
+      desc: '방호 격벽 내 비상 축전·배전 구역 (Stage 3 지하 전력 설비 배치 가능)'
+    }
+  },
+  B1_ROOM_ORDER: ['quarters', 'research_lab', 'supply_depot', 'lounge', 'power_vault'],
+  B1_TOOLS: [
+    {
+      id: 'b1_dig',
+      mode: 'b1_dig',
+      name: '암반 굴착',
+      iconId: 'b1-dig',
+      tag: '인접 굴착',
+      costLabel: '1~3 AP',
+      accent: '#F59E0B',
+      desc: '열린 공간과 상하좌우 인접한 비기반암 암반을 클릭 또는 드래그해 굴착합니다. 거리별 1/2/3 AP 소모.'
+    },
+    {
+      id: 'b1_door',
+      mode: 'b1_door',
+      name: '방폭문',
+      iconId: 'b1-door',
+      tag: '격벽 연결',
+      costLabel: '무료',
+      accent: '#F59E0B',
+      desc: '콘크리트 격벽(구역↔복도 또는 구역↔구역)을 클릭해 3D 방폭문을 설치·제거합니다. 승강기와 연결해야 활성화됩니다.'
+    },
+    {
+      id: 'b1_zone_quarters',
+      mode: 'b1_zone',
+      role: 'quarters',
+      name: '생활관 구역',
+      iconId: 'b1-quarters',
+      tag: '드래그 지정',
+      costLabel: '생활관',
+      accent: '#E8A848',
+      desc: '드래그로 생활관 구역을 지정해 전술 콘크리트 바닥과 자동 격벽을 형성합니다.'
+    },
+    {
+      id: 'b1_zone_research_lab',
+      mode: 'b1_zone',
+      role: 'research_lab',
+      name: '연구실 구역',
+      iconId: 'b1-lab',
+      tag: '드래그 지정',
+      costLabel: '연구실',
+      accent: '#C084FC',
+      desc: '드래그로 연구실 구역을 지정해 전술 콘크리트 바닥과 자동 격벽을 형성합니다.'
+    },
+    {
+      id: 'b1_zone_supply_depot',
+      mode: 'b1_zone',
+      role: 'supply_depot',
+      name: '보급 창고 구역',
+      iconId: 'b1-supply',
+      tag: '드래그 지정',
+      costLabel: '보급 창고',
+      accent: '#D49A5A',
+      desc: '드래그로 보급 창고 구역을 지정해 전술 콘크리트 바닥과 자동 격벽을 형성합니다.'
+    },
+    {
+      id: 'b1_zone_lounge',
+      mode: 'b1_zone',
+      role: 'lounge',
+      name: '휴게실 구역',
+      iconId: 'b1-lounge',
+      tag: '드래그 지정',
+      costLabel: '휴게실',
+      accent: '#4ADE80',
+      desc: '드래그로 휴게실 구역을 지정해 전술 콘크리트 바닥과 자동 격벽을 형성합니다.'
+    },
+    {
+      id: 'b1_zone_power_vault',
+      mode: 'b1_zone',
+      role: 'power_vault',
+      name: '지하 축전실 구역',
+      iconId: 'b1-vault',
+      tag: '드래그 지정',
+      costLabel: '축전실',
+      accent: '#E07A38',
+      desc: '드래그로 지하 축전실 구역을 지정해 전술 콘크리트 바닥과 자동 격벽을 형성합니다.'
+    },
+    {
+      id: 'b1_unzone',
+      mode: 'b1_unzone',
+      name: '구역 해제',
+      iconId: 'b1-unzone',
+      tag: '드래그 해제',
+      costLabel: '초기화',
+      accent: '#94A3B8',
+      desc: '지정된 구역 타일을 드래그 또는 클릭해 일반 흙바닥 복도로 되돌립니다. (가젯 미배치 시 가능)'
+    }
+  ],
   PLATEAU_ELEV_Z: 10,
   RAMP_ELEV_Z: 5,
   ROCK_TOP_Z: 16,

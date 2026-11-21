@@ -59,6 +59,11 @@ ZS.Iso = (function () {
     return Number(Math.max(0.54, Math.min(0.76, fitZoom)).toFixed(3));
   }
 
+  const layerCameras = {
+    surface: null,
+    underground: null
+  };
+
   function setViewport(w, h) {
     viewW = w;
     viewH = h;
@@ -67,7 +72,7 @@ ZS.Iso = (function () {
     clampCamera();
   }
 
-  function resetCamera() {
+  function resetSurfaceCamera() {
     const hqX = ZS.DATA.HQ_POS.x + 0.5;
     const hqY = ZS.DATA.HQ_POS.y + 0.5;
     cam.minZoom = computeMinZoom(viewW, viewH);
@@ -76,6 +81,48 @@ ZS.Iso = (function () {
     const baseZoom = Math.min(1.12, Math.max(0.78, Math.min(viewW / 1280, viewH / 760)));
     cam.zoom = Math.max(cam.minZoom, Math.min(cam.maxZoom, baseZoom));
     clampCamera();
+  }
+
+  function resetUndergroundCamera() {
+    const elPos = ZS.DATA.B1_ELEVATOR_POS || { x: 11, y: 11 };
+    const cx = elPos.x + 0.5;
+    const cy = elPos.y + 0.5;
+    cam.minZoom = computeMinZoom(viewW, viewH);
+    cam.x = (cx - cy) * (TILE_W * 0.5);
+    cam.y = (cx + cy) * (TILE_H * 0.5) + 18;
+    const baseZoom = Math.min(1.18, Math.max(0.84, Math.min(viewW / 1280, viewH / 760)));
+    cam.zoom = Math.max(cam.minZoom, Math.min(cam.maxZoom, baseZoom));
+    clampCamera();
+  }
+
+  function resetCamera() {
+    const isUg = !!(ZS.Game && ZS.Game.state && ZS.Game.state.activeLayer === 'underground');
+    if (isUg) resetUndergroundCamera();
+    else resetSurfaceCamera();
+  }
+
+  function saveLayerCamera(layer) {
+    const key = layer === 'underground' ? 'underground' : 'surface';
+    layerCameras[key] = { x: cam.x, y: cam.y, zoom: cam.zoom };
+  }
+
+  function restoreLayerCamera(layer) {
+    const key = layer === 'underground' ? 'underground' : 'surface';
+    const saved = layerCameras[key];
+    if (saved) {
+      cam.x = saved.x;
+      cam.y = saved.y;
+      cam.zoom = Math.max(cam.minZoom, Math.min(cam.maxZoom, saved.zoom));
+      clampCamera();
+      return;
+    }
+    if (key === 'underground') resetUndergroundCamera();
+    else resetSurfaceCamera();
+  }
+
+  function resetLayerCameras() {
+    layerCameras.surface = null;
+    layerCameras.underground = null;
   }
 
   function panByScreen(dxScreen, dyScreen) {
@@ -150,7 +197,27 @@ ZS.Iso = (function () {
   }
 
   function screenToGrid(sx, sy) {
-    const tGrid = ZS.Game && ZS.Game.state && ZS.Game.state.terrainGrid;
+    const st = ZS.Game && ZS.Game.state;
+    if (st && st.activeLayer === 'underground') {
+      const uiMode = ZS._UI && ZS._UI.uiState && ZS._UI.uiState.mode;
+      if (uiMode !== 'b1_zone' && uiMode !== 'b1_unzone' && uiMode !== 'b1_door') {
+        const ug = st.underground;
+        const b1Size = (ZS.DATA && ZS.DATA.B1_SIZE) || 23;
+        const rockZ = (ZS.DATA && ZS.DATA.B1_ROCK_Z) || 11;
+        if (ug && ug.grid) {
+          const cRock = screenToGridAtZ(sx, sy, rockZ);
+          if (cRock.tx >= 0 && cRock.ty >= 0 && cRock.tx < b1Size && cRock.ty < b1Size) {
+            const cell = ug.grid[cRock.ty] && ug.grid[cRock.ty][cRock.tx];
+            if (cell && !cell.excavated) {
+              return cRock;
+            }
+          }
+        }
+      }
+      return screenToGridAtZ(sx, sy, 0);
+    }
+
+    const tGrid = st && st.terrainGrid;
     if (tGrid) {
       const plateauZ = (ZS.DATA && ZS.DATA.PLATEAU_ELEV_Z) || 10;
       const c10 = screenToGridAtZ(sx, sy, plateauZ);
@@ -398,6 +465,11 @@ ZS.Iso = (function () {
     computeMinZoom,
     setViewport,
     resetCamera,
+    resetSurfaceCamera,
+    resetUndergroundCamera,
+    saveLayerCamera,
+    restoreLayerCamera,
+    resetLayerCameras,
     panByScreen,
     zoomAtScreen,
     gridToWorld,
@@ -405,6 +477,7 @@ ZS.Iso = (function () {
     getElevationOffset,
     projectTo,
     gridToScreen,
+    screenToGridAtZ,
     screenToGridFlat,
     screenToGrid,
     shadeHex,

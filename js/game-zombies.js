@@ -921,6 +921,11 @@ window.ZS = window.ZS || {};
 
   function triggerGameOver() {
     state.phase = 'gameover';
+    if (state.activeLayer === 'underground') {
+      state.activeLayer = 'surface';
+      if (ZS.Iso && ZS.Iso.restoreLayerCamera) ZS.Iso.restoreLayerCamera('surface');
+      if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
+    }
     if (G.recordDivisionProgress) {
       G.recordDivisionProgress(state.divisionId, state.wave, !!(state.bossDefeated && state.wave >= 20));
     }

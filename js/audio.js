@@ -94,6 +94,14 @@ ZS.Audio = (function () {
       tone(320, 540, 0.09, 'triangle', 0.09);
       setTimeout(() => tone(620, 780, 0.07, 'sine', 0.06), 45);
     },
+    playDig() {
+      noise(0.11, 0.09, 520);
+      tone(165, 82, 0.11, 'triangle', 0.08);
+    },
+    playDoor() {
+      noise(0.08, 0.07, 740);
+      tone(220, 340, 0.09, 'square', 0.05);
+    },
     playUpgrade() {
       tone(380, 620, 0.10, 'triangle', 0.09);
       setTimeout(() => tone(620, 920, 0.11, 'sine', 0.08), 55);

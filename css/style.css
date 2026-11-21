@@ -729,6 +729,87 @@ button, input, select {
   background: linear-gradient(155deg, #C084FC 0%, #7E22CE 52%, #291642 100%);
 }
 
+.wind-layer-btn:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.wind-layer-btn.b1-toggle-btn {
+  color: #FDE68A;
+}
+
+.wind-layer-btn.b1-toggle-btn::before {
+  background: linear-gradient(155deg, #F59E0B 0%, #925414 52%, #2B1A09 100%);
+}
+
+.wind-layer-btn.b1-toggle-btn::after {
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.18) 0, transparent 6px),
+    linear-gradient(180deg, #2B2012 0%, #17120C 100%);
+}
+
+.wind-layer-btn.b1-toggle-btn:hover:not(:disabled) {
+  color: #FFFBEB;
+  transform: translateY(-1px);
+}
+
+.wind-layer-btn.b1-toggle-btn.active {
+  color: #FFFBEB;
+}
+
+.wind-layer-btn.b1-toggle-btn.active::before {
+  background: linear-gradient(155deg, #FBBF24 0%, #D97706 55%, #451A03 100%);
+}
+
+.wind-layer-btn.b1-toggle-btn.active::after {
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.24) 0, transparent 7px),
+    linear-gradient(180deg, #3C2810 0%, #201509 100%);
+}
+
+.wind-layer-btn.b1-toggle-btn.b1-locked-unlock {
+  color: #9FB3C7;
+}
+
+.wind-layer-btn.b1-toggle-btn.b1-locked-unlock::before {
+  background: linear-gradient(155deg, #4B5B6E 0%, #2A3644 52%, #141B24 100%);
+}
+
+.wind-layer-btn.b1-toggle-btn.b1-locked-unlock::after {
+  background: linear-gradient(180deg, #1E2835 0%, #111720 100%);
+}
+
+.wind-layer-btn.b1-toggle-btn.b1-unlocked-pulse {
+  animation: b1UnlockPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes b1UnlockPulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(245, 158, 11, 0)); }
+  50% { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.55)); }
+}
+
+.b1-ap-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(245, 158, 11, 0.22);
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  color: #FDE68A;
+  line-height: 1.1;
+}
+
+.b1-locked-unlock .b1-ap-chip {
+  background: rgba(51, 65, 85, 0.45);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #9FB3C7;
+}
+
 .settings-wrap {
   position: relative;
   z-index: 48;
@@ -1443,6 +1524,30 @@ button, input, select {
 
 .cta-wave-btn.boss-wave .cta-sub {
   color: #FFE4E8;
+}
+
+.cta-wave-btn.b1-locked,
+.cta-wave-btn:disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+  transform: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+}
+
+.cta-wave-btn.b1-locked::before {
+  background: linear-gradient(155deg, #64748B 0%, #334155 50%, #1E293B 100%);
+}
+
+.cta-wave-btn.b1-locked::after {
+  background: linear-gradient(180deg, #1E2733 0%, #111822 100%);
+}
+
+.cta-wave-btn.b1-locked .cta-hazard {
+  background: repeating-linear-gradient(-45deg, #64748B 0 7px, #1E293B 7px 14px);
+}
+
+.cta-wave-btn.b1-locked .cta-sub {
+  color: #FDE68A;
 }
 
 .tactical-btn {
@@ -4421,4 +4526,46 @@ body.main-menu-active #game-canvas {
     grid-template-columns: 1fr;
   }
 }
+
+/* ================= UNDERGROUND B1 DOCK & ACTION STYLES ================= */
+.tool-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.b1-tab-btn.active::before {
+  background: linear-gradient(155deg, #F59E0B 0%, #B45309 55%, #451A03 100%);
+}
+
+.cost-chip.b1-ap-cost {
+  background: rgba(69, 26, 3, 0.78);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #FDE68A;
+}
+
+.cost-chip.b1-role-chip {
+  background: rgba(15, 23, 34, 0.85);
+  border: 1px solid rgba(148, 178, 210, 0.25);
+  color: #E2E8F0;
+}
+
+.b1-role-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.detail-upgrade-btn.b1-action-btn {
+  border-color: rgba(245, 158, 11, 0.65);
+  background: rgba(54, 34, 12, 0.90);
+  color: #FDE68A;
+}
+
+.detail-upgrade-btn.b1-action-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.24);
+  border-color: #F59E0B;
+}
+
 
