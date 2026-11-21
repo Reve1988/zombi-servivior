@@ -666,10 +666,113 @@ window.ZS = window.ZS || {};
     return c;
   }
 
+  function rotateB1LocalPt(lx, ly, rot) {
+    const r = rot & 3;
+    if (r === 1) return [ly, 1 - lx];
+    if (r === 2) return [1 - lx, 1 - ly];
+    if (r === 3) return [1 - ly, lx];
+    return [lx, ly];
+  }
+
+  function rotateB1LocalBox(lx, ly, sx, sy, rot) {
+    const r = rot & 3;
+    if (r === 1) return [ly, 1 - lx - sx, sy, sx];
+    if (r === 2) return [1 - lx - sx, 1 - ly - sy, sx, sy];
+    if (r === 3) return [1 - ly - sy, lx, sy, sx];
+    return [lx, ly, sx, sy];
+  }
+
+  function sortRotatedB1Boxes(boxes) {
+    const n = boxes.length;
+    if (n <= 1) return boxes;
+    const indeg = new Int16Array(n);
+    const adj = Array.from({ length: n }, () => []);
+    const embedTol = 0.045;
+    const zTol = 0.02;
+
+    for (let i = 0; i < n; i++) {
+      const A = boxes[i];
+      const ax0 = A.rx;
+      const ax1 = A.rx + A.rsx;
+      const ay0 = A.ry;
+      const ay1 = A.ry + A.rsy;
+      const az0 = A.lz;
+      const az1 = A.lz + A.h;
+      for (let j = i + 1; j < n; j++) {
+        const B = boxes[j];
+        const bx0 = B.rx;
+        const bx1 = B.rx + B.rsx;
+        const by0 = B.ry;
+        const by1 = B.ry + B.rsy;
+        const bz0 = B.lz;
+        const bz1 = B.lz + B.h;
+
+        const xOverlap = ax0 < bx1 - 0.005 && bx0 < ax1 - 0.005;
+        const yOverlap = ay0 < by1 - 0.005 && by0 < ay1 - 0.005;
+        const zOverlap = az0 < bz1 - 0.005 && bz0 < az1 - 0.005;
+
+        let dir = 0; // 1 => A before B, -1 => B before A
+        if (xOverlap && yOverlap && !zOverlap) {
+          if (az1 <= bz0 + zTol && az0 < bz0 - 0.002) dir = 1;
+          else if (bz1 <= az0 + zTol && bz0 < az0 - 0.002) dir = -1;
+        }
+        if (dir === 0 && zOverlap) {
+          const aBehindX = ax0 < bx0 - 0.002 && ax1 < bx1 - 0.002 && ax1 <= bx0 + embedTol;
+          const bBehindX = bx0 < ax0 - 0.002 && bx1 < ax1 - 0.002 && bx1 <= ax0 + embedTol;
+          const aBehindY = ay0 < by0 - 0.002 && ay1 < by1 - 0.002 && ay1 <= by0 + embedTol;
+          const bBehindY = by0 < ay0 - 0.002 && by1 < ay1 - 0.002 && by1 <= ay0 + embedTol;
+          if ((aBehindX && yOverlap) || (aBehindY && xOverlap) || (aBehindX && aBehindY)) {
+            dir = 1;
+          } else if ((bBehindX && yOverlap) || (bBehindY && xOverlap) || (bBehindX && bBehindY)) {
+            dir = -1;
+          }
+        }
+        if (dir === 1) {
+          adj[i].push(j);
+          indeg[j] += 1;
+        } else if (dir === -1) {
+          adj[j].push(i);
+          indeg[i] += 1;
+        }
+      }
+    }
+
+    const done = new Uint8Array(n);
+    const out = [];
+    for (let step = 0; step < n; step++) {
+      let pick = -1;
+      let bestDeg = Infinity;
+      let bestKey = Infinity;
+      for (let i = 0; i < n; i++) {
+        if (done[i]) continue;
+        const deg = indeg[i];
+        const b = boxes[i];
+        const depthKey = (b.rx + b.rsx * 0.5) + (b.ry + b.rsy * 0.5) + b.lz * 0.02 + i * 0.0001;
+        if (deg < bestDeg || (deg === bestDeg && depthKey < bestKey)) {
+          bestDeg = deg;
+          bestKey = depthKey;
+          pick = i;
+        }
+      }
+      if (pick < 0) break;
+      done[pick] = 1;
+      out.push(boxes[pick]);
+      const nbrs = adj[pick];
+      for (let k = 0; k < nbrs.length; k++) {
+        indeg[nbrs[k]] -= 1;
+      }
+    }
+    return out;
+  }
+
   function makeB1WorldPainter(ctx, tx, ty, baseZ, isSil, timeSec, opts) {
     const Iso = ZS.Iso;
     const powered = opts ? !opts.blackoutPaused : true;
     const active = opts && opts.active !== undefined ? !!opts.active : true;
+    const rot = opts && opts.rot ? (opts.rot & 3) : 0;
+    const polys = [];
+    const boxes = [];
+    const glows = [];
     return {
       isSil: !!isSil,
       isThumb: false,
@@ -677,9 +780,11 @@ window.ZS = window.ZS || {};
       active,
       timeSec: timeSec || 0,
       pt(lx, ly, lz) {
-        return Iso.gridToScreen(tx + lx, ty + ly, baseZ + lz);
+        const [rx, ry] = rotateB1LocalPt(lx, ly, rot);
+        return Iso.gridToScreen(tx + rx, ty + ry, baseZ + lz);
       },
       box(lx, ly, lz, sx, sy, h, boxOpts) {
+        const [rx, ry, rsx, rsy] = rotateB1LocalBox(lx, ly, sx, sy, rot);
         const o = Object.assign({}, boxOpts);
         if (isSil) {
           o.base = '#B8C0C8';
@@ -688,37 +793,56 @@ window.ZS = window.ZS || {};
           delete o.right;
           o.stroke = 'rgba(18, 24, 32, 0.35)';
         }
-        Iso.drawVoxelBox(ctx, tx + lx, ty + ly, baseZ + lz, sx, sy, h, o);
+        boxes.push({ rx, ry, lz, rsx, rsy, h, o });
       },
       poly(pts3d, fill, stroke, lineWidth) {
         if (isSil && !fill) return;
-        ctx.save();
-        ctx.beginPath();
-        for (let i = 0; i < pts3d.length; i++) {
-          const p = Iso.gridToScreen(tx + pts3d[i][0], ty + pts3d[i][1], baseZ + pts3d[i][2]);
-          if (i === 0) ctx.moveTo(p.x, p.y);
-          else ctx.lineTo(p.x, p.y);
-        }
-        ctx.closePath();
-        if (fill) {
-          ctx.fillStyle = isSil ? '#B8C0C8' : fill;
-          ctx.fill();
-        }
-        if (stroke) {
-          ctx.strokeStyle = isSil ? 'rgba(18, 24, 32, 0.35)' : stroke;
-          ctx.lineWidth = lineWidth || 1;
-          ctx.stroke();
-        }
-        ctx.restore();
+        polys.push({ pts3d, fill, stroke, lineWidth });
       },
       glowEllipse(lx, ly, lz, rx, ry, color, alpha) {
         if (isSil || !color || alpha <= 0) return;
-        const p = Iso.gridToScreen(tx + lx, ty + ly, baseZ + lz);
-        const stamp = getB1GlowStamp(color);
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(stamp, p.x - rx, p.y - ry, rx * 2, ry * 2);
-        ctx.restore();
+        const [rlx, rly] = rotateB1LocalPt(lx, ly, rot);
+        glows.push({ rlx, rly, lz, rx, ry, color, alpha });
+      },
+      flush() {
+        for (let i = 0; i < polys.length; i++) {
+          const pl = polys[i];
+          ctx.save();
+          ctx.beginPath();
+          for (let j = 0; j < pl.pts3d.length; j++) {
+            const [prx, pry] = rotateB1LocalPt(pl.pts3d[j][0], pl.pts3d[j][1], rot);
+            const p = Iso.gridToScreen(tx + prx, ty + pry, baseZ + pl.pts3d[j][2]);
+            if (j === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          }
+          ctx.closePath();
+          if (pl.fill) {
+            ctx.fillStyle = isSil ? '#B8C0C8' : pl.fill;
+            ctx.fill();
+          }
+          if (pl.stroke) {
+            ctx.strokeStyle = isSil ? 'rgba(18, 24, 32, 0.35)' : pl.stroke;
+            ctx.lineWidth = pl.lineWidth || 1;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        const ordered = rot === 0 ? boxes : sortRotatedB1Boxes(boxes);
+        for (let i = 0; i < ordered.length; i++) {
+          const b = ordered[i];
+          Iso.drawVoxelBox(ctx, tx + b.rx, ty + b.ry, baseZ + b.lz, b.rsx, b.rsy, b.h, b.o);
+        }
+
+        for (let i = 0; i < glows.length; i++) {
+          const g = glows[i];
+          const p = Iso.gridToScreen(tx + g.rlx, ty + g.rly, baseZ + g.lz);
+          const stamp = getB1GlowStamp(g.color);
+          ctx.save();
+          ctx.globalAlpha = g.alpha;
+          ctx.drawImage(stamp, p.x - g.rx, p.y - g.ry, g.rx * 2, g.ry * 2);
+          ctx.restore();
+        }
       }
     };
   }
@@ -1112,6 +1236,7 @@ window.ZS = window.ZS || {};
         break;
       }
     }
+    if (P.flush) P.flush();
   }
 
   function drawB1GadgetStatusBadge(ctx, tx, ty, status, zScale) {
@@ -1147,7 +1272,8 @@ window.ZS = window.ZS || {};
       : { connected: true, blackoutPaused: false, active: true };
     const timer = gadget.buildAnimTimer || 0;
     const dropZ = timer > 0 ? Math.sin((timer / 0.24) * Math.PI) * 6.5 : 0;
-    const painter = makeB1WorldPainter(ctx, tx, ty, 2.0 + dropZ, isSil, timeSec, status);
+    const painterOpts = Object.assign({}, status, { rot: gadget.rot || 0 });
+    const painter = makeB1WorldPainter(ctx, tx, ty, 2.0 + dropZ, isSil, timeSec, painterOpts);
     paintB1Gadget(painter, gadget.id);
     if (!isSil && state && state.phase !== 'night') {
       drawB1GadgetStatusBadge(ctx, tx, ty, status, zScale);
@@ -1169,6 +1295,28 @@ window.ZS = window.ZS || {};
     const url = canvas.toDataURL('image/png');
     _b1GadgetThumbCache.set(key, url);
     return url;
+  }
+
+  function drawB1DirectionCue(ctx, tx, ty, zOff, rot) {
+    const Iso = ZS.Iso;
+    const [txA, tyA] = rotateB1LocalPt(0.50, 0.96, rot);
+    const [txB, tyB] = rotateB1LocalPt(0.36, 0.77, rot);
+    const [txC, tyC] = rotateB1LocalPt(0.64, 0.77, rot);
+    const pA = Iso.gridToScreen(tx + txA, ty + tyA, zOff);
+    const pB = Iso.gridToScreen(tx + txB, ty + tyB, zOff);
+    const pC = Iso.gridToScreen(tx + txC, ty + tyC, zOff);
+    ctx.save();
+    ctx.fillStyle = '#FFB347';
+    ctx.strokeStyle = '#1B2430';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.lineTo(pC.x, pC.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawB1RoomLabelsAndWarnings(ctx, ug, B1_SIZE, zScale) {
@@ -1494,13 +1642,17 @@ window.ZS = window.ZS || {};
               2.0
             );
             if (check.ok) {
+              const ghostRot = uiState.b1BuildRot || 0;
               ctx.save();
-              ctx.globalAlpha = 0.62;
+              ctx.globalAlpha = 0.68;
               paintB1Gadget(
-                makeB1WorldPainter(ctx, tx, ty, 2.0, false, timeSec, { connected: true, powered: true, active: true }),
+                makeB1WorldPainter(ctx, tx, ty, 2.0, false, timeSec, { connected: true, powered: true, active: true, rot: ghostRot }),
                 def.id
               );
               ctx.restore();
+              drawB1DirectionCue(ctx, tx, ty, zOff + 0.15, ghostRot);
+            } else if (cell && cell.excavated) {
+              drawB1DirectionCue(ctx, tx, ty, zOff + 0.15, uiState.b1BuildRot || 0);
             }
           }
         }
@@ -1525,8 +1677,9 @@ window.ZS = window.ZS || {};
         }
         if (uiState.hoverTile && srcGadget) {
           const { tx, ty } = uiState.hoverTile;
+          const moveRot = uiState.b1BuildRot || 0;
           const check = ZS.Game && ZS.Game.canMoveB1Item
-            ? ZS.Game.canMoveB1Item(src.tx, src.ty, tx, ty)
+            ? ZS.Game.canMoveB1Item(src.tx, src.ty, tx, ty, moveRot)
             : { ok: false };
           Iso.drawTilePoly(
             ctx, tx, ty, 2.1,
@@ -1536,12 +1689,13 @@ window.ZS = window.ZS || {};
           );
           if (check.ok) {
             ctx.save();
-            ctx.globalAlpha = 0.62;
+            ctx.globalAlpha = 0.68;
             paintB1Gadget(
-              makeB1WorldPainter(ctx, tx, ty, 2.0, false, timeSec, { connected: true, powered: true, active: true }),
+              makeB1WorldPainter(ctx, tx, ty, 2.0, false, timeSec, { connected: true, powered: true, active: true, rot: moveRot }),
               srcGadget.id
             );
             ctx.restore();
+            drawB1DirectionCue(ctx, tx, ty, 2.25, moveRot);
           }
         }
       } else if (uiState.hoverTile) {

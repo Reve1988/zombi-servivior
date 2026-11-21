@@ -15,6 +15,7 @@ window.ZS = window.ZS || {};
     b1DragStart: null,
     b1DragCurrent: null,
     hoverB1DoorEdge: null,
+    b1BuildRot: 0,
     dockCollapsed: false,
     hudResCompact: false,
     mainMenuOpen: true,
@@ -831,6 +832,7 @@ window.ZS = window.ZS || {};
     uiState.selectedItemId = null;
     uiState.selectedB1ToolId = null;
     uiState.selectedB1Role = null;
+    uiState.b1BuildRot = 0;
     if (!uiState.activeB1Category) uiState.activeB1Category = 'b1_ops';
     if (U.renderCategoryTabs) U.renderCategoryTabs();
     if (U.setToolMode) U.setToolMode('inspect');

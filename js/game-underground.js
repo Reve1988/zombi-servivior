@@ -100,6 +100,10 @@ window.ZS = window.ZS || {};
     return !!(cell && cell.excavated && !cell.bedrock && !cell.elevator && (cell.permanentCorridor || cell.corridor));
   }
 
+  function normalizeB1Rot(rot) {
+    return ((Math.trunc(Number(rot) || 0) % 4) + 4) % 4;
+  }
+
   function getB1PartitionGroup(cell) {
     if (!cell || !cell.excavated || cell.bedrock || cell.elevator) return null;
     if (isB1CorridorCell(cell)) return 'corridor';
@@ -226,6 +230,7 @@ window.ZS = window.ZS || {};
             base.b1StructGrid[y][x] = {
               id: rawG.id,
               uid: gUid,
+              rot: normalizeB1Rot(rawG.rot),
               usedVoucher: !!rawG.usedVoucher,
               invested: rawG.invested && typeof rawG.invested === 'object'
                 ? {
@@ -1263,7 +1268,7 @@ window.ZS = window.ZS || {};
     };
   }
 
-  function placeB1Item(rawItemId, tx, ty) {
+  function placeB1Item(rawItemId, tx, ty, rot) {
     const check = canPlaceB1Item(rawItemId, tx, ty);
     if (!check.ok) {
       if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
@@ -1284,6 +1289,7 @@ window.ZS = window.ZS || {};
     ug.b1StructGrid[ty][tx] = {
       id: itemId,
       uid: (G.nextStructUid = (G.nextStructUid || 1) + 1),
+      rot: normalizeB1Rot(rot),
       usedVoucher,
       invested: usedVoucher
         ? { wood: 0, scrap: 0, coin: 0 }
@@ -1314,12 +1320,9 @@ window.ZS = window.ZS || {};
     return true;
   }
 
-  function canMoveB1Item(fromX, fromY, toX, toY) {
+  function canMoveB1Item(fromX, fromY, toX, toY, nextRot) {
     if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       return { ok: false, reason: '주간 지하 B1 레이어에서만 이동할 수 있습니다.' };
-    }
-    if (fromX === toX && fromY === toY) {
-      return { ok: false, sameTile: true, reason: '같은 위치입니다.' };
     }
     const ug = ensureUndergroundState();
     if (fromX < 1 || fromY < 1 || fromX > B1_SIZE - 2 || fromY > B1_SIZE - 2) {
@@ -1330,6 +1333,12 @@ window.ZS = window.ZS || {};
     }
     const src = ug.b1StructGrid[fromY] && ug.b1StructGrid[fromY][fromX];
     if (!src) return { ok: false, reason: '이동할 지하 설비가 없습니다.' };
+    if (fromX === toX && fromY === toY) {
+      if (nextRot != null && normalizeB1Rot(nextRot) !== normalizeB1Rot(src.rot)) {
+        return { ok: true, inPlaceRotate: true, nextRot: normalizeB1Rot(nextRot) };
+      }
+      return { ok: false, sameTile: true, reason: '같은 위치입니다.' };
+    }
     const def = DATA.ITEMS && DATA.ITEMS[src.id];
     if (!def) return { ok: false, reason: '잘못된 설비입니다.' };
 
@@ -1362,8 +1371,8 @@ window.ZS = window.ZS || {};
     };
   }
 
-  function moveB1Item(fromX, fromY, toX, toY) {
-    const check = canMoveB1Item(fromX, fromY, toX, toY);
+  function moveB1Item(fromX, fromY, toX, toY, nextRot) {
+    const check = canMoveB1Item(fromX, fromY, toX, toY, nextRot);
     if (!check.ok) {
       if (!check.sameTile) {
         if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
@@ -1373,7 +1382,17 @@ window.ZS = window.ZS || {};
     }
     const ug = ensureUndergroundState();
     const src = ug.b1StructGrid[fromY][fromX];
+    if (check.inPlaceRotate) {
+      src.rot = check.nextRot;
+      src.buildAnimTimer = 0.16;
+      ug.rev += 1;
+      if (ZS.Audio && ZS.Audio.playClick) ZS.Audio.playClick();
+      G.saveGame();
+      G.notifyUi();
+      return true;
+    }
     ug.b1StructGrid[fromY][fromX] = null;
+    src.rot = nextRot != null ? normalizeB1Rot(nextRot) : normalizeB1Rot(src.rot);
     src.buildAnimTimer = 0.24;
     ug.b1StructGrid[toY][toX] = src;
     ug.rev += 1;
@@ -1383,6 +1402,24 @@ window.ZS = window.ZS || {};
 
     if (ZS.Audio && ZS.Audio.playBuild) ZS.Audio.playBuild();
     if (G.spawnBuildDustPuffs) G.spawnBuildDustPuffs(toX + 0.5, toY + 0.5, 8);
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function rotateB1ItemAt(tx, ty, step) {
+    if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
+      return false;
+    }
+    const ug = ensureUndergroundState();
+    if (tx < 1 || ty < 1 || tx > B1_SIZE - 2 || ty > B1_SIZE - 2) return false;
+    const item = ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx];
+    if (!item) return false;
+    const delta = Number.isFinite(step) ? Math.trunc(step) : 1;
+    item.rot = normalizeB1Rot((item.rot || 0) + delta);
+    item.buildAnimTimer = 0.14;
+    ug.rev += 1;
+    if (ZS.Audio && ZS.Audio.playClick) ZS.Audio.playClick();
     G.saveGame();
     G.notifyUi();
     return true;
@@ -1830,6 +1867,7 @@ window.ZS = window.ZS || {};
     placeB1Item,
     canMoveB1Item,
     moveB1Item,
+    rotateB1ItemAt,
     removeB1ItemAt,
     recomputeUndergroundEffects,
     getB1GadgetStatus,
@@ -1875,6 +1913,7 @@ window.ZS = window.ZS || {};
       placeB1Item,
       canMoveB1Item,
       moveB1Item,
+      rotateB1ItemAt,
       removeB1ItemAt,
       recomputeUndergroundEffects,
       getB1GadgetStatus,
