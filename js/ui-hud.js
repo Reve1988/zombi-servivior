@@ -11,6 +11,8 @@ window.ZS = window.ZS || {};
     activeSkill: null, // null | 'airstrike'
     dockCollapsed: false,
     hudResCompact: false,
+    mainMenuOpen: true,
+    menuOptionsOpen: false,
     lastPhase: null,
     pointerClient: { x: 0, y: 0, inside: false }
   };
@@ -498,6 +500,7 @@ window.ZS = window.ZS || {};
   }
 
   function showWaveBanner(title, sub, tone) {
+    if (uiState.mainMenuOpen) return;
     const el = document.getElementById('wave-banner');
     el.className = `wave-banner ${tone || 'info'}`;
     document.getElementById('banner-title').textContent = title;
