@@ -14,7 +14,20 @@ window.ZS = window.ZS || {};
   // ================= UI RENDERING =================
   function renderCategoryTabs() {
     const wrap = document.getElementById('category-tabs');
+    if (!wrap) return;
     wrap.innerHTML = '';
+    const st = ZS.Game && ZS.Game.state;
+    if (st && st.activeLayer === 'underground') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tab-btn active b1-tab-btn';
+      btn.innerHTML = ozIcon('b1-elevator', 20, 'icon-ap');
+      btn.setAttribute('aria-label', '지하 B1 작업');
+      btn.title = '지하 B1 쉘터 — 암반 굴착 · 구역 지정 · 방폭문 설치';
+      wrap.appendChild(btn);
+      return;
+    }
+
     ZS.DATA.CATEGORIES.forEach((cat) => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -30,6 +43,11 @@ window.ZS = window.ZS || {};
       });
       wrap.appendChild(btn);
     });
+  }
+
+  function selectB1Tool(toolDef) {
+    if (!toolDef) return;
+    setToolMode(toolDef.mode, toolDef.id, toolDef.role || null);
   }
 
   function getCardLockState(def, st) {
@@ -136,9 +154,73 @@ window.ZS = window.ZS || {};
     return { html: `<span>방호벽 · HP ${def.maxHp}</span>`, cls: '' };
   }
 
+  function renderB1DockCards(container, st) {
+    const tools = ZS.DATA.B1_TOOLS || [];
+    const drill2 = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
+    const ugRev = st.underground ? st.underground.rev : 0;
+    const nextSig = `b1|${st.phase}|${uiState.mode}|${uiState.selectedB1ToolId || ''}|${Math.floor(st.digAp || 0)}|${drill2}|${ugRev}`;
+    if (nextSig === lastDockSig && container.childElementCount > 0) {
+      return;
+    }
+    const layerChanged = lastDockCategory !== '__b1__';
+    lastDockSig = nextSig;
+    lastDockCategory = '__b1__';
+
+    container.innerHTML = '';
+
+    tools.forEach((t, idx) => {
+      const isSelected = uiState.selectedB1ToolId === t.id && uiState.mode === t.mode;
+      const card = document.createElement('div');
+      card.className = 'item-card b1-tool-card' + (isSelected ? ' selected' : '');
+      card.setAttribute('data-b1-tool', t.id);
+      card.title = `${t.name} (${t.tag}) — ${t.desc}`;
+
+      const hotkeyHtml = idx < 9 ? `<span class="card-hotkey">${idx + 1}</span>` : '';
+      const thumbUrl = ZS.Renderer && ZS.Renderer.renderB1ToolThumbnail ? ZS.Renderer.renderB1ToolThumbnail(t.id, 88) : '';
+      const thumbHtml = thumbUrl
+        ? `<img class="card-thumb" src="${thumbUrl}" width="84" height="84" alt="" />`
+        : `<span class="card-thumb icon-slot">${ozIcon(t.iconId || 'b1-dig', 28)}</span>`;
+
+      let chipHtml = '';
+      if (t.id === 'b1_dig') {
+        const rangeTxt = drill2 > 0 ? '1~2 AP' : '1~3 AP';
+        chipHtml = `<span class="cost-chip b1-ap-cost">${ozIcon('b1-dig', 13, 'icon-ap')}<span>${rangeTxt}</span></span>`;
+      } else if (t.id === 'b1_door') {
+        chipHtml = `<span class="cost-chip free">${ozIcon('b1-door', 13, 'icon-ap')}<span>무료 연결</span></span>`;
+      } else if (t.id === 'b1_unzone') {
+        chipHtml = `<span class="cost-chip">${escapeHtml(t.costLabel)}</span>`;
+      } else {
+        chipHtml = `<span class="cost-chip b1-role-chip"><span class="b1-role-dot" style="background:${escapeHtml(t.accent)};"></span><span>${escapeHtml(t.costLabel)}</span></span>`;
+      }
+
+      card.innerHTML = `
+        ${hotkeyHtml}
+        <div class="card-visual">
+          ${thumbHtml}
+        </div>
+        <div class="card-meta">
+          <span class="card-title">${escapeHtml(t.name)}</span>
+          <div class="card-costs">${chipHtml}</div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        selectB1Tool(t);
+      });
+
+      container.appendChild(card);
+    });
+
+    if (layerChanged) container.scrollLeft = 0;
+  }
+
   function renderItemCards() {
     const container = document.getElementById('item-cards');
     const st = ZS.Game.state;
+    if (st && st.activeLayer === 'underground') {
+      renderB1DockCards(container, st);
+      return;
+    }
     if (st.phase === 'night' && container.childElementCount > 0 && lastDockCategory === uiState.activeCategory) {
       return;
     }
@@ -255,14 +337,25 @@ window.ZS = window.ZS || {};
     if (categoryChanged) container.scrollLeft = 0;
   }
 
-  function setToolMode(mode, itemId) {
+  function setToolMode(mode, itemId, b1Role) {
+    const st = ZS.Game && ZS.Game.state;
+    const isUg = !!(st && st.activeLayer === 'underground');
+    if (isUg && (mode === 'move' || mode === 'remove' || mode === 'build')) {
+      mode = 'inspect';
+    }
+
     uiState.mode = mode;
     uiState.movingSource = null;
     uiState.activeSkill = null;
+    uiState.b1DragStart = null;
+    uiState.b1DragCurrent = null;
+    uiState.hoverB1DoorEdge = null;
     document.getElementById('btn-skill-airstrike').classList.remove('targeting');
 
     if (mode === 'build') {
       uiState.selectedItemId = itemId;
+      uiState.selectedB1ToolId = null;
+      uiState.selectedB1Role = null;
       uiState.inspectedTile = null;
       const def = ZS.DATA.ITEMS[itemId];
       if (def) {
@@ -285,20 +378,42 @@ window.ZS = window.ZS || {};
         }
         setDetailHtml(`${ozIcon(catIcon, 14)} <b>[${escapeHtml(def.name)}]</b> — ${escapeHtml(def.desc + cozyHint + mountHint)}`);
       }
+    } else if (mode === 'b1_dig' || mode === 'b1_door' || mode === 'b1_zone' || mode === 'b1_unzone') {
+      uiState.selectedItemId = null;
+      uiState.selectedB1ToolId = itemId || null;
+      uiState.selectedB1Role = b1Role || null;
+      uiState.inspectedTile = null;
+      const toolDef = (ZS.DATA.B1_TOOLS || []).find((t) => t.id === itemId);
+      if (toolDef) {
+        const iconCls = mode === 'b1_dig' || mode === 'b1_door' ? 'icon-ap' : '';
+        setDetailHtml(`${ozIcon(toolDef.iconId || 'b1-dig', 14, iconCls)} <b>[${escapeHtml(toolDef.name)}]</b> — ${escapeHtml(toolDef.desc)}`);
+      }
     } else {
       uiState.selectedItemId = null;
+      uiState.selectedB1ToolId = null;
+      uiState.selectedB1Role = null;
       if (mode === 'move') {
         setDetailHtml(`${ozIcon('tool-move', 14)} <b>[무료 이동 모드]</b> 옮길 시설을 클릭한 뒤, 이동할 빈 타일을 클릭하세요. (낮 전용)`);
       } else if (mode === 'remove') {
         setDetailHtml(`${ozIcon('tool-remove', 14, 'icon-danger')} <b>[철거 모드]</b> 철거할 시설 또는 바닥 타일을 클릭하면 건설 자원의 80%를 돌려받습니다.`);
+      } else if (isUg) {
+        setDetailHtml(`${ozIcon('tool-inspect', 14)} 지하 B1 타일·구역·승강기(11, 11)를 클릭해 상태와 연결 여부를 확인하세요.`);
       } else {
         setDetailHtml(`${ozIcon('tool-inspect', 14)} 기지 내 시설을 클릭하면 현재 적용 중인 안락함·오라 버프와 상세 스탯을 확인할 수 있습니다.`);
       }
     }
 
     document.getElementById('tool-inspect').classList.toggle('active', mode === 'inspect');
-    document.getElementById('tool-move').classList.toggle('active', mode === 'move');
-    document.getElementById('tool-remove').classList.toggle('active', mode === 'remove');
+    const moveBtn = document.getElementById('tool-move');
+    const removeBtn = document.getElementById('tool-remove');
+    if (moveBtn) {
+      moveBtn.classList.toggle('active', mode === 'move');
+      moveBtn.disabled = isUg;
+    }
+    if (removeBtn) {
+      removeBtn.classList.toggle('active', mode === 'remove');
+      removeBtn.disabled = isUg;
+    }
     syncDetailBarVisibility();
     renderItemCards();
     updateCursorTooltip();
@@ -417,6 +532,153 @@ window.ZS = window.ZS || {};
     }
 
     const { tx, ty } = uiState.hoverTile;
+    if (st.activeLayer === 'underground') {
+      const b1Size = ZS.DATA.B1_SIZE || 23;
+      if (tx < 0 || ty < 0 || tx >= b1Size || ty >= b1Size) {
+        hideTip();
+        return;
+      }
+      const ug = st.underground;
+      const cell = ug && ug.grid && ug.grid[ty] && ug.grid[ty][tx];
+      const doorEdge = uiState.hoverB1DoorEdge;
+      const doorKey = doorEdge ? `${doorEdge.key}:${doorEdge.hasDoor ? 1 : 0}` : '';
+      const dragKey = uiState.b1DragStart && uiState.b1DragCurrent
+        ? `${uiState.b1DragStart.tx},${uiState.b1DragStart.ty}:${uiState.b1DragCurrent.tx},${uiState.b1DragCurrent.ty}`
+        : '';
+      const ugKey = `b1|${uiState.mode}|${uiState.selectedB1Role || ''}|${tx},${ty}|${Math.floor(st.digAp || 0)}|${ug ? ug.rev : 0}|${doorKey}|${dragKey}`;
+      if (ugKey !== lastTipStateKey) {
+        lastTipStateKey = ugKey;
+        let tipText = null;
+        let tipKind = 'info';
+        let tipIcon = 'b1-dig';
+        let tipIconCls = 'icon-ap';
+
+        if (uiState.mode === 'b1_dig') {
+          const check = ZS.Game.canDigTile ? ZS.Game.canDigTile(tx, ty) : null;
+          if (check && check.ok) {
+            tipText = `굴착 가능 (${check.tierName}) — ${check.cost} AP 소모`;
+            tipKind = 'ok';
+            tipIcon = 'b1-dig';
+            tipIconCls = 'icon-ap';
+          } else if (check && check.reason) {
+            tipText = check.reason;
+            tipKind = check.alreadyExcavated ? 'info' : 'err';
+            tipIcon = check.alreadyExcavated ? 'b1-zone' : 'state-alert';
+            tipIconCls = check.alreadyExcavated ? 'icon-muted' : 'icon-danger';
+          }
+        } else if (uiState.mode === 'b1_zone') {
+          const rDef = ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(uiState.selectedB1Role) : null;
+          const rName = rDef ? rDef.name : '방 구역';
+          if (cell && cell.excavated && !cell.permanentCorridor && !cell.elevator && !cell.bedrock) {
+            if (cell.roomId != null && ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId)) {
+              tipText = '가젯이 배치된 구역은 먼저 가젯을 제거해야 수정할 수 있습니다.';
+              tipKind = 'err';
+              tipIcon = 'state-lock';
+              tipIconCls = 'icon-danger';
+            } else {
+              tipText = `드래그하여 [${rName}] 구역 지정`;
+              tipKind = 'ok';
+              tipIcon = (rDef && rDef.iconId) || 'b1-zone';
+              tipIconCls = 'icon-heal';
+            }
+          } else {
+            tipText = cell && (cell.permanentCorridor || cell.elevator)
+              ? '중앙 승강기 공용 복도는 구역을 지정할 수 없습니다.'
+              : '굴착된 빈 공간 위에서만 구역을 지정할 수 있습니다.';
+            tipKind = 'err';
+            tipIcon = 'state-lock';
+            tipIconCls = 'icon-danger';
+          }
+        } else if (uiState.mode === 'b1_unzone') {
+          if (cell && cell.roomId != null) {
+            if (ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId)) {
+              tipText = '가젯이 배치된 구역은 먼저 가젯을 제거해야 해제할 수 있습니다.';
+              tipKind = 'err';
+              tipIcon = 'state-lock';
+              tipIconCls = 'icon-danger';
+            } else {
+              tipText = '드래그하여 구역 지정 해제 (일반 흙바닥 복원)';
+              tipKind = 'info';
+              tipIcon = 'b1-unzone';
+              tipIconCls = 'icon-ap';
+            }
+          } else {
+            tipText = '해제할 지정 구역이 없는 타일입니다.';
+            tipKind = 'info';
+            tipIcon = 'b1-unzone';
+            tipIconCls = 'icon-muted';
+          }
+        } else if (uiState.mode === 'b1_door') {
+          if (doorEdge) {
+            tipText = doorEdge.hasDoor ? '클릭하여 방폭문 제거' : '클릭하여 3D 방폭문 설치 (승강기 연결)';
+            tipKind = 'ok';
+            tipIcon = 'b1-door';
+            tipIconCls = 'icon-ap';
+          } else {
+            tipText = '구역과 복도 또는 다른 구역 사이의 콘크리트 격벽을 클릭하세요.';
+            tipKind = 'info';
+            tipIcon = 'b1-door';
+            tipIconCls = 'icon-muted';
+          }
+        } else if (uiState.mode === 'inspect' && cell) {
+          if (cell.elevator) {
+            tipText = '지하 본부 화물 승강기 (11, 11) — 클릭해 지상 복귀';
+            tipKind = 'info';
+            tipIcon = 'b1-elevator';
+            tipIconCls = 'icon-ap';
+          } else if (cell.permanentCorridor) {
+            tipText = '영구 강철 그레이트 공용 복도 (승강기 연결 기준점)';
+            tipKind = 'info';
+            tipIcon = 'b1-zone';
+            tipIconCls = 'icon-ap';
+          } else if (cell.roomId != null && ug && ug.rooms[cell.roomId]) {
+            const room = ug.rooms[cell.roomId];
+            const rDef = ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(room.role) : null;
+            tipText = `${rDef ? rDef.name : room.role} (${room.tiles.length}칸) — ${room.connected ? '승강기 연결됨' : '출입문 미연결 (대기)'}`;
+            tipKind = room.connected ? 'ok' : 'err';
+            tipIcon = (rDef && rDef.iconId) || 'b1-zone';
+            tipIconCls = room.connected ? 'icon-heal' : 'icon-danger';
+          } else if (cell.excavated) {
+            tipText = `굴착된 흙바닥 (${tx}, ${ty}) — 구역 지정 또는 복도 통행`;
+            tipKind = 'info';
+            tipIcon = 'b1-zone';
+            tipIconCls = 'icon-muted';
+          } else if (cell.bedrock) {
+            tipText = '기반암 — 굴착 불가 외곽 테두리';
+            tipKind = 'info';
+            tipIcon = 'state-lock';
+            tipIconCls = 'icon-muted';
+          } else {
+            const tier = ZS.Game.getB1RockTier ? ZS.Game.getB1RockTier(tx, ty) : 1;
+            const cost = ZS.Game.getB1DigCost ? ZS.Game.getB1DigCost(tx, ty) : 1;
+            const tName = ZS.Game.getB1RockTierName ? ZS.Game.getB1RockTierName(tier) : '암반';
+            tipText = `${tName} (${tx}, ${ty}) — 굴착 비용 ${cost} AP`;
+            tipKind = 'info';
+            tipIcon = 'b1-dig';
+            tipIconCls = 'icon-ap';
+          }
+        }
+
+        if (!tipText) {
+          hideTip();
+          return;
+        }
+        tipEl.innerHTML = `${ozIcon(tipIcon, 14, tipIconCls)}<span>${escapeHtml(tipText)}</span>`;
+        tipEl.classList.toggle('ok', tipKind === 'ok');
+        tipEl.classList.toggle('info', tipKind === 'info');
+        tipEl.classList.remove('hidden');
+        lastTipVisible = true;
+        cachedTipW = tipEl.offsetWidth || 240;
+        cachedTipH = tipEl.offsetHeight || 32;
+      }
+      if (!lastTipVisible) return;
+      const vw = window.innerWidth || 1600;
+      const vh = window.innerHeight || 900;
+      tipEl.style.left = `${Math.max(12, Math.min(vw - cachedTipW - 14, uiState.pointerClient.x + 16))}px`;
+      tipEl.style.top = `${Math.max(70, Math.min(vh - cachedTipH - 14, uiState.pointerClient.y + 16))}px`;
+      return;
+    }
+
     const N = ZS.DATA.GRID_SIZE;
     if (tx < 0 || ty < 0 || tx >= N || ty >= N) {
       hideTip();
@@ -825,8 +1087,77 @@ window.ZS = window.ZS || {};
     });
   }
 
+  function inspectB1TileAt(tx, ty, st) {
+    const b1Size = ZS.DATA.B1_SIZE || 23;
+    if (tx < 0 || ty < 0 || tx >= b1Size || ty >= b1Size) return;
+    uiState.inspectedTile = { tx, ty };
+    const ug = ZS.Game.ensureUndergroundState ? ZS.Game.ensureUndergroundState() : st.underground;
+    const cell = ug && ug.grid && ug.grid[ty] && ug.grid[ty][tx];
+    if (!cell) return;
+
+    if (cell.elevator) {
+      const sum = ZS.Game.getB1Summary ? ZS.Game.getB1Summary() : { excavatedCount: 0, roomCount: 0, connectedRooms: 0 };
+      const exitBtnHtml = `<button id="btn-exit-b1" class="detail-upgrade-btn b1-action-btn">${ozIcon('b1-elevator', 15, 'icon-ap')}<span>지상 본부로 복귀</span></button>`;
+      setDetailHtml(
+        `${ozIcon('b1-elevator', 14, 'icon-ap')} <b>[지하 본부 화물 승강기 (11, 11)]</b> 보유 굴착력 ${Math.floor(st.digAp || 0)}/${st.digApCap || 24} AP · 굴착 ${sum.excavatedCount}칸 · 연결된 구역 ${sum.connectedRooms}/${sum.roomCount}`,
+        exitBtnHtml
+      );
+      document.getElementById('btn-exit-b1')?.addEventListener('click', () => {
+        if (ZS.Game.exitUnderground) ZS.Game.exitUnderground();
+      });
+      return;
+    }
+
+    if (cell.permanentCorridor) {
+      setDetailHtml(
+        `${ozIcon('b1-zone', 14, 'icon-ap')} <b>[승강기 홀 공용 복도 (${tx}, ${ty})]</b> 영구 강철 그레이트 공용 복도입니다. 이 복도에서 방폭문으로 이어진 구역만 활성화됩니다.`
+      );
+      return;
+    }
+
+    if (cell.roomId != null && ug.rooms[cell.roomId]) {
+      const room = ug.rooms[cell.roomId];
+      const rDef = ZS.Game.getB1RoomDef ? ZS.Game.getB1RoomDef(room.role) : null;
+      const gTiles = ZS.Game.getB1RoomGadgetTiles ? ZS.Game.getB1RoomGadgetTiles(room.id) : [];
+      const statusBadge = room.connected
+        ? `<span class="cost-chip free">승강기 연결 활성</span>`
+        : `<span class="cost-chip short">${ozIcon('state-alert', 13, 'icon-danger')}<span>출입문 미연결 — 대기</span></span>`;
+      const lockTxt = gTiles.length > 0 ? ` · 배치 가젯 ${gTiles.length}개(수정 잠금)` : '';
+      setDetailHtml(
+        `${ozIcon((rDef && rDef.iconId) || 'b1-zone', 14)} <b>[${escapeHtml((rDef && rDef.name) || room.role)} #${room.id}]</b> ${room.tiles.length}칸${lockTxt} — ${escapeHtml((rDef && rDef.desc) || '')}`,
+        statusBadge
+      );
+      return;
+    }
+
+    if (cell.excavated) {
+      setDetailHtml(
+        `${ozIcon('b1-zone', 14)} <b>[굴착된 흙바닥 (${tx}, ${ty})]</b> 자유 통행 복도입니다. 구역 지정 도구로 방을 구획해 콘크리트 바닥과 격벽을 생성할 수 있습니다.`
+      );
+      return;
+    }
+
+    if (cell.bedrock) {
+      setDetailHtml(
+        `${ozIcon('state-lock', 14, 'icon-muted')} <b>[기반암 (${tx}, ${ty})]</b> 지하 쉘터 외곽의 영구 기반암으로 굴착할 수 없습니다.`
+      );
+      return;
+    }
+
+    const tier = ZS.Game.getB1RockTier ? ZS.Game.getB1RockTier(tx, ty) : 1;
+    const cost = ZS.Game.getB1DigCost ? ZS.Game.getB1DigCost(tx, ty) : 1;
+    const tierName = ZS.Game.getB1RockTierName ? ZS.Game.getB1RockTierName(tier) : '암반';
+    setDetailHtml(
+      `${ozIcon('b1-dig', 14, 'icon-ap')} <b>[${escapeHtml(tierName)} (${tx}, ${ty})]</b> 굴착 비용 ${cost} AP · 열린 공간과 상하좌우 인접 시 굴착 가능 (매장 자원 발견 확률)`
+    );
+  }
+
   function inspectTileAt(tx, ty) {
     const st = ZS.Game.state;
+    if (st.activeLayer === 'underground') {
+      inspectB1TileAt(tx, ty, st);
+      return;
+    }
     if (tx < 0 || ty < 0 || tx >= ZS.DATA.GRID_SIZE || ty >= ZS.DATA.GRID_SIZE) return;
     uiState.inspectedTile = { tx, ty };
 
@@ -887,6 +1218,11 @@ window.ZS = window.ZS || {};
         actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`;
       }
 
+      if (st.undergroundUnlocked) {
+        const b1Dis = st.phase !== 'day' ? 'disabled' : '';
+        actionHtml += `<button id="btn-enter-b1" class="detail-upgrade-btn b1-action-btn" ${b1Dis} title="지하 B1 쉘터 레이어 진입 (주간 전용 · 단축키 B)">${ozIcon('b1-elevator', 15, 'icon-ap')}<span>지하 B1 진입</span></button>`;
+      }
+
       const nightBuffs = [];
       if (st.nightConsumables && st.nightConsumables.overpressureAmmo) nightBuffs.push('고압 탄약 +20%');
       if (st.nightConsumables && st.nightConsumables.reactiveArmor) nightBuffs.push('반응 장갑 -20%피격/+15%반사');
@@ -901,6 +1237,12 @@ window.ZS = window.ZS || {};
       if (upBtn) {
         upBtn.addEventListener('click', () => {
           ZS.Game.upgradeHq();
+        });
+      }
+      const enterB1Btn = document.getElementById('btn-enter-b1');
+      if (enterB1Btn) {
+        enterB1Btn.addEventListener('click', () => {
+          if (ZS.Game.enterUnderground) ZS.Game.enterUnderground();
         });
       }
       return;
@@ -1225,6 +1567,7 @@ window.ZS = window.ZS || {};
     renderCategoryTabs,
     getCardTagInfo,
     selectBuildCard,
+    selectB1Tool,
     renderItemCards,
     setToolMode,
     syncDetailBarVisibility,

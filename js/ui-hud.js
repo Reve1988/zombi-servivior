@@ -3,12 +3,17 @@ window.ZS = window.ZS || {};
 (function () {
   const uiState = {
     activeCategory: 'defense',
-    mode: 'inspect', // 'inspect' | 'build' | 'move' | 'remove'
+    mode: 'inspect', // 'inspect' | 'build' | 'move' | 'remove' | 'b1_dig' | 'b1_door' | 'b1_zone' | 'b1_unzone'
     selectedItemId: null,
+    selectedB1ToolId: null,
+    selectedB1Role: null,
     hoverTile: null,
     inspectedTile: null,
     movingSource: null,
     activeSkill: null, // null | 'airstrike'
+    b1DragStart: null,
+    b1DragCurrent: null,
+    hoverB1DoorEdge: null,
     dockCollapsed: false,
     hudResCompact: false,
     mainMenuOpen: true,
@@ -212,15 +217,50 @@ window.ZS = window.ZS || {};
   function syncWindLayerButton(st) {
     const btn = document.getElementById('btn-toggle-wind-layer');
     if (!btn || !st) return;
-    const on = !!st.showWindOverlay;
+    const isUg = st.activeLayer === 'underground';
+    const on = !isUg && !!st.showWindOverlay;
+    btn.disabled = isUg;
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = isUg
+      ? '지상 레이어에서만 강풍 오버레이를 사용할 수 있습니다.'
+      : '강풍 지대(주변 +40% / 중심 +70%) 오버레이 레이어 표시/숨기기 (단축키 V)';
+  }
+
+  function syncUndergroundToggleButton(st) {
+    const btn = document.getElementById('btn-toggle-underground');
+    if (!btn || !st) return;
+    const unlocked = !!st.undergroundUnlocked;
+    const isDay = st.phase === 'day';
+    const isUg = st.activeLayer === 'underground';
+    btn.disabled = !unlocked || !isDay;
+    btn.classList.toggle('b1-locked-unlock', !unlocked);
+    btn.classList.toggle('b1-unlocked-pulse', unlocked && isDay && !isUg);
+    btn.classList.toggle('active', isUg);
+    btn.setAttribute('aria-pressed', isUg ? 'true' : 'false');
+
+    const lblEl = document.getElementById('btn-b1-label');
+    if (lblEl) {
+      lblEl.textContent = isUg ? '지상 복귀 [B]' : '지하 B1 [B]';
+    }
+    const apChip = document.getElementById('hud-dig-ap-chip');
+    if (apChip) {
+      apChip.textContent = unlocked ? `${Math.floor(st.digAp || 0)} AP` : 'Lv.2';
+    }
+    btn.title = !unlocked
+      ? '지하 쉘터 B1: 지휘 본부 Lv.2(Wave 20+) 증축 시 개방'
+      : !isDay
+      ? '야간 방어 중에는 지하로 이동할 수 없습니다 (주간 전용)'
+      : isUg
+      ? '지상 본부 레이어로 복귀 (단축키 B)'
+      : `지하 B1 쉘터로 이동 (보유 ${Math.floor(st.digAp || 0)}/${st.digApCap || 24} AP · 단축키 B)`;
   }
 
   function updateHud() {
     const st = ZS.Game.state;
     syncDivisionBadge(st);
     syncWindLayerButton(st);
+    syncUndergroundToggleButton(st);
     const P = ZS.DATA.PALETTE;
     const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
     const phaseIconEl = document.getElementById('hud-phase-icon');
@@ -403,12 +443,18 @@ window.ZS = window.ZS || {};
     renderReconCard(st);
 
     if (isDay) {
+      const isUg = st.activeLayer === 'underground';
       const startBtn = document.getElementById('btn-start-wave');
-      if (startBtn) startBtn.classList.toggle('boss-wave', st.wave % 5 === 0);
-      document.getElementById('cta-wave-sub').innerHTML =
-        st.wave % 5 === 0
-          ? `${ozIcon('state-alert', 13, 'icon-danger')}<span>WAVE ${st.wave} 보스전 개시</span>`
-          : `<span>WAVE ${st.wave} 야간 방어 돌입</span>`;
+      if (startBtn) {
+        startBtn.disabled = isUg;
+        startBtn.classList.toggle('b1-locked', isUg);
+        startBtn.classList.toggle('boss-wave', !isUg && st.wave % 5 === 0);
+      }
+      document.getElementById('cta-wave-sub').innerHTML = isUg
+        ? `${ozIcon('state-lock', 13, 'icon-ap')}<span>지상 복귀 후 웨이브 시작 [B]</span>`
+        : st.wave % 5 === 0
+        ? `${ozIcon('state-alert', 13, 'icon-danger')}<span>WAVE ${st.wave} 보스전 개시</span>`
+        : `<span>WAVE ${st.wave} 야간 방어 돌입</span>`;
 
       const rep = ZS.Game.getRepairAllInfo();
       const repBtn = document.getElementById('btn-repair-all');
@@ -680,6 +726,7 @@ window.ZS = window.ZS || {};
     syncNightPhaseAndPowerHud(st);
     syncDivisionBadge(st);
     syncWindLayerButton(st);
+    syncUndergroundToggleButton(st);
 
     const left = st.spawnQueue.length + st.zombies.length;
     document.getElementById('hud-enemies-left').textContent = `${left}기`;
@@ -731,6 +778,7 @@ window.ZS = window.ZS || {};
       <div class="debug-body">
         <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">${ozIcon('res-coin', 13, 'icon-coin')}<span>+500 자원</span></button>
         <button id="btn-dbg-rp" class="debug-btn" title="연구포인트(RP) 즉시 +20">${ozIcon('res-rp', 13, 'icon-rp')}<span>+20 RP</span></button>
+        <button id="btn-dbg-digap" class="debug-btn" title="지하 B1 개방 및 굴착력 +20 AP 지급">${ozIcon('b1-dig', 13, 'icon-ap')}<span>+20 굴착 AP</span></button>
         <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">${ozIcon('res-power', 13, 'icon-power')}<span>전력 완충/방전</span></button>
         <button id="btn-dbg-pop" class="debug-btn" title="가용 요원 및 임시 숙소 수용량 +2">${ozIcon('res-agent', 13)}<span>요원 +2</span></button>
         <button id="btn-dbg-wave1" class="debug-btn" title="주간 정비 상태에서 웨이브 +1">${ozIcon('act-speed', 13)}<span>웨이브 +1</span></button>
@@ -754,6 +802,7 @@ window.ZS = window.ZS || {};
     };
     bind('btn-dbg-res', () => ZS.Game.debugAddResources(500));
     bind('btn-dbg-rp', () => ZS.Game.debugAddRp && ZS.Game.debugAddRp(20));
+    bind('btn-dbg-digap', () => ZS.Game.debugAddDigAp && ZS.Game.debugAddDigAp(20));
     bind('btn-dbg-pwr', () => ZS.Game.debugTogglePower());
     bind('btn-dbg-pop', () => ZS.Game.debugAddAgents(2));
     bind('btn-dbg-wave1', () => ZS.Game.debugAdvanceWave(1));
@@ -769,6 +818,20 @@ window.ZS = window.ZS || {};
     });
   }
 
+  function onLayerChanged() {
+    uiState.inspectedTile = null;
+    uiState.movingSource = null;
+    uiState.activeSkill = null;
+    uiState.b1DragStart = null;
+    uiState.b1DragCurrent = null;
+    uiState.hoverB1DoorEdge = null;
+    uiState.selectedItemId = null;
+    uiState.selectedB1ToolId = null;
+    uiState.selectedB1Role = null;
+    if (U.renderCategoryTabs) U.renderCategoryTabs();
+    if (U.setToolMode) U.setToolMode('inspect');
+  }
+
   Object.assign(U, {
     ozIcon,
     escapeHtml,
@@ -776,6 +839,8 @@ window.ZS = window.ZS || {};
     formatPowerSubText,
     syncNightPhaseAndPowerHud,
     syncDivisionBadge,
+    syncUndergroundToggleButton,
+    onLayerChanged,
     updateHud,
     updateCombatHud,
     renderReconCard,

@@ -180,6 +180,15 @@ window.ZS = window.ZS || {};
 
   function startNightWave() {
     if (state.phase !== 'day') return false;
+    if (state.activeLayer === 'underground') {
+      if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
+      G.banner(
+        '지상 복귀 필요',
+        '지하 쉘터에서는 야간 웨이브를 개시할 수 없습니다. [B] 키로 지상에 복귀하세요.',
+        'warn'
+      );
+      return false;
+    }
     state.phase = 'night';
     state.isNight = true;
     const nightStartsDry = state.power <= 0.001 && (state.nightGen || 0) < state.nightIdleDrain;
@@ -339,6 +348,9 @@ window.ZS = window.ZS || {};
       }
       if (state.blackoutFlickerTimer > 0) {
         state.blackoutFlickerTimer = Math.max(0, state.blackoutFlickerTimer - rawDt);
+      }
+      if (G.updateUnderground) {
+        G.updateUnderground(rawDt);
       }
       const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
       if (hqSt && hqSt.upgradeAnimTimer > 0) {
