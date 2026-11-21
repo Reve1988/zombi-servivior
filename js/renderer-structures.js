@@ -29,10 +29,10 @@ window.ZS = window.ZS || {};
       return hit;
     }
 
-    const logicalW = 88;
-    const anchorX = 44;
-    const anchorY = Math.max(44, Math.ceil((topZ || 24) + 22));
-    const logicalH = anchorY + 42;
+    const logicalW = 96;
+    const anchorX = 48;
+    const anchorY = Math.max(48, Math.ceil((topZ || 24) + 24));
+    const logicalH = anchorY + 46;
     const stamp = R.bakeSpriteStamp(logicalW, logicalH, STAMP_SCALE, anchorX, anchorY, tintBucket, isSil, bakeFn);
     if (structStampCache.size >= STAMP_CACHE_MAX) {
       const oldestKey = structStampCache.keys().next().value;
@@ -75,50 +75,60 @@ window.ZS = window.ZS || {};
 
   function drawWireXFrame(ctx, cx, cy, crossAxis, P, zScale) {
     const Iso = ZS.Iso;
-    const wood = P.wireWood || '#8B6843';
-    const woodDark = P.wireWoodDark || '#5E452B';
-    const iron = P.wireIron || '#4A5562';
+    const sand = P.milSand || '#B7A179';
+    const sandDark = P.milSandDark || '#8F7B56';
+    const iron = P.milGunmetal || '#3B4552';
+    const steel = P.milSteelTrim || '#8A96A4';
     if (crossAxis === 'y') {
-      R.drawIsoBox(ctx, cx - 0.04, cy - 0.19, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
-      R.drawIsoBox(ctx, cx - 0.04, cy + 0.11, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(cx, cy - 0.16, 1.0), Iso.gridToScreen(cx, cy + 0.16, 10.5), wood, 2.3, true, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(cx, cy + 0.16, 1.0), Iso.gridToScreen(cx, cy - 0.16, 10.5), wood, 2.3, true, zScale);
+      // Compact sandbag/concrete anchor blocks at picket feet
+      R.drawDetailedIsoBox(ctx, cx - 0.065, cy - 0.21, 0, 0.13, 0.10, 2.2, sand, { bevel: true, groundCrease: true }, zScale);
+      R.drawDetailedIsoBox(ctx, cx - 0.065, cy + 0.11, 0, 0.13, 0.10, 2.2, sand, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoBox(ctx, cx - 0.035, cy - 0.19, 1.8, 0.07, 0.07, 1.0, iron, null, zScale);
+      R.drawIsoBox(ctx, cx - 0.035, cy + 0.12, 1.8, 0.07, 0.07, 1.0, iron, null, zScale);
+      // Angled steel X-pickets (eliminating railroad-tie illusion)
+      R.drawIsoLine(ctx, Iso.gridToScreen(cx, cy - 0.16, 1.8), Iso.gridToScreen(cx, cy + 0.15, 10.6), iron, 2.3, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(cx, cy + 0.16, 1.8), Iso.gridToScreen(cx, cy - 0.15, 10.6), iron, 2.3, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(cx, cy - 0.16, 2.1), Iso.gridToScreen(cx, cy + 0.15, 10.7), steel, 0.9, false, zScale);
     } else {
-      R.drawIsoBox(ctx, cx - 0.19, cy - 0.04, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
-      R.drawIsoBox(ctx, cx + 0.11, cy - 0.04, 0, 0.08, 0.08, 1.6, woodDark, null, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(cx - 0.16, cy, 1.0), Iso.gridToScreen(cx + 0.16, cy, 10.5), wood, 2.3, true, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(cx + 0.16, cy, 1.0), Iso.gridToScreen(cx - 0.16, cy, 10.5), wood, 2.3, true, zScale);
+      R.drawDetailedIsoBox(ctx, cx - 0.21, cy - 0.065, 0, 0.10, 0.13, 2.2, sand, { bevel: true, groundCrease: true }, zScale);
+      R.drawDetailedIsoBox(ctx, cx + 0.11, cy - 0.065, 0, 0.10, 0.13, 2.2, sand, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoBox(ctx, cx - 0.19, cy - 0.035, 1.8, 0.07, 0.07, 1.0, iron, null, zScale);
+      R.drawIsoBox(ctx, cx + 0.12, cy - 0.035, 1.8, 0.07, 0.07, 1.0, iron, null, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(cx - 0.16, cy, 1.8), Iso.gridToScreen(cx + 0.15, cy, 10.6), iron, 2.3, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(cx + 0.16, cy, 1.8), Iso.gridToScreen(cx - 0.15, cy, 10.6), iron, 2.3, true, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(cx - 0.16, cy, 2.1), Iso.gridToScreen(cx + 0.15, cy, 10.7), steel, 0.9, false, zScale);
     }
-    R.drawIsoBox(ctx, cx - 0.045, cy - 0.045, 4.9, 0.09, 0.09, 1.5, iron, null, zScale);
+    R.drawDetailedIsoBox(ctx, cx - 0.05, cy - 0.05, 5.1, 0.10, 0.10, 1.7, sandDark, { bevel: true }, zScale);
+    R.drawIsoDot(ctx, Iso.gridToScreen(cx, cy, 6.2), 1.1, steel, false, zScale);
   }
 
   function drawWireHub(ctx, tx, ty, P, zScale) {
     const Iso = ZS.Iso;
-    const wood = P.wireWood || '#8B6843';
-    const woodDark = P.wireWoodDark || '#5E452B';
-    const iron = P.wireIron || '#4A5562';
-    R.drawIsoBox(ctx, tx + 0.41, ty + 0.41, 0, 0.18, 0.18, 1.6, woodDark, null, zScale);
-    R.drawIsoBox(ctx, tx + 0.43, ty + 0.43, 1.6, 0.14, 0.14, 8.6, wood, null, zScale);
-    R.drawIsoBox(ctx, tx + 0.42, ty + 0.42, 4.9, 0.16, 0.16, 1.6, iron, null, zScale);
-    R.drawIsoBox(ctx, tx + 0.435, ty + 0.435, 10.2, 0.13, 0.13, 0.7, iron, null, zScale);
-    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.35, ty + 0.65, 0.8), Iso.gridToScreen(tx + 0.50, ty + 0.50, 9.6), wood, 2.0, true, zScale);
-    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.65, ty + 0.35, 0.8), Iso.gridToScreen(tx + 0.50, ty + 0.50, 9.6), wood, 2.0, true, zScale);
+    const sand = P.milSand || '#B7A179';
+    const iron = P.milGunmetal || '#3B4552';
+    const steel = P.milSteelTrim || '#8A96A4';
+    R.drawDetailedIsoBox(ctx, tx + 0.36, ty + 0.36, 0, 0.28, 0.28, 2.6, sand, { bevel: true, groundCrease: true }, zScale);
+    R.drawSandbagCoursesOnBox(ctx, tx + 0.36, ty + 0.36, 0, 0.28, 0.28, 2.6, 2, 2, 2, P.milSandSeam, false, zScale);
+    R.drawDetailedIsoBox(ctx, tx + 0.425, ty + 0.425, 2.6, 0.15, 0.15, 8.0, iron, { bevel: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.415, ty + 0.415, 5.6, 0.17, 0.17, 1.5, steel, null, zScale);
+    R.drawIsoCornerRivets(ctx, tx + 0.425, ty + 0.425, 10.6, 0.15, 0.15, 0.03, 0.8, '#DCE5EE', zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.36, ty + 0.64, 1.8), Iso.gridToScreen(tx + 0.50, ty + 0.50, 9.6), iron, 1.9, true, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.64, ty + 0.36, 1.8), Iso.gridToScreen(tx + 0.50, ty + 0.50, 9.6), iron, 1.9, true, zScale);
   }
 
   function drawWireCoilSpan(ctx, tx, ty, axis, t0, t1, loops, P, zScale) {
     const Iso = ZS.Iso;
     const isSil = !!window.ZS_SILHOUETTE_MODE;
-    const rr = 0.145;
-    const zc = 5.7;
-    const rz = 3.9;
     const span = t1 - t0;
-    const du = span / loops;
-    const ptAt = (u, a) =>
-      axis === 'x'
-        ? Iso.gridToScreen(tx + u, ty + 0.5 + rr * Math.cos(a), zc + rz * Math.sin(a))
-        : Iso.gridToScreen(tx + 0.5 + rr * Math.cos(a), ty + u, zc + rz * Math.sin(a));
+    const denseLoops = Math.max(loops + 2, Math.round(span * 11));
+    const du = span / denseLoops;
 
-    const drawHalf = (uStart, a0, a1, steps, phaseOff, strokeHex, widthPx, withOutline) => {
+    const ptAt = (u, a, rr, zc, rz, offLat) =>
+      axis === 'x'
+        ? Iso.gridToScreen(tx + u, ty + 0.5 + (offLat || 0) + rr * Math.cos(a), zc + rz * Math.sin(a))
+        : Iso.gridToScreen(tx + 0.5 + (offLat || 0) + rr * Math.cos(a), ty + u, zc + rz * Math.sin(a));
+
+    const drawHalf = (uStart, a0, a1, steps, phaseOff, rr, zc, rz, offLat, strokeHex, widthPx, withOutline) => {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -126,13 +136,13 @@ window.ZS = window.ZS || {};
         const f = s / steps;
         const a = a0 + (a1 - a0) * f;
         const u = Math.min(t1, Math.max(t0, uStart + (phaseOff + f * 0.5) * du));
-        const p = ptAt(u, a);
+        const p = ptAt(u, a, rr, zc, rz, offLat);
         if (s === 0) ctx.moveTo(p.x, p.y);
         else ctx.lineTo(p.x, p.y);
       }
       if (withOutline && !isSil) {
-        ctx.strokeStyle = 'rgba(10, 14, 20, 0.48)';
-        ctx.lineWidth = (widthPx + 1.0) * zScale;
+        ctx.strokeStyle = 'rgba(10, 14, 20, 0.52)';
+        ctx.lineWidth = (widthPx + 0.9) * zScale;
         ctx.stroke();
       }
       ctx.strokeStyle = Iso.resolveFaceColor(strokeHex, 1.0, false, 0) || strokeHex;
@@ -143,33 +153,43 @@ window.ZS = window.ZS || {};
     const coilDim = P.wireCoilDim || '#6E7B88';
     const coilCol = P.wireCoil || '#BAC6D2';
     const barbCol = P.wireBarb || '#DCE5EE';
-    const wood = P.wireWood || '#8B6843';
+    const iron = P.milGunmetal || '#3B4552';
 
-    for (let i = 0; i < loops; i++) {
-      drawHalf(t0 + i * du, 0.72 * Math.PI, 1.72 * Math.PI, 7, 0.0, coilDim, 1.2, false);
+    // Thin tensioned steel spine wire (no thick wooden beam that looked like a railroad track)
+    const w0 = axis === 'x' ? Iso.gridToScreen(tx + t0, ty + 0.5, 5.8) : Iso.gridToScreen(tx + 0.5, ty + t0, 5.8);
+    const w1 = axis === 'x' ? Iso.gridToScreen(tx + t1, ty + 0.5, 5.8) : Iso.gridToScreen(tx + 0.5, ty + t1, 5.8);
+    R.drawIsoLine(ctx, w0, w1, iron, 1.15, false, zScale);
+
+    // Back-side concertina arcs (lower twin-roll + upper crown roll)
+    for (let i = 0; i < denseLoops; i++) {
+      const uS = t0 + i * du;
+      drawHalf(uS, 0.72 * Math.PI, 1.72 * Math.PI, 6, 0.0, 0.115, 3.8, 2.7, -0.045, coilDim, 1.05, false);
+      drawHalf(uS, 0.72 * Math.PI, 1.72 * Math.PI, 6, 0.25, 0.145, 6.4, 3.8, 0.015, coilDim, 1.15, false);
     }
 
-    if (axis === 'x') R.drawIsoBox(ctx, tx + t0, ty + 0.475, 5.1, span, 0.05, 1.1, wood, null, zScale);
-    else R.drawIsoBox(ctx, tx + 0.475, ty + t0, 5.1, 0.05, span, 1.1, wood, null, zScale);
-
-    for (let i = 0; i < loops; i++) {
+    // Front-side razor concertina arcs + sharp glinting razor-barb X-nodes
+    for (let i = 0; i < denseLoops; i++) {
       const uStart = t0 + i * du;
-      drawHalf(uStart, -0.28 * Math.PI, 0.72 * Math.PI, 8, 0.5, coilCol, 1.5, true);
-      const barbAngles = [0.48 * Math.PI, 0.05];
-      for (let bi = 0; bi < barbAngles.length; bi++) {
-        const ba = barbAngles[bi];
-        const f = (ba + 0.28 * Math.PI) / Math.PI;
-        const u = Math.min(t1, Math.max(t0, uStart + (0.5 + f * 0.5) * du));
-        const bp = ptAt(u, ba);
-        const d = 2.0 * zScale;
-        ctx.strokeStyle = Iso.resolveFaceColor(barbCol, 1.0, false, 0) || barbCol;
-        ctx.lineWidth = 1.1 * zScale;
-        ctx.beginPath();
-        ctx.moveTo(bp.x - d, bp.y - d * 0.65);
-        ctx.lineTo(bp.x + d, bp.y + d * 0.65);
-        ctx.moveTo(bp.x - d, bp.y + d * 0.65);
-        ctx.lineTo(bp.x + d, bp.y - d * 0.65);
-        ctx.stroke();
+      drawHalf(uStart, -0.28 * Math.PI, 0.72 * Math.PI, 6, 0.25, 0.115, 3.8, 2.7, 0.045, '#9AA8B6', 1.15, false);
+      drawHalf(uStart, -0.28 * Math.PI, 0.72 * Math.PI, 7, 0.5, 0.148, 6.4, 3.9, 0.0, coilCol, 1.4, true);
+
+      if (!isSil && i % 2 === 0) {
+        const barbAngles = [0.50 * Math.PI, 0.08 * Math.PI];
+        for (let bi = 0; bi < barbAngles.length; bi++) {
+          const ba = barbAngles[bi];
+          const f = (ba + 0.28 * Math.PI) / Math.PI;
+          const u = Math.min(t1, Math.max(t0, uStart + (0.5 + f * 0.5) * du));
+          const bp = ptAt(u, ba, 0.148, 6.4, 3.9, 0.0);
+          const d = 1.9 * zScale;
+          ctx.strokeStyle = Iso.resolveFaceColor(barbCol, 1.0, false, 0) || barbCol;
+          ctx.lineWidth = 1.05 * zScale;
+          ctx.beginPath();
+          ctx.moveTo(bp.x - d, bp.y - d * 0.65);
+          ctx.lineTo(bp.x + d, bp.y + d * 0.65);
+          ctx.moveTo(bp.x - d, bp.y + d * 0.65);
+          ctx.lineTo(bp.x + d, bp.y - d * 0.65);
+          ctx.stroke();
+        }
       }
     }
   }
@@ -232,24 +252,55 @@ window.ZS = window.ZS || {};
     if (mask & 4) drawWireCoilSpan(ctx, tx, ty, 'y', 0.55, 1.00, 3, P, zScale);
   }
 
-  function drawHescoPiece(ctx, x, y, w, d, h, lv, skipCap, steelCol, maxAccent, zScale) {
-    R.drawIsoBox(ctx, x, y, 0, w, d, h, '#C9B48A', null, zScale);
-    R.drawIsoBox(ctx, x + 0.035, y + 0.035, h, w - 0.07, d - 0.07, 0.6, '#9E8758', null, zScale);
-    if (lv >= 2) {
-      R.drawIsoBox(ctx, x - 0.006, y - 0.006, 4.8, w + 0.012, d + 0.012, 2.2, steelCol, { noTop: true }, zScale);
+  function drawHescoPiece(ctx, x, y, w, d, h, lv, skipCap, steelCol, maxAccent, zScale, isPost) {
+    const P = ZS.DATA.PALETTE;
+    const sand = P.milSand || '#B7A179';
+    const sandTop = P.milSandDark || '#8F7B56';
+    const gunmetal = P.milGunmetal || '#3B4552';
+    const slate = P.milSlate || '#525E6B';
+
+    if (isPost) {
+      // Heavy dark gunmetal/concrete fortress bastion post (matches concept art corner & rhythm pillars!)
+      R.drawDetailedIsoBox(ctx, x - 0.012, y - 0.012, 0, w + 0.024, d + 0.024, 2.2, '#2B333D', { bevel: true, groundCrease: true }, zScale);
+      R.drawDetailedIsoBox(ctx, x, y, 2.2, w, d, h - 3.6, gunmetal, { bevel: true }, zScale);
+      R.drawIsoFaceSeams(ctx, 'left', x, y, 2.4, w, d, h - 3.8, 2, 'rgba(10, 14, 20, 0.42)', zScale);
+      R.drawIsoFaceSeams(ctx, 'right', x, y, 2.4, w, d, h - 3.8, 2, 'rgba(10, 14, 20, 0.42)', zScale);
+      // Mid steel reinforcement collar
+      R.drawIsoBox(ctx, x - 0.008, y - 0.008, 6.4, w + 0.016, d + 0.016, 1.8, slate, { noTop: true }, zScale);
+      if (!skipCap) {
+        R.drawDetailedIsoBox(ctx, x - 0.014, y - 0.014, h - 1.4, w + 0.028, d + 0.028, 1.4, slate, { bevel: true }, zScale);
+        R.drawDetailedIsoBox(ctx, x + 0.035, y + 0.035, h, w - 0.07, d - 0.07, 0.55, '#687686', { bevel: true }, zScale);
+        R.drawIsoCornerRivets(ctx, x - 0.01, y - 0.01, h, w + 0.02, d + 0.02, 0.045, 0.85, '#DCE5EE', zScale);
+      } else {
+        R.drawDetailedIsoBox(ctx, x - 0.01, y - 0.01, h - 1.4, w + 0.02, d + 0.02, 1.4, slate, { bevel: true }, zScale);
+      }
+      return;
     }
+
+    // Stacked desert-sand sandbag wall span inside galvanized wire-mesh HESCO cage + light sandbag crown (distinct from dark gunmetal corner posts!)
+    R.drawDetailedIsoBox(ctx, x - 0.008, y - 0.008, 0, w + 0.016, d + 0.016, 1.15, gunmetal, { bevel: false, groundCrease: true }, zScale);
+    const bagH = h - 1.55;
+    R.drawDetailedIsoBox(ctx, x, y, 1.15, w, d, bagH, sand, { bevel: true, topHex: '#C8B48B', gradDrop: 0.11 }, zScale);
+    R.drawSandbagCoursesOnBox(ctx, x, y, 1.15, w, d, bagH, 4, Math.max(2, Math.round(w * 6)), Math.max(2, Math.round(d * 6)), '#5A4A2E', true, zScale);
+
+    // Thin galvanized steel cage rim collar + top sandbag seam lines
+    R.drawIsoBox(ctx, x - 0.006, y - 0.006, h - 0.9, w + 0.012, d + 0.012, 0.5, '#7E8C9A', { noTop: true }, zScale);
+    R.drawIsoFaceSeams(ctx, 'topX', x, y, 1.15, w, d, bagH, Math.max(2, Math.round(w * 5)), 'rgba(70, 56, 34, 0.34)', zScale);
+    R.drawIsoFaceSeams(ctx, 'topY', x, y, 1.15, w, d, bagH, Math.max(2, Math.round(d * 5)), 'rgba(70, 56, 34, 0.28)', zScale);
+    R.drawIsoBox(ctx, x + 0.04, y + 0.04, h - 0.4, w - 0.08, d - 0.08, 0.35, sandTop, null, zScale);
+
     if (lv >= 3 && !skipCap) {
       R.drawIsoBox(ctx, x - 0.005, y - 0.005, h + 0.6, w + 0.01, d + 0.01, 1.2, maxAccent, { noTop: true }, zScale);
-      R.drawIsoBox(ctx, x, y, h + 1.8, w, d, 2.4, steelCol, null, zScale);
+      R.drawDetailedIsoBox(ctx, x, y, h + 1.8, w, d, 2.4, steelCol, { bevel: true }, zScale);
     }
   }
 
-  function drawBlastSlab(ctx, x, y, w, d, z0, z1, H, I, axis, hex, top, zScale) {
+  function drawBlastSlab(ctx, x, y, w, d, z0, z1, H, I, axis, hex, top, zScale, groundCrease) {
     const ix = axis === 'x' ? 0 : 1;
     const iy = axis === 'y' ? 0 : 1;
     const i0 = (I * z0) / H;
     const i1 = (I * z1) / H;
-    R.drawFrustumXY(
+    R.drawDetailedFrustum(
       ctx,
       x + i0 * ix,
       y + i0 * iy,
@@ -257,40 +308,58 @@ window.ZS = window.ZS || {};
       w - 2 * i0 * ix,
       d - 2 * i0 * iy,
       z1 - z0,
-      (i1 - i0) * ix,
-      (i1 - i0) * iy,
+      0,
       hex,
-      { noTop: !top },
+      {
+        ix: (i1 - i0) * ix,
+        iy: (i1 - i0) * iy,
+        noTop: !top,
+        bevel: !!top,
+        groundCrease: !!groundCrease
+      },
       zScale
     );
   }
 
-  function drawBlastPiece(ctx, x, y, w, d, axis, lv, skipCap, steelCol, maxAccent, zScale) {
+  function drawBlastPiece(ctx, x, y, w, d, axis, lv, skipCap, steelCol, maxAccent, zScale, isPost) {
+    const P = ZS.DATA.PALETTE;
+    const gunmetal = P.milGunmetal || '#3B4552';
+    const slate = P.milSlate || '#525E6B';
+    const armorBody = '#606C7A';
     const H = 24;
-    const I = 0.08;
-    const secs =
-      lv >= 2
-        ? [
-            [0, 4.5, '#6B7686'],
-            [4.5, 8.5, '#F0BD35'],
-            [8.5, 12.5, '#6B7686'],
-            [12.5, 15.5, steelCol],
-            [15.5, 24, '#6B7686']
-          ]
-        : [
-            [0, 4.5, '#6B7686'],
-            [4.5, 8.5, '#F0BD35'],
-            [8.5, 24, '#6B7686']
-          ];
-    for (let i = 0; i < secs.length; i++) {
-      const s = secs[i];
-      drawBlastSlab(ctx, x, y, w, d, s[0], s[1], H, I, axis, s[2], i === secs.length - 1, zScale);
+    const I = isPost ? 0.045 : 0.08;
+
+    if (isPost) {
+      // Heavy reinforced alloy bastion corner/center post
+      R.drawDetailedIsoBox(ctx, x - 0.014, y - 0.014, 0, w + 0.028, d + 0.028, 3.6, '#272F39', { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoHazardBand(ctx, x - 0.008, y - 0.008, 3.6, w + 0.016, d + 0.016, 2.8, '#DFAC2E', '#232B35', 3, zScale);
+      R.drawDetailedFrustum(ctx, x, y, 6.4, w, d, H - 6.4, I, gunmetal, { bevel: skipCap, noTop: false }, zScale);
+      R.drawIsoFaceSeams(ctx, 'left', x + I * 0.5, y, 7.0, w - I, d - I * 0.5, H - 8.0, 2, 'rgba(10, 14, 20, 0.45)', zScale);
+      R.drawIsoFaceSeams(ctx, 'right', x, y + I * 0.5, 7.0, w - I * 0.5, d - I, H - 8.0, 2, 'rgba(10, 14, 20, 0.45)', zScale);
+      R.drawIsoBox(ctx, x + I * 0.4 - 0.008, y + I * 0.4 - 0.008, 14.2, w - I * 0.8 + 0.016, d - I * 0.8 + 0.016, 2.2, steelCol, { noTop: true }, zScale);
+      if (!skipCap) {
+        R.drawIsoBox(ctx, x + I - 0.006, y + I - 0.006, H, w - 2 * I + 0.012, d - 2 * I + 0.012, 1.3, maxAccent, { noTop: true }, zScale);
+        R.drawDetailedIsoBox(ctx, x + I - 0.01, y + I - 0.01, H + 1.3, w - 2 * I + 0.02, d - 2 * I + 0.02, 2.4, slate, { bevel: true }, zScale);
+        R.drawIsoCornerRivets(ctx, x + I - 0.01, y + I - 0.01, H + 3.7, w - 2 * I + 0.02, d - 2 * I + 0.02, 0.045, 0.9, '#E2EBF3', zScale);
+      }
+      return;
     }
+
+    // Sloped composite alloy armor wall span with hazard band, armor seams & rivets
+    drawBlastSlab(ctx, x, y, w, d, 0, 4.2, H, I, axis, gunmetal, false, zScale, true);
+    const ix4 = axis === 'x' ? 0 : (I * 4.2) / H;
+    const iy4 = axis === 'y' ? 0 : (I * 4.2) / H;
+    R.drawIsoHazardBand(ctx, x + ix4, y + iy4, 4.2, w - 2 * ix4, d - 2 * iy4, 3.0, '#DFAC2E', '#232B35', 3, zScale);
+    drawBlastSlab(ctx, x, y, w, d, 7.2, 13.5, H, I, axis, armorBody, false, zScale, false);
+    drawBlastSlab(ctx, x, y, w, d, 13.5, 16.0, H, I, axis, steelCol, false, zScale, false);
+    drawBlastSlab(ctx, x, y, w, d, 16.0, H, H, I, axis, armorBody, true, zScale, false);
+
     if (lv >= 3 && !skipCap) {
       const ix = axis === 'x' ? 0 : I;
       const iy = axis === 'y' ? 0 : I;
       R.drawIsoBox(ctx, x + ix - 0.004, y + iy - 0.004, H, w - 2 * ix + 0.008, d - 2 * iy + 0.008, 1.3, maxAccent, { noTop: true }, zScale);
-      R.drawIsoBox(ctx, x + ix, y + iy, H + 1.3, w - 2 * ix, d - 2 * iy, 2.4, steelCol, null, zScale);
+      R.drawDetailedIsoBox(ctx, x + ix, y + iy, H + 1.3, w - 2 * ix, d - 2 * iy, 2.4, steelCol, { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, x + ix, y + iy, H + 3.7, w - 2 * ix, d - 2 * iy, 0.038, 0.8, '#E2EBF3', zScale);
     }
   }
 
@@ -302,11 +371,12 @@ window.ZS = window.ZS || {};
     const isHesco = tier === 2;
     if (mask === 0) {
       if (isHesco) {
-        drawHescoPiece(ctx, tx + 0.17, ty + 0.31, 0.32, 0.38, 13, tier, !!mounted, steelCol, maxAccent, zScale);
-        drawHescoPiece(ctx, tx + 0.51, ty + 0.31, 0.32, 0.38, 13, tier, !!mounted, steelCol, maxAccent, zScale);
+        drawHescoPiece(ctx, tx + 0.14, ty + 0.31, 0.24, 0.38, 13.2, tier, !!mounted, steelCol, maxAccent, zScale, false);
+        drawHescoPiece(ctx, tx + 0.38, ty + 0.29, 0.24, 0.42, 14.0, tier, !!mounted, steelCol, maxAccent, zScale, true);
+        drawHescoPiece(ctx, tx + 0.62, ty + 0.31, 0.24, 0.38, 13.2, tier, !!mounted, steelCol, maxAccent, zScale, false);
       } else {
         const r = WALL_PIECES.iso;
-        drawBlastPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], 'both', tier, !!mounted, steelCol, maxAccent, zScale);
+        drawBlastPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], 'both', tier, !!mounted, steelCol, maxAccent, zScale, false);
       }
       return;
     }
@@ -319,14 +389,45 @@ window.ZS = window.ZS || {};
     if (mask & 2) order.push(['E', 'x']);
     if (mask & 4) order.push(['S', 'y']);
 
+    // Straight spans (mask === 10 or mask === 5) use sandbag span for smooth continuous wall + slim gunmetal rib,
+    // while corners, T-junctions, ends, and mounted walls use full gunmetal bastion posts!
+    const isCornerOrEndOrMount = !!mounted || (mask !== 10 && mask !== 5);
+
     for (let i = 0; i < order.length; i++) {
       const k = order[i][0];
       const axis = order[i][1];
       const r = WALL_PIECES[k];
       if (isHesco) {
-        drawHescoPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], k === 'post' ? 14 : 13, tier, !!(mounted && k === 'post'), steelCol, maxAccent, zScale);
+        if (k === 'post') {
+          if (isCornerOrEndOrMount) {
+            drawHescoPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], 14.0, tier, !!mounted, steelCol, maxAccent, zScale, true);
+          } else {
+            // Straight run: continuous sandbag body with crisp narrow gunmetal divider post rib (matches concept art wall!)
+            drawHescoPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], 13.2, tier, false, steelCol, maxAccent, zScale, false);
+            if (mask === 10) {
+              R.drawDetailedIsoBox(ctx, tx + 0.46, ty + 0.295, 0, 0.08, 0.41, 13.8, P.milGunmetal || '#3B4552', { bevel: true }, zScale);
+            } else {
+              R.drawDetailedIsoBox(ctx, tx + 0.295, ty + 0.46, 0, 0.41, 0.08, 13.8, P.milGunmetal || '#3B4552', { bevel: true }, zScale);
+            }
+          }
+        } else {
+          drawHescoPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], 13.2, tier, false, steelCol, maxAccent, zScale, false);
+        }
       } else {
-        drawBlastPiece(ctx, tx + r[0], ty + r[1], r[2], r[3], axis, tier, !!(mounted && k === 'post'), steelCol, maxAccent, zScale);
+        drawBlastPiece(
+          ctx,
+          tx + r[0],
+          ty + r[1],
+          r[2],
+          r[3],
+          axis,
+          tier,
+          !!(mounted && k === 'post'),
+          steelCol,
+          maxAccent,
+          zScale,
+          k === 'post' && isCornerOrEndOrMount
+        );
       }
     }
   }
@@ -1079,38 +1180,31 @@ window.ZS = window.ZS || {};
 
   function drawHqContactShadow(ctx, tx, ty, lv, isSil, zScale) {
     if (isSil) return;
-    if (lv <= 1) {
-      const Iso = ZS.Iso;
-      const outerC = Iso.gridToScreen(tx + 0.525, ty + 0.555, 0.45);
-      ctx.fillStyle = 'rgba(10, 16, 22, 0.22)';
-      ctx.beginPath();
-      ctx.ellipse(outerC.x, outerC.y, 28.5 * zScale, 14.2 * zScale, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      const coreC = Iso.gridToScreen(tx + 0.535, ty + 0.565, 0.45);
-      ctx.fillStyle = 'rgba(6, 10, 16, 0.36)';
-      ctx.beginPath();
-      ctx.ellipse(coreC.x, coreC.y, 22.5 * zScale, 11.2 * zScale, 0, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-    const pad = lv === 2 ? 0.08 : lv === 3 ? 0.02 : 0.0;
-    drawIsoFootprintAO(ctx, tx + pad, ty + pad, 1.0 - pad * 2, 1.0 - pad * 2, 0.45, zScale);
+    const pad = lv === 1 ? 0.08 : lv === 2 ? 0.06 : lv === 3 ? 0.05 : 0.04;
+    drawIsoFootprintAO(ctx, tx + pad, ty + pad, 1.0 - pad * 2, 1.0 - pad * 2, 0.25, zScale);
   }
 
   function drawStructGroundShadow(ctx, tx, ty, def, isSil, zScale) {
     if (!(def && def.passable) && !isSil) {
       const Iso = ZS.Iso;
-      const outerC = Iso.gridToScreen(tx + 0.525, ty + 0.555, 0.45);
-      ctx.fillStyle = 'rgba(10, 16, 22, 0.22)';
+      const id = def && def.id;
+      const isCompactMast = id === 'wind_turbine' || id === 'gas_heater' || id === 'led_floodlight';
+      const isMedPad = id === 'solar_array' || id === 'battery_bank' || id === 'vending_machine' || id === 'arcade_neon' || id === 'urban_planter';
+      const rxOuter = (isCompactMast ? 17.5 : isMedPad ? 22.0 : 24.5) * zScale;
+      const ryOuter = rxOuter * 0.50;
+      const rxCore = (isCompactMast ? 12.2 : isMedPad ? 15.8 : 17.8) * zScale;
+      const ryCore = rxCore * 0.50;
+
+      const outerC = Iso.gridToScreen(tx + 0.52, ty + 0.545, 0.35);
+      ctx.fillStyle = 'rgba(8, 14, 20, 0.24)';
       ctx.beginPath();
-      ctx.ellipse(outerC.x, outerC.y, 24.5 * zScale, 12.2 * zScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(outerC.x, outerC.y, rxOuter, ryOuter, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      const coreC = Iso.gridToScreen(tx + 0.535, ty + 0.565, 0.45);
-      ctx.fillStyle = 'rgba(6, 10, 16, 0.36)';
+      const coreC = Iso.gridToScreen(tx + 0.53, ty + 0.555, 0.35);
+      ctx.fillStyle = 'rgba(5, 9, 14, 0.38)';
       ctx.beginPath();
-      ctx.ellipse(coreC.x, coreC.y, 17.8 * zScale, 8.9 * zScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(coreC.x, coreC.y, rxCore, ryCore, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -1243,72 +1337,205 @@ window.ZS = window.ZS || {};
 
   function drawWindTurbineStatic(ctx, tx, ty, lv, P, zScale) {
     const Iso = ZS.Iso;
+    const gunmetal = P.milGunmetal || '#3B4552';
+    const slate = P.milSlate || '#525E6B';
+    const olive = P.milOlive || '#6B7A5E';
+    const towerBase = '#D8E1EA';
+    const towerMid = '#E6EEF5';
+
     if (lv <= 1) {
-      R.drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 3.0, '#647280', null, zScale);
-      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 3.5, 0.13, 2.0, P.power, { n: 12, emissive: true }, zScale);
-      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 5.5, 0.042, 22.0, '#DCE5EE', { n: 10 }, zScale);
+      // Compact octagonal/chamfered military base pad (~30% footprint) + bolt flange + tapered tower + compact nacelle & tail vane
+      R.drawDetailedFrustum(ctx, tx + 0.35, ty + 0.35, 0.4, 0.30, 0.30, 2.2, 0.03, gunmetal, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.35, ty + 0.35, 2.6, 0.30, 0.30, 0.045, 0.75, '#BAC6D2', zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 2.6, 0.095, 1.4, slate, { n: 10 }, zScale);
+      // Small cyan power indicator ring on collar
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.0, 0.072, 0.9, P.power, { n: 10, emissive: true, noTop: true }, zScale);
+      // Slim tapered white-slate tubular mast
+      R.drawTaperedCyl(ctx, tx + 0.50, ty + 0.50, 4.8, 0.056, 0.034, 19.8, towerBase, { n: 10, specHighlight: true }, zScale);
+      // Tail vane (drawn before nacelle housing)
+      R.drawDetailedIsoBox(ctx, tx + 0.485, ty + 0.25, 24.8, 0.03, 0.16, 2.8, olive, { bevel: true }, zScale);
+      // Aerodynamic nacelle housing
+      R.drawDetailedIsoBox(ctx, tx + 0.445, ty + 0.39, 24.2, 0.11, 0.22, 3.2, '#CFD9E3', { bevel: true }, zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.555, ty + 0.43, 25.0, 0.12, 2, 1.0, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.43, 27.9), 1.15, P.power, true, zScale);
     } else if (lv === 2) {
-      R.drawIsoBox(ctx, tx + 0.34, ty + 0.34, 0.5, 0.32, 0.32, 3.5, '#6C7B8A', null, zScale);
-      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 3.8, 0.125, false, zScale);
-      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.0, 0.048, 31.0, '#E4ECF4', { n: 10 }, zScale);
-      R.drawIsoBox(ctx, tx + 0.44, ty + 0.38, 35.0, 0.12, 0.24, 3.8, '#C7D2DD', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.48, ty + 0.18, 35.6, 0.04, 0.20, 4.4, '#7B8FA2', null, zScale);
+      R.drawDetailedFrustum(ctx, tx + 0.33, ty + 0.33, 0.4, 0.34, 0.34, 2.8, 0.035, gunmetal, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.33, ty + 0.33, 3.2, 0.34, 0.34, 0.05, 0.8, '#BAC6D2', zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.61, ty + 0.44, 0.8, 0.09, 0.13, 3.2, olive, { bevel: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 3.2, 0.11, 1.6, slate, { n: 12 }, zScale);
+      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 4.4, 0.092, false, zScale);
+      R.drawTaperedCyl(ctx, tx + 0.50, ty + 0.50, 5.6, 0.064, 0.038, 29.4, towerMid, { n: 12, specHighlight: true }, zScale);
+      // Mid-tower collar seam
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 18.5, 0.054, 0.9, '#9AA8B6', { n: 10, noTop: true }, zScale);
+      // Tail stabilizer fin + armored nacelle
+      R.drawDetailedIsoBox(ctx, tx + 0.48, ty + 0.21, 35.6, 0.04, 0.18, 3.8, slate, { bevel: true }, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.43, ty + 0.37, 34.6, 0.14, 0.26, 4.0, '#D8E2EC', { bevel: true }, zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.57, ty + 0.42, 35.6, 0.15, 2, 1.2, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.44, 39.1), 1.3, P.power, true, zScale);
     } else if (lv === 3) {
-      R.drawIsoBox(ctx, tx + 0.36, ty + 0.36, 0.5, 0.28, 0.28, 4.0, '#758594', null, zScale);
-      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 4.5, 0.058, 42.0, '#EEF3F8', { n: 10 }, zScale);
-      R.drawIsoBox(ctx, tx + 0.42, ty + 0.36, 46.5, 0.16, 0.28, 5.0, '#D0DBE6', null, zScale);
+      R.drawDetailedFrustum(ctx, tx + 0.31, ty + 0.31, 0.4, 0.38, 0.38, 3.4, 0.045, gunmetal, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.31, ty + 0.31, 3.8, 0.38, 0.38, 0.055, 0.85, '#C9D5E0', zScale);
+      // Compact auxiliary transformer pod beside mast
+      R.drawDetailedIsoBox(ctx, tx + 0.30, ty + 0.56, 0.6, 0.13, 0.14, 4.2, slate, { bevel: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 3.8, 0.12, 2.0, slate, { n: 12 }, zScale);
+      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 5.2, 0.10, false, zScale);
+      R.drawTaperedCyl(ctx, tx + 0.50, ty + 0.50, 6.4, 0.072, 0.044, 39.8, towerMid, { n: 12, specHighlight: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 22.0, 0.062, 1.0, '#94A3B2', { n: 12, noTop: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 35.0, 0.052, 1.0, '#94A3B2', { n: 12, noTop: true }, zScale);
+      // Heavy streamlined military nacelle + olive dorsal cowling
+      R.drawDetailedIsoBox(ctx, tx + 0.475, ty + 0.20, 47.0, 0.05, 0.16, 4.2, olive, { bevel: true }, zScale);
+      R.drawDetailedFrustum(ctx, tx + 0.41, ty + 0.34, 45.8, 0.18, 0.31, 4.8, 0.018, '#DCE6F0', { bevel: true }, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.43, ty + 0.37, 50.6, 0.14, 0.22, 1.1, olive, { bevel: true }, zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.59, ty + 0.40, 47.0, 0.18, 3, 1.1, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.45, 52.2), 1.5, P.power, true, zScale);
     } else {
-      R.drawFrustum(ctx, tx + 0.30, ty + 0.30, 0.5, 0.40, 0.40, 6.5, 0.08, '#5E6E7E', null, zScale);
-      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 5.4, 0.145, false, zScale);
-      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 7.0, 0.066, 47.0, '#EEF3F8', { n: 12 }, zScale);
-      R.drawIsoBox(ctx, tx + 0.40, ty + 0.28, 54.0, 0.20, 0.38, 5.6, '#DCE5EE', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.395, ty + 0.275, 56.0, 0.21, 0.39, 1.3, P.power, { noTop: true, emissive: true }, zScale);
-      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.46, 61.0), 1.9, P.power, true, zScale);
+      // Lv.4 High-altitude twin-rotor military wind generator
+      R.drawDetailedFrustum(ctx, tx + 0.28, ty + 0.28, 0.4, 0.44, 0.44, 4.8, 0.06, gunmetal, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoHazardBand(ctx, tx + 0.295, ty + 0.295, 1.4, 0.41, 0.41, 1.6, '#DFAC2E', '#232B35', 4, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.28, ty + 0.28, 5.2, 0.44, 0.44, 0.06, 0.9, '#DCE5EE', zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 5.2, 0.14, 2.2, slate, { n: 12 }, zScale);
+      R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.50, 6.2, 0.142, false, zScale);
+      R.drawTaperedCyl(ctx, tx + 0.50, ty + 0.50, 7.4, 0.082, 0.048, 46.6, '#EDF3F8', { n: 12, specHighlight: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 24.0, 0.070, 1.2, slate, { n: 12, noTop: true }, zScale);
+      R.drawCyl(ctx, tx + 0.50, ty + 0.50, 40.0, 0.058, 1.2, slate, { n: 12, noTop: true }, zScale);
+      // Long twin-rotor armored nacelle + small cyan power core slit
+      R.drawDetailedFrustum(ctx, tx + 0.39, ty + 0.27, 53.6, 0.22, 0.42, 5.6, 0.02, '#DCE6F0', { bevel: true }, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.41, ty + 0.31, 59.2, 0.18, 0.32, 1.3, slate, { bevel: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.386, ty + 0.34, 55.8, 0.228, 0.26, 1.1, P.power, { noTop: true, emissive: true }, zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.61, ty + 0.36, 54.6, 0.22, 2, 1.4, zScale);
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.46, 61.1), 1.8, P.power, true, zScale);
     }
+  }
+
+  function drawAeroRotorAssembly(ctx, hubPt, coneTipPt, radiusPx, rootHalfW, tipHalfW, bladeAngle, bladeHex, trimHex, hubHex, zScale, tipGlowHex) {
+    const Iso = ZS.Iso;
+    const isSil = !!window.ZS_SILHOUETTE_MODE;
+    const mainFill = Iso.resolveFaceColor(bladeHex, 1.0, false, 0) || bladeHex;
+    const edgeShade = Iso.resolveFaceColor(bladeHex, 0.80, false, 0) || bladeHex;
+    const trimFill = trimHex ? (Iso.resolveFaceColor(trimHex, 0.95, false, 0) || trimHex) : null;
+
+    for (let b = 0; b < 3; b++) {
+      const a = bladeAngle + (b * Math.PI * 2) / 3;
+      const dx = Math.cos(a) * 0.96;
+      const dy = Math.sin(a) * 0.90;
+      const nx = -dy;
+      const ny = dx;
+
+      const rStart = 1.6 * zScale;
+      const rMid = radiusPx * 0.34 * zScale;
+      const rBand = radiusPx * 0.78 * zScale;
+      const rEnd = radiusPx * zScale;
+      const wRoot = rootHalfW * zScale;
+      const wMid = rootHalfW * 1.32 * zScale;
+      const wTip = tipHalfW * zScale;
+
+      const p0L = { x: hubPt.x + dx * rStart + nx * wRoot * 0.65, y: hubPt.y + dy * rStart + ny * wRoot * 0.65 };
+      const pMidL = { x: hubPt.x + dx * rMid + nx * wMid, y: hubPt.y + dy * rMid + ny * wMid };
+      const pTipL = { x: hubPt.x + dx * rEnd + nx * wTip * 0.5, y: hubPt.y + dy * rEnd + ny * wTip * 0.5 };
+      const pTipR = { x: hubPt.x + dx * rEnd - nx * wTip, y: hubPt.y + dy * rEnd - ny * wTip };
+      const pMidR = { x: hubPt.x + dx * rMid - nx * wRoot * 0.85, y: hubPt.y + dy * rMid - ny * wRoot * 0.85 };
+      const p0R = { x: hubPt.x + dx * rStart - nx * wRoot * 0.65, y: hubPt.y + dy * rStart - ny * wRoot * 0.65 };
+
+      // Tapered airfoil polygon
+      ctx.beginPath();
+      ctx.moveTo(p0L.x, p0L.y);
+      ctx.lineTo(pMidL.x, pMidL.y);
+      ctx.lineTo(pTipL.x, pTipL.y);
+      ctx.lineTo(pTipR.x, pTipR.y);
+      ctx.lineTo(pMidR.x, pMidR.y);
+      ctx.lineTo(p0R.x, p0R.y);
+      ctx.closePath();
+      ctx.fillStyle = mainFill;
+      ctx.fill();
+
+      if (!isSil) {
+        // Trailing-edge subtle shadow facet for 3D airfoil volume
+        ctx.beginPath();
+        ctx.moveTo(hubPt.x + dx * rStart, hubPt.y + dy * rStart);
+        ctx.lineTo(hubPt.x + dx * rEnd, hubPt.y + dy * rEnd);
+        ctx.lineTo(pTipR.x, pTipR.y);
+        ctx.lineTo(pMidR.x, pMidR.y);
+        ctx.lineTo(p0R.x, p0R.y);
+        ctx.closePath();
+        ctx.fillStyle = edgeShade;
+        ctx.fill();
+
+        if (trimFill) {
+          const b0L = { x: hubPt.x + dx * rBand + nx * wTip * 1.15, y: hubPt.y + dy * rBand + ny * wTip * 1.15 };
+          const b0R = { x: hubPt.x + dx * rBand - nx * wTip * 1.15, y: hubPt.y + dy * rBand - ny * wTip * 1.15 };
+          ctx.beginPath();
+          ctx.moveTo(b0L.x, b0L.y);
+          ctx.lineTo(pTipL.x, pTipL.y);
+          ctx.lineTo(pTipR.x, pTipR.y);
+          ctx.lineTo(b0R.x, b0R.y);
+          ctx.closePath();
+          ctx.fillStyle = trimFill;
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(10, 16, 24, 0.46)';
+        ctx.lineWidth = Math.max(0.6, 0.72 * zScale);
+        ctx.beginPath();
+        ctx.moveTo(p0L.x, p0L.y);
+        ctx.lineTo(pMidL.x, pMidL.y);
+        ctx.lineTo(pTipL.x, pTipL.y);
+        ctx.lineTo(pTipR.x, pTipR.y);
+        ctx.lineTo(pMidR.x, pMidR.y);
+        ctx.lineTo(p0R.x, p0R.y);
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      if (tipGlowHex) {
+        R.drawIsoDot(ctx, { x: hubPt.x + dx * rEnd, y: hubPt.y + dy * rEnd }, 1.15, tipGlowHex, true, zScale);
+      }
+    }
+
+    // 3D aerodynamic nose spinner cone at hub center
+    const rHub = (rootHalfW * 1.38 + 0.9) * zScale;
+    const hubBaseCol = Iso.resolveFaceColor(hubHex || '#607080', 0.82, false, 0) || '#607080';
+    const hubCapCol = Iso.resolveFaceColor(bladeHex, 1.0, false, 0) || bladeHex;
+    ctx.beginPath();
+    ctx.arc(hubPt.x, hubPt.y, rHub, 0, Math.PI * 2);
+    ctx.fillStyle = hubBaseCol;
+    ctx.fill();
+    if (!isSil) {
+      ctx.strokeStyle = 'rgba(10, 14, 20, 0.52)';
+      ctx.lineWidth = Math.max(0.65, 0.75 * zScale);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(coneTipPt.x, coneTipPt.y, rHub * 0.68, 0, Math.PI * 2);
+    ctx.fillStyle = hubCapCol;
+    ctx.fill();
   }
 
   function drawWindTurbineRotors(ctx, tx, ty, lv, bladeAngle, P, zScale) {
     const Iso = ZS.Iso;
+    const olive = P.milOlive || '#6B7A5E';
+    const slate = P.milSlate || '#525E6B';
     if (lv <= 1) {
-      const rx = 0.21 * Math.cos(bladeAngle);
-      const ry = 0.21 * Math.sin(bladeAngle);
-      const bx1 = tx + 0.50 + rx;
-      const by1 = ty + 0.50 + ry;
-      const bx2 = tx + 0.50 - rx;
-      const by2 = ty + 0.50 - ry;
-      R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 14.0), Iso.gridToScreen(bx1, by1, 14.0), '#9AA8B6', 1.7, true, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 24.5), Iso.gridToScreen(bx1, by1, 24.5), '#9AA8B6', 1.7, true, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(bx1, by1, 12.2), Iso.gridToScreen(bx1, by1, 26.5), '#F5F9FC', 2.8, true, zScale);
-      R.drawIsoLine(ctx, Iso.gridToScreen(bx2, by2, 12.2), Iso.gridToScreen(bx2, by2, 26.5), '#F5F9FC', 2.8, true, zScale);
-      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, 28.0), 2.2, '#C7D2DD', false, zScale);
+      // Lv.1 immediately reads as a crisp 3-blade horizontal-axis wind turbine!
+      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.63, 25.8);
+      const tip = Iso.gridToScreen(tx + 0.50, ty + 0.67, 25.8);
+      drawAeroRotorAssembly(ctx, hub, tip, 13.5, 1.55, 0.55, bladeAngle, '#F2F7FB', olive, slate, zScale, null);
     } else if (lv === 2) {
-      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.64, 37.0);
-      for (let b = 0; b < 3; b++) {
-        const a = bladeAngle + (b * Math.PI * 2) / 3;
-        R.drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 15.5 * zScale, y: hub.y + Math.sin(a) * 15.5 * zScale }, '#F5F9FC', 2.2, true, zScale);
-      }
-      R.drawIsoDot(ctx, hub, 2.4, '#C7D2DD', false, zScale);
+      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.65, 36.6);
+      const tip = Iso.gridToScreen(tx + 0.50, ty + 0.70, 36.6);
+      drawAeroRotorAssembly(ctx, hub, tip, 17.5, 1.75, 0.62, bladeAngle, '#F4F8FC', olive, slate, zScale, null);
     } else if (lv === 3) {
-      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.66, 49.0);
-      for (let b = 0; b < 3; b++) {
-        const a = bladeAngle + (b * Math.PI * 2) / 3;
-        R.drawIsoLine(ctx, hub, { x: hub.x + Math.cos(a) * 23.0 * zScale, y: hub.y + Math.sin(a) * 23.0 * zScale }, '#F5F9FC', 2.7, true, zScale);
-      }
-      R.drawIsoDot(ctx, hub, 3.0, '#C7D2DD', false, zScale);
+      const hub = Iso.gridToScreen(tx + 0.50, ty + 0.67, 48.2);
+      const tip = Iso.gridToScreen(tx + 0.50, ty + 0.73, 48.2);
+      drawAeroRotorAssembly(ctx, hub, tip, 23.0, 2.05, 0.70, bladeAngle, '#F6FAFD', '#D99B26', slate, zScale, null);
     } else {
-      const hubB = Iso.gridToScreen(tx + 0.50, ty + 0.26, 56.8);
-      for (let b = 0; b < 3; b++) {
-        const a = -bladeAngle + 0.52 + (b * Math.PI * 2) / 3;
-        R.drawIsoLine(ctx, hubB, { x: hubB.x + Math.cos(a) * 13.5 * zScale, y: hubB.y + Math.sin(a) * 13.5 * zScale }, '#CBD7E3', 2.1, true, zScale);
-      }
-      const hubF = Iso.gridToScreen(tx + 0.50, ty + 0.68, 56.8);
-      for (let b = 0; b < 3; b++) {
-        const a = bladeAngle + (b * Math.PI * 2) / 3;
-        const tip = { x: hubF.x + Math.cos(a) * 26.0 * zScale, y: hubF.y + Math.sin(a) * 26.0 * zScale };
-        R.drawIsoLine(ctx, hubF, tip, '#F5F9FC', 2.9, true, zScale);
-        R.drawIsoDot(ctx, tip, 1.5, P.power, true, zScale);
-      }
-      R.drawIsoDot(ctx, hubF, 3.2, '#B6C3D0', false, zScale);
+      // Rear counter-rotating auxiliary rotor + massive front 3-blade rotor
+      const hubB = Iso.gridToScreen(tx + 0.50, ty + 0.25, 56.4);
+      const tipB = Iso.gridToScreen(tx + 0.50, ty + 0.21, 56.4);
+      drawAeroRotorAssembly(ctx, hubB, tipB, 14.2, 1.45, 0.52, -bladeAngle + 0.52, '#CFDCE8', slate, '#455260', zScale, null);
+
+      const hubF = Iso.gridToScreen(tx + 0.50, ty + 0.71, 56.4);
+      const tipF = Iso.gridToScreen(tx + 0.50, ty + 0.77, 56.4);
+      drawAeroRotorAssembly(ctx, hubF, tipF, 26.2, 2.25, 0.76, bladeAngle, '#F7FAFD', '#E2A83B', slate, zScale, P.power);
     }
   }
 
@@ -1513,34 +1740,76 @@ window.ZS = window.ZS || {};
       }
 
       case 'solar_array': {
+        const gunmetal = P.milGunmetal || '#3B4552';
+        const slate = P.milSlate || '#525E6B';
+        const olive = P.milOlive || '#6B7A5E';
+        const bezel = P.milBrushed || '#B8C4D0';
+        const cellCol = P.milSolarCell || '#1A3048';
+        const cellDeep = P.milSolarCellDeep || '#122235';
+        const gridCol = P.milSolarGrid || '#89A1B8';
+        const ledCol = solarOff ? P.powerDim : P.power;
+
         if (lv <= 1) {
-          R.drawIsoBox(ctx, tx + 0.22, ty + 0.28, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.22, ty + 0.72, 0.5, 0.56, 0.06, 1.2, '#596673', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.45, ty + 0.30, 1.7, 0.10, 0.08, 7.6, '#7B8996', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.12, ty + 0.52, 0.5, 0.12, 0.20, 4.2, '#475361', null, zScale);
-          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.18, ty + 0.72, 3.2), 1.4, solarOff ? P.powerDim : P.power, !solarOff, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.22, ty + 0.24, 0.58, 0.54, 11.2, 5.4, 1.1, '#9AA8B6', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          // Compact ~68% military skid rails + angled A-frame truss struts + side micro-inverter box + 3x2 slate-navy solar module
+          R.drawDetailedIsoBox(ctx, tx + 0.20, ty + 0.24, 0.4, 0.60, 0.06, 1.3, gunmetal, { bevel: true, groundCrease: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.20, ty + 0.70, 0.4, 0.60, 0.06, 1.3, gunmetal, { bevel: true, groundCrease: true }, zScale);
+          // Rear A-frame truss struts & hydraulic brace
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.30, ty + 0.27, 1.5), Iso.gridToScreen(tx + 0.30, ty + 0.27, 10.6), slate, 1.9, true, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.68, ty + 0.27, 1.5), Iso.gridToScreen(tx + 0.68, ty + 0.27, 10.6), slate, 1.9, true, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.30, ty + 0.72, 1.5), Iso.gridToScreen(tx + 0.30, ty + 0.29, 9.8), '#788694', 1.3, false, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.68, ty + 0.72, 1.5), Iso.gridToScreen(tx + 0.68, ty + 0.29, 9.8), '#788694', 1.3, false, zScale);
+          // Front low mounting cleats
+          R.drawDetailedIsoBox(ctx, tx + 0.28, ty + 0.69, 1.7, 0.06, 0.06, 3.2, slate, { bevel: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.66, ty + 0.69, 1.7, 0.06, 0.06, 3.2, slate, { bevel: true }, zScale);
+          // Compact olive field inverter & junction box on left skid
+          R.drawDetailedIsoBox(ctx, tx + 0.14, ty + 0.50, 0.5, 0.11, 0.19, 4.4, olive, { bevel: true, groundCrease: true }, zScale);
+          R.drawIsoLouvers(ctx, 'left', tx + 0.155, ty + 0.69, 1.6, 0.08, 2, 1.1, zScale);
+          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.195, ty + 0.695, 3.9), 1.2, ledCol, !solarOff, zScale);
+          // Precision brushed-bezel solar panel (3x2 wafer array)
+          R.drawSlantedSolarPanel(ctx, tx + 0.21, ty + 0.21, 0.60, 0.54, 11.4, 4.8, 1.25, bezel, cellCol, gridCol, 3, 2, zScale);
         } else if (lv === 2) {
-          R.drawIsoBox(ctx, tx + 0.44, ty + 0.44, 0.5, 0.12, 0.12, 9.0, '#7B8996', null, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.12, 0.88, 0.76, 15.5, 8.5, 1.5, '#A9B6C4', '#2466B5', '#6E9FE0', 3, 2, zScale);
+          // Medium ~76% tracking pedestal + twin hydraulic actuators + inverter cabinet + dense 4x3 panel array
+          R.drawDetailedFrustum(ctx, tx + 0.30, ty + 0.32, 0.4, 0.40, 0.36, 2.2, 0.04, gunmetal, { bevel: true, groundCrease: true }, zScale);
+          R.drawIsoCornerRivets(ctx, tx + 0.30, ty + 0.32, 2.6, 0.40, 0.36, 0.05, 0.75, '#BAC6D2', zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.44, ty + 0.43, 2.6, 0.12, 0.12, 8.2, slate, { bevel: true }, zScale);
+          // Angled steel cross-beams & hydraulic rams under panel
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.24, ty + 0.30, 13.8), Iso.gridToScreen(tx + 0.76, ty + 0.30, 13.8), '#8A98A6', 1.8, true, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.38, ty + 0.52, 4.2), Iso.gridToScreen(tx + 0.28, ty + 0.28, 13.4), '#9AA8B6', 1.4, true, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.62, ty + 0.52, 4.2), Iso.gridToScreen(tx + 0.72, ty + 0.28, 13.4), '#9AA8B6', 1.4, true, zScale);
+          // Front-left tactical inverter box
+          R.drawDetailedIsoBox(ctx, tx + 0.18, ty + 0.58, 0.5, 0.15, 0.18, 5.2, olive, { bevel: true, groundCrease: true }, zScale);
+          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.25, ty + 0.765, 4.4), 1.25, ledCol, !solarOff, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.14, ty + 0.16, 0.72, 0.64, 15.8, 7.6, 1.45, bezel, cellCol, gridCol, 4, 3, zScale);
         } else if (lv === 3) {
-          R.drawCyl(ctx, tx + 0.50, ty + 0.44, 0.5, 0.22, 3.6, '#596673', { n: 14 }, zScale);
-          R.drawPowerStripCyl(ctx, tx + 0.50, ty + 0.44, 2.5, 0.225, solarOff, zScale);
-          R.drawCyl(ctx, tx + 0.50, ty + 0.44, 4.1, 0.07, 11.4, '#8C9AA8', { n: 10 }, zScale);
-          R.drawIsoBox(ctx, tx + 0.18, ty + 0.40, 14.8, 0.64, 0.08, 1.8, '#7B8996', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.34, ty + 0.66, 0.5, 0.32, 0.20, 7.2, '#DDE5EC', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.37, ty + 0.855, 4.6, 0.26, 0.015, 1.4, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.54, ty + 0.10, 0.42, 0.62, 22.5, 13.5, 1.3, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          // Dual-wing military tracking solar generator (~80% footprint) + armored mast + transformer box
+          R.drawDetailedFrustum(ctx, tx + 0.30, ty + 0.30, 0.4, 0.40, 0.38, 2.6, 0.04, gunmetal, { bevel: true, groundCrease: true }, zScale);
+          R.drawCyl(ctx, tx + 0.50, ty + 0.46, 3.0, 0.13, 1.8, slate, { n: 12 }, zScale);
+          R.drawTaperedCyl(ctx, tx + 0.50, ty + 0.46, 4.8, 0.068, 0.052, 11.2, '#94A2B0', { n: 10, specHighlight: true }, zScale);
+          // Horizontal torque tube & actuator struts
+          R.drawDetailedIsoBox(ctx, tx + 0.16, ty + 0.39, 15.2, 0.68, 0.07, 1.6, slate, { bevel: true }, zScale);
+          // Front compact military inverter unit (tiny LED strip only — no large cyan ring)
+          R.drawDetailedIsoBox(ctx, tx + 0.36, ty + 0.64, 0.5, 0.28, 0.18, 6.2, slate, { bevel: true, groundCrease: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.38, ty + 0.66, 6.7, 0.24, 0.14, 0.8, olive, { bevel: true }, zScale);
+          R.drawIsoLouvers(ctx, 'left', tx + 0.39, ty + 0.82, 1.8, 0.14, 3, 1.1, zScale);
+          R.drawIsoBox(ctx, tx + 0.56, ty + 0.822, 4.2, 0.05, 0.014, 1.2, ledCol, { emissive: !solarOff }, zScale);
+          // Twin precision solar wings (3x3 each)
+          R.drawSlantedSolarPanel(ctx, tx + 0.09, ty + 0.14, 0.38, 0.56, 22.4, 12.6, 1.35, bezel, cellCol, gridCol, 3, 3, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.53, ty + 0.14, 0.38, 0.56, 22.4, 12.6, 1.35, bezel, cellCol, gridCol, 3, 3, zScale);
         } else {
-          R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, 0.5, 0.84, 0.84, 3.0, '#475361', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, 1.7, 0.85, 0.85, 1.0, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
-          R.drawIsoBox(ctx, tx + 0.38, ty + 0.34, 3.5, 0.24, 0.24, 26.0, '#607080', null, zScale);
-          R.drawIsoBox(ctx, tx + 0.375, ty + 0.335, 17.5, 0.25, 0.25, 1.5, solarOff ? P.powerDim : P.power, { noTop: true, emissive: !solarOff }, zScale);
-          R.drawIsoBox(ctx, tx + 0.41, ty + 0.37, 29.5, 0.18, 0.18, 3.5, solarOff ? P.powerDim : P.power, { emissive: !solarOff }, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.06, ty + 0.06, 0.88, 0.42, 28.0, 20.5, 1.4, '#B6C3D0', '#1D5AA8', '#6E9FE0', 4, 2, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.04, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
-          R.drawSlantedSolarPanel(ctx, tx + 0.63, ty + 0.46, 0.33, 0.46, 14.2, 8.2, 1.2, '#A9B6C4', '#2466B5', '#6E9FE0', 2, 2, zScale);
+          // Lv.4 Tactical Solar Power Station: compact ~82% armored gantry + upper main 5x3 array + twin lower 3x2 collector wings
+          R.drawDetailedFrustum(ctx, tx + 0.13, ty + 0.13, 0.4, 0.74, 0.74, 2.6, 0.04, gunmetal, { bevel: true, groundCrease: true }, zScale);
+          R.drawIsoHazardBand(ctx, tx + 0.145, ty + 0.145, 1.1, 0.71, 0.71, 1.2, '#DFAC2E', '#232B35', 5, zScale);
+          R.drawIsoCornerRivets(ctx, tx + 0.13, ty + 0.13, 3.0, 0.74, 0.74, 0.055, 0.85, '#C9D5E0', zScale);
+          // Central armored support pylon + inverter core
+          R.drawDetailedIsoBox(ctx, tx + 0.39, ty + 0.35, 3.0, 0.22, 0.22, 22.5, slate, { bevel: true }, zScale);
+          R.drawIsoFaceSeams(ctx, 'left', tx + 0.39, ty + 0.35, 3.5, 0.22, 0.22, 21.0, 2, 'rgba(10, 14, 20, 0.42)', zScale);
+          R.drawIsoBox(ctx, tx + 0.386, ty + 0.346, 17.5, 0.228, 0.228, 1.0, ledCol, { noTop: true, emissive: !solarOff }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.42, ty + 0.38, 25.5, 0.16, 0.16, 4.2, olive, { bevel: true }, zScale);
+          R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.46, 30.3), 1.5, ledCol, !solarOff, zScale);
+          // Upper high-elevation 5x3 array + twin lower 3x2 flank arrays
+          R.drawSlantedSolarPanel(ctx, tx + 0.11, ty + 0.10, 0.78, 0.38, 29.2, 21.2, 1.45, bezel, cellDeep, gridCol, 5, 3, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.10, ty + 0.48, 0.33, 0.40, 14.4, 8.0, 1.25, bezel, cellCol, gridCol, 3, 2, zScale);
+          R.drawSlantedSolarPanel(ctx, tx + 0.57, ty + 0.48, 0.33, 0.40, 14.4, 8.0, 1.25, bezel, cellCol, gridCol, 3, 2, zScale);
         }
         break;
       }
@@ -1694,7 +1963,6 @@ window.ZS = window.ZS || {};
     const healCol = P.repairNano || P.heal || '#4ADE80';
 
     const canTryStamp =
-      id !== 'command_hq' &&
       !isNodeAnimatingOrFlashing(st) &&
       !(st.mounted && isNodeAnimatingOrFlashing(st.mounted));
 
@@ -1702,6 +1970,18 @@ window.ZS = window.ZS || {};
       const tintBucket = getTintBucket(state, isSil);
       const topZ = R.getStructVisualTopZ(id, lv);
       const aim = st.aimAngle != null ? st.aimAngle : 0.8;
+
+      if (id === 'command_hq') {
+        const hqLv = Math.max(1, Math.min(4, st.level || state.hqLevel || 1));
+        const hqTopZ = [38, 34, 42, 52][hqLv - 1];
+        const stamp = ensureStructureStamp(`hq|${hqLv}|${tintBucket}`, hqTopZ, tintBucket, isSil, (sctx) => {
+          drawHqContactShadow(sctx, 0, 0, hqLv, isSil, 1.0);
+          drawHqStaticBody(sctx, 0, 0, 0.5, hqLv, P, 1.0);
+        });
+        blitStructureStamp(ctx, stamp, tx, ty, zScale, isSil);
+        drawHqDynamicOverlay(ctx, tx, ty, 0.5, hqLv, aim, timeSec, P, zScale);
+        return;
+      }
 
       if (id === 'barricade_wall') {
         const mask = st.previewMask != null ? st.previewMask : getWallConnectMask(state.structGrid, tx, ty);
@@ -1771,7 +2051,7 @@ window.ZS = window.ZS || {};
       }
 
       if (id === 'solar_array') {
-        const solarOff = !powered;
+        const solarOff = !!(state.isNight || !powered || (st.empStunTimer || 0) > 0);
         const stamp = ensureStructureStamp(`solar|${lv}|${solarOff ? 1 : 0}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawFullStaticStructBody(sctx, id, lv, 0, 0, isUnpowered, solarOff, P, steelCol, maxAccent, 1.0);
@@ -2091,7 +2371,8 @@ window.ZS = window.ZS || {};
       }
 
       default: {
-        drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, !powered, P, steelCol, maxAccent, zScale);
+        const defaultSolarOff = id === 'solar_array' ? !!(state.isNight || !powered || (st.empStunTimer || 0) > 0) : !powered;
+        drawFullStaticStructBody(ctx, id, lv, tx, ty, isUnpowered, defaultSolarOff, P, steelCol, maxAccent, zScale);
         break;
       }
     }
@@ -2113,8 +2394,217 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawHqByLevel(ctx, st, tx, ty, state, timeSec, zScale) {
+  function drawHqStaticBody(ctx, tx, ty, zb, lv, P, zScale) {
     const Iso = ZS.Iso;
+    const olive = P.milOlive || '#6B7A5E';
+    const oliveDark = P.milOliveDark || '#4D5943';
+    const sand = P.milSand || '#B7A179';
+    const gunmetal = P.milGunmetal || '#3B4552';
+    const slate = P.milSlate || '#525E6B';
+    const goldHex = P.gold || '#FFC94A';
+    const amberLight = P.baseLight || '#FFD27A';
+    const warmCore = P.hqAmberCore || '#FFF3D6';
+
+    if (lv === 1) {
+      // Lv.1 임시 지휘소: Warm golden glowing ground pad (0px cyan!) + sandbag defensive pockets + chamfered olive command container + awning + radio mast
+      R.drawGroundGlowPad(ctx, tx, ty, 0.84, goldHex, 0.92, zScale);
+      const bz = zb + 0.9;
+
+      // Back sandbag parapet pockets
+      R.drawDetailedIsoBox(ctx, tx + 0.14, ty + 0.16, bz, 0.24, 0.14, 3.6, sand, { bevel: false }, zScale);
+      R.drawSandbagCoursesOnBox(ctx, tx + 0.14, ty + 0.16, bz, 0.24, 0.14, 3.6, 3, 2, 1, P.milSandSeam, false, zScale);
+
+      // Main olive tactical command container (~58% footprint for crisp pad margin)
+      R.drawDetailedIsoBox(ctx, tx + 0.21, ty + 0.22, bz, 0.56, 0.50, 12.2, olive, { bevel: true, groundCrease: true }, zScale);
+      // Corrugated container panel seams & louvers
+      R.drawIsoFaceSeams(ctx, 'left', tx + 0.21, ty + 0.22, bz + 0.6, 0.56, 0.50, 10.8, 5, 'rgba(12, 18, 14, 0.36)', zScale);
+      R.drawIsoFaceSeams(ctx, 'right', tx + 0.21, ty + 0.22, bz + 0.6, 0.56, 0.50, 10.8, 4, 'rgba(12, 18, 14, 0.36)', zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.77, ty + 0.52, bz + 4.2, 0.14, 3, 1.2, zScale);
+
+      // Recessed warm amber situation-room slit window & blast awning
+      R.drawDetailedIsoBox(ctx, tx + 0.26, ty + 0.70, bz + 9.2, 0.34, 0.06, 1.0, gunmetal, { bevel: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.28, ty + 0.722, bz + 4.8, 0.30, 0.015, 4.0, amberLight, { emissive: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.63, ty + 0.722, bz + 1.2, 0.10, 0.015, 7.6, oliveDark, null, zScale);
+
+      // Front sandbag defensive pockets
+      R.drawDetailedIsoBox(ctx, tx + 0.15, ty + 0.66, bz, 0.22, 0.14, 3.8, sand, { bevel: false, groundCrease: true }, zScale);
+      R.drawSandbagCoursesOnBox(ctx, tx + 0.15, ty + 0.66, bz, 0.22, 0.14, 3.8, 3, 2, 1, P.milSandSeam, false, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.65, ty + 0.64, bz, 0.18, 0.15, 3.8, sand, { bevel: false, groundCrease: true }, zScale);
+      R.drawSandbagCoursesOnBox(ctx, tx + 0.65, ty + 0.64, bz, 0.18, 0.15, 3.8, 3, 2, 1, P.milSandSeam, false, zScale);
+
+      // Roof HVAC unit, reinforced trim & tall radio mast
+      R.drawDetailedIsoBox(ctx, tx + 0.20, ty + 0.21, bz + 12.2, 0.58, 0.52, 1.2, gunmetal, { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.20, ty + 0.21, bz + 13.4, 0.58, 0.52, 0.045, 0.8, '#DCE5EE', zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.27, ty + 0.29, bz + 13.4, 0.20, 0.18, 2.8, slate, { bevel: true }, zScale);
+      R.drawCyl(ctx, tx + 0.66, ty + 0.32, bz + 13.4, 0.055, 2.2, gunmetal, { n: 8 }, zScale);
+      R.drawIsoLine(
+        ctx,
+        Iso.gridToScreen(tx + 0.66, ty + 0.32, bz + 15.4),
+        Iso.gridToScreen(tx + 0.66, ty + 0.32, bz + 33.6),
+        '#DCE5EE',
+        1.45,
+        true,
+        zScale
+      );
+      R.drawIsoLine(
+        ctx,
+        Iso.gridToScreen(tx + 0.61, ty + 0.32, bz + 26.5),
+        Iso.gridToScreen(tx + 0.71, ty + 0.32, bz + 26.5),
+        '#BAC6D2',
+        1.1,
+        false,
+        zScale
+      );
+      return;
+    }
+
+    if (lv === 2) {
+      // Lv.2 전술 작전 본부: Golden command pad + stepped bunker plinth (76% footprint) + armored ops room + upper bridge + radar base + LMG turret ring
+      R.drawGroundGlowPad(ctx, tx, ty, 0.88, goldHex, 1.0, zScale);
+      const bz = zb + 0.9;
+
+      // Stepped chamfered bunker plinth
+      R.drawDetailedFrustum(ctx, tx + 0.12, ty + 0.12, bz, 0.76, 0.76, 4.4, 0.04, gunmetal, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoHazardBand(ctx, tx + 0.145, ty + 0.145, bz + 1.2, 0.71, 0.71, 1.4, '#DFAC2E', '#232B35', 5, zScale);
+
+      // 1st floor armored tactical operations hall (~64% footprint)
+      R.drawDetailedIsoBox(ctx, tx + 0.18, ty + 0.18, bz + 4.4, 0.64, 0.64, 11.2, slate, { bevel: true }, zScale);
+      R.drawIsoFaceSeams(ctx, 'left', tx + 0.18, ty + 0.18, bz + 4.8, 0.64, 0.64, 10.4, 4, 'rgba(10, 14, 20, 0.42)', zScale);
+      R.drawIsoFaceSeams(ctx, 'right', tx + 0.18, ty + 0.18, bz + 4.8, 0.64, 0.64, 10.4, 4, 'rgba(10, 14, 20, 0.42)', zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.82, ty + 0.56, bz + 6.2, 0.18, 3, 1.2, zScale);
+
+      // Warm amber recessed tactical slit windows on both visible faces (0px cyan!)
+      R.drawIsoBox(ctx, tx + 0.24, ty + 0.822, bz + 10.2, 0.48, 0.015, 2.8, amberLight, { emissive: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.822, ty + 0.24, bz + 10.2, 0.015, 0.26, 2.8, amberLight, { emissive: true }, zScale);
+
+      // 2nd floor observation command bridge (~46% footprint)
+      R.drawDetailedIsoBox(ctx, tx + 0.24, ty + 0.24, bz + 15.6, 0.50, 0.50, 6.2, '#C9D5E0', { bevel: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.28, ty + 0.742, bz + 17.8, 0.38, 0.015, 2.2, warmCore, { emissive: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.742, ty + 0.28, bz + 17.8, 0.015, 0.34, 2.2, amberLight, { emissive: true }, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.23, ty + 0.23, bz + 21.8, 0.52, 0.52, 1.1, gunmetal, { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.23, ty + 0.23, bz + 22.9, 0.52, 0.52, 0.045, 0.8, '#E2EBF3', zScale);
+
+      // Radar mast pedestal & roof LMG turret ring
+      R.drawCyl(ctx, tx + 0.34, ty + 0.34, bz + 22.9, 0.055, 4.6, '#8C9AA8', { n: 8 }, zScale);
+      R.drawCyl(ctx, tx + 0.60, ty + 0.60, bz + 22.9, 0.095, 2.8, gunmetal, { n: 12 }, zScale);
+      return;
+    }
+
+    if (lv === 3) {
+      // Lv.3 통합 요새 사령부: Golden luminous pad + sloped armored bastion skirt + multi-tier command citadel + warm golden core bands + HMG turret mount
+      R.drawGroundGlowPad(ctx, tx, ty, 0.90, goldHex, 1.12, zScale);
+      const bz = zb + 0.9;
+
+      // Sloped armored citadel bastion base (80% footprint)
+      R.drawDetailedFrustum(ctx, tx + 0.10, ty + 0.10, bz, 0.80, 0.80, 7.6, 0.065, gunmetal, { bevel: true, groundCrease: true }, zScale);
+      R.drawIsoHazardBand(ctx, tx + 0.125, ty + 0.125, bz + 2.0, 0.75, 0.75, 1.8, '#E2A83B', '#232B35', 6, zScale);
+      // Corner armored buttress lugs
+      const lugs = [[0.10, 0.10], [0.76, 0.10], [0.10, 0.76], [0.76, 0.76]];
+      for (let i = 0; i < lugs.length; i++) {
+        R.drawDetailedIsoBox(ctx, tx + lugs[i][0], ty + lugs[i][1], bz, 0.14, 0.14, 5.8, '#2B333D', { bevel: true }, zScale);
+      }
+
+      // Main armored command tower (~64% footprint) + golden luminous waist band (matches concept art!)
+      R.drawDetailedIsoBox(ctx, tx + 0.18, ty + 0.18, bz + 7.6, 0.64, 0.64, 14.4, slate, { bevel: true }, zScale);
+      R.drawIsoFaceSeams(ctx, 'left', tx + 0.18, ty + 0.18, bz + 8.0, 0.64, 0.64, 13.6, 4, 'rgba(10, 14, 20, 0.42)', zScale);
+      R.drawIsoFaceSeams(ctx, 'right', tx + 0.18, ty + 0.18, bz + 8.0, 0.64, 0.64, 13.6, 4, 'rgba(10, 14, 20, 0.42)', zScale);
+      R.drawIsoBox(ctx, tx + 0.175, ty + 0.175, bz + 14.6, 0.65, 0.65, 2.8, amberLight, { emissive: true, noTop: true }, zScale);
+      R.drawIsoLouvers(ctx, 'left', tx + 0.24, ty + 0.82, bz + 9.4, 0.20, 3, 1.2, zScale);
+      R.drawIsoLouvers(ctx, 'right', tx + 0.82, ty + 0.54, bz + 9.4, 0.20, 3, 1.2, zScale);
+
+      // Upper duplex bridge (~48% footprint) + warm searchlight housing + HMG turret ring
+      R.drawDetailedFrustum(ctx, tx + 0.25, ty + 0.25, bz + 22.0, 0.50, 0.50, 7.2, 0.025, '#D8E2EC', { bevel: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.265, ty + 0.265, bz + 25.4, 0.47, 0.47, 2.0, warmCore, { emissive: true, noTop: true }, zScale);
+      R.drawDetailedIsoBox(ctx, tx + 0.26, ty + 0.26, bz + 29.2, 0.48, 0.48, 1.2, gunmetal, { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + 0.26, ty + 0.26, bz + 30.4, 0.48, 0.48, 0.045, 0.85, '#E2EBF3', zScale);
+
+      // Tactical warm searchlight + comm antenna + HMG turret pedestal
+      R.drawDetailedIsoBox(ctx, tx + 0.29, ty + 0.32, bz + 30.4, 0.13, 0.11, 3.2, slate, { bevel: true }, zScale);
+      R.drawIsoBox(ctx, tx + 0.30, ty + 0.432, bz + 31.0, 0.11, 0.015, 2.0, warmCore, { emissive: true }, zScale);
+      R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.34, ty + 0.29, bz + 30.4), Iso.gridToScreen(tx + 0.34, ty + 0.29, bz + 37.5), '#DCE5EE', 1.3, true, zScale);
+      R.drawCyl(ctx, tx + 0.60, ty + 0.60, bz + 30.4, 0.105, 3.4, gunmetal, { n: 12 }, zScale);
+      return;
+    }
+
+    // Lv.4 이지스 코어 사령부: Brilliant warm-gold core pad (0px cyan!) + chamfered fortress base (82%) + dual golden light bands + Aegis radome + twin cannon turret
+    R.drawGroundGlowPad(ctx, tx, ty, 0.92, goldHex, 1.25, zScale);
+    const bz = zb + 0.9;
+
+    R.drawDetailedFrustum(ctx, tx + 0.09, ty + 0.09, bz, 0.82, 0.82, 9.2, 0.065, '#333C48', { bevel: true, groundCrease: true }, zScale);
+    R.drawIsoHazardBand(ctx, tx + 0.115, ty + 0.115, bz + 2.4, 0.77, 0.77, 2.0, '#FFC94A', '#202730', 6, zScale);
+    const bastions = [[0.08, 0.08], [0.76, 0.08], [0.08, 0.76], [0.76, 0.76]];
+    for (let i = 0; i < bastions.length; i++) {
+      R.drawDetailedIsoBox(ctx, tx + bastions[i][0], ty + bastions[i][1], bz, 0.16, 0.16, 7.2, '#262E38', { bevel: true }, zScale);
+      R.drawIsoCornerRivets(ctx, tx + bastions[i][0], ty + bastions[i][1], bz + 7.2, 0.16, 0.16, 0.035, 0.75, '#FFC94A', zScale);
+    }
+
+    // Lower citadel core + radiant golden energy band 1
+    R.drawDetailedIsoBox(ctx, tx + 0.17, ty + 0.17, bz + 9.2, 0.66, 0.66, 15.8, slate, { bevel: true }, zScale);
+    R.drawIsoFaceSeams(ctx, 'left', tx + 0.17, ty + 0.17, bz + 9.8, 0.66, 0.66, 14.8, 4, 'rgba(10, 14, 20, 0.45)', zScale);
+    R.drawIsoFaceSeams(ctx, 'right', tx + 0.17, ty + 0.17, bz + 9.8, 0.66, 0.66, 14.8, 4, 'rgba(10, 14, 20, 0.45)', zScale);
+    R.drawIsoBox(ctx, tx + 0.164, ty + 0.164, bz + 17.2, 0.672, 0.672, 3.0, goldHex, { emissive: true, noTop: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.162, ty + 0.162, bz + 18.0, 0.676, 0.676, 1.4, warmCore, { emissive: true, noTop: true }, zScale);
+
+    // Upper Aegis command crown + golden core band 2
+    R.drawDetailedFrustum(ctx, tx + 0.24, ty + 0.24, bz + 25.0, 0.52, 0.52, 8.2, 0.03, '#DCE6F0', { bevel: true }, zScale);
+    R.drawIsoBox(ctx, tx + 0.252, ty + 0.252, bz + 28.8, 0.496, 0.496, 2.2, warmCore, { emissive: true, noTop: true }, zScale);
+    R.drawDetailedIsoBox(ctx, tx + 0.25, ty + 0.25, bz + 33.2, 0.50, 0.50, 1.4, gunmetal, { bevel: true }, zScale);
+    R.drawIsoCornerRivets(ctx, tx + 0.25, ty + 0.25, bz + 34.6, 0.50, 0.50, 0.045, 0.9, '#FFC94A', zScale);
+
+    // Phased-array Aegis radome + twin comm whip antennas
+    R.drawCyl(ctx, tx + 0.50, ty + 0.50, bz + 34.6, 0.21, 2.2, '#455260', { n: 14 }, zScale);
+    R.drawDome(ctx, tx + 0.50, ty + 0.50, bz + 36.8, 0.19, 8.2, '#EEF4F9', { n: 16 }, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.30, ty + 0.30, bz + 34.6), Iso.gridToScreen(tx + 0.30, ty + 0.30, bz + 44.0), '#DCE5EE', 1.25, true, zScale);
+    R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.70, ty + 0.30, bz + 34.6), Iso.gridToScreen(tx + 0.70, ty + 0.30, bz + 42.5), '#DCE5EE', 1.25, true, zScale);
+  }
+
+  function drawHqDynamicOverlay(ctx, tx, ty, zb, lv, aim, timeSec, P, zScale) {
+    const Iso = ZS.Iso;
+    const bz = zb + 0.9;
+    const amberLight = P.baseLight || '#FFD27A';
+    const warmCore = P.hqAmberCore || '#FFF3D6';
+
+    if (lv === 1) {
+      const blinkOn = Math.sin(timeSec * 4.5) > -0.25;
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.66, ty + 0.32, bz + 34.5), 2.0, blinkOn ? amberLight : '#9E7428', blinkOn, zScale);
+      return;
+    }
+
+    if (lv === 2) {
+      const rTop = Iso.gridToScreen(tx + 0.34, ty + 0.34, bz + 28.2);
+      const rot = timeSec * 1.9;
+      ctx.save();
+      ctx.translate(rTop.x, rTop.y);
+      ctx.rotate(Math.sin(rot) * 0.38);
+      ctx.fillStyle = Iso.resolveFaceColor('#E8F0F7', 1.0, false, 0) || '#E8F0F7';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5.8 * zScale, 3.1 * zScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (!window.ZS_SILHOUETTE_MODE) {
+        ctx.strokeStyle = 'rgba(12, 18, 26, 0.48)';
+        ctx.lineWidth = Math.max(0.7, 0.85 * zScale);
+        ctx.stroke();
+      }
+      ctx.restore();
+      R.drawIsoDot(ctx, { x: rTop.x, y: rTop.y - 1.2 * zScale }, 1.15, amberLight, true, zScale);
+      drawHqRoofBarrels(ctx, tx + 0.60, ty + 0.60, bz + 24.8, aim, 0.32, 1, 2.2, '#1F242B', zScale);
+      return;
+    }
+
+    if (lv === 3) {
+      const blinkOn = Math.sin(timeSec * 5.0) > -0.2;
+      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.34, ty + 0.29, bz + 38.2), 1.6, blinkOn ? amberLight : '#9E7428', blinkOn, zScale);
+      drawHqRoofBarrels(ctx, tx + 0.60, ty + 0.60, bz + 32.8, aim, 0.38, 2, 2.5, '#1F242B', zScale);
+      return;
+    }
+
+    // Lv.4 Aegis twin heavy cannon barrels + pulsing golden apex core beacon
+    drawHqRoofBarrels(ctx, tx + 0.50, ty + 0.50, bz + 39.8, aim, 0.48, 2, 3.3, '#1F242B', zScale);
+    const pulseR = 2.6 + 0.55 * Math.sin(timeSec * 5.5);
+    R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, bz + 46.2), pulseR, warmCore, true, zScale);
+  }
+
+  function drawHqByLevel(ctx, st, tx, ty, state, timeSec, zScale) {
     const P = ZS.DATA.PALETTE;
     const lv = Math.max(1, Math.min(4, st.level || state.hqLevel || 1));
     const aim = st.aimAngle != null ? st.aimAngle : 0.8;
@@ -2129,76 +2619,8 @@ window.ZS = window.ZS || {};
     }
     const zb = Math.max(0, 0.5 + zLift);
 
-    if (lv === 1) {
-      // Lv.1 임시 지휘소: circular sandbag ring (#B5A27A) + olive container (#7D8B6A, 0.6x0.54, h12) + warm door window (#FFD27A) + radio antenna (h35)
-      R.drawCyl(ctx, tx + 0.5, ty + 0.5, zb, 0.45, 5, '#B5A27A', { n: 18 }, zScale);
-      R.drawIsoBox(ctx, tx + 0.20, ty + 0.22, zb, 0.60, 0.54, 12, '#7D8B6A', null, zScale);
-      R.drawCyl(ctx, tx + 0.5, ty + 0.5, zb, 0.45, 5, '#B5A27A', { n: 18, noTop: true }, zScale);
-      R.drawIsoBox(ctx, tx + 0.30, ty + 0.76, zb + 4.8, 0.24, 0.015, 4, P.baseLight, { emissive: true }, zScale);
-      R.drawIsoLine(
-        ctx,
-        Iso.gridToScreen(tx + 0.70, ty + 0.30, zb + 12),
-        Iso.gridToScreen(tx + 0.70, ty + 0.30, zb + 34),
-        '#C8D0D8',
-        1.4,
-        false,
-        zScale
-      );
-      const blinkOn = Math.sin(timeSec * 4.5) > -0.25;
-      R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.70, ty + 0.30, zb + 35), 2.2, blinkOn ? P.baseLight : '#B8893A', blinkOn, zScale);
-      return;
-    }
-
-    if (lv === 2) {
-      // Lv.2 전술 작전 본부: body 0.84x0.84 h16 (#5B6B7C) + #FFD27A window band + bridge 0.6x0.6 h6 (#C9D3DD) + radar + LMG (0.32 tiles)
-      R.drawIsoBox(ctx, tx + 0.08, ty + 0.08, zb, 0.84, 0.84, 16, '#5B6B7C', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.075, ty + 0.075, zb + 9, 0.85, 0.85, 3, P.baseLight, { emissive: true, noTop: true }, zScale);
-      R.drawIsoBox(ctx, tx + 0.20, ty + 0.20, zb + 16, 0.60, 0.60, 6, '#C9D3DD', null, zScale);
-      R.drawIsoLine(
-        ctx,
-        Iso.gridToScreen(tx + 0.32, ty + 0.32, zb + 22),
-        Iso.gridToScreen(tx + 0.32, ty + 0.32, zb + 28),
-        '#C9D3DD',
-        1.6,
-        false,
-        zScale
-      );
-      const rTop = Iso.gridToScreen(tx + 0.32, ty + 0.32, zb + 29);
-      ctx.fillStyle = Iso.resolveFaceColor('#EEF5FC', 1.0, false, 0);
-      ctx.beginPath();
-      ctx.ellipse(rTop.x, rTop.y, 6.0 * zScale, 3.4 * zScale, Math.sin(timeSec * 1.8) * 0.3, 0, Math.PI * 2);
-      ctx.fill();
-
-      R.drawCyl(ctx, tx + 0.62, ty + 0.62, zb + 22, 0.08, 3, '#3B4552', { n: 12 }, zScale);
-      drawHqRoofBarrels(ctx, tx + 0.62, ty + 0.62, zb + 24, aim, 0.32, 1, 2.2, '#1F242B', zScale);
-      return;
-    }
-
-    if (lv === 3) {
-      // Lv.3 통합 요새 사령부: sloped armor skirt 0.96 h8 (#4A5562) + body 0.76 h16 + #FFD27A band + bridge 0.56 h7 + #FFF6DA searchlight + HMG twin barrels
-      R.drawFrustum(ctx, tx + 0.02, ty + 0.02, zb, 0.96, 0.96, 8, 0.06, '#4A5562', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.12, ty + 0.12, zb + 8, 0.76, 0.76, 16, '#5B6B7C', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.115, ty + 0.115, zb + 15, 0.77, 0.77, 3, P.baseLight, { emissive: true, noTop: true }, zScale);
-      R.drawIsoBox(ctx, tx + 0.22, ty + 0.22, zb + 24, 0.56, 0.56, 7, '#DCE4EC', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.26, ty + 0.30, zb + 31, 0.12, 0.10, 3, '#59636E', null, zScale);
-      R.drawIsoBox(ctx, tx + 0.26, ty + 0.40, zb + 31.5, 0.12, 0.015, 2, '#FFF6DA', { emissive: true }, zScale);
-      R.drawCyl(ctx, tx + 0.62, ty + 0.62, zb + 31, 0.10, 3.5, '#3B4552', { n: 12 }, zScale);
-      drawHqRoofBarrels(ctx, tx + 0.62, ty + 0.62, zb + 33.5, aim, 0.38, 2, 2.4, '#1F242B', zScale);
-      return;
-    }
-
-    // Lv.4 이지스 코어 사령부: sloped full-tile skirt + #F0BD35 hazard band + body + 2nd tower + 2 #FFD27A bands + white Aegis dome + heavy twin barrels + #FFF3D6 core beacon
-    R.drawFrustum(ctx, tx, ty, zb, 1.0, 1.0, 10, 0.07, '#3F4955', null, zScale);
-    const i3 = (0.07 * 3) / 10;
-    const i5 = (0.07 * 5) / 10;
-    R.drawFrustum(ctx, tx + i3, ty + i3, zb + 3, 1.0 - 2 * i3, 1.0 - 2 * i3, 2, i5 - i3, '#F0BD35', { noTop: true }, zScale);
-    R.drawIsoBox(ctx, tx + 0.10, ty + 0.10, zb + 10, 0.80, 0.80, 18, '#5B6B7C', null, zScale);
-    R.drawIsoBox(ctx, tx + 0.095, ty + 0.095, zb + 19, 0.81, 0.81, 3, P.baseLight, { emissive: true, noTop: true }, zScale);
-    R.drawIsoBox(ctx, tx + 0.20, ty + 0.20, zb + 28, 0.60, 0.60, 8, '#DCE4EC', null, zScale);
-    R.drawIsoBox(ctx, tx + 0.195, ty + 0.195, zb + 33, 0.61, 0.61, 1.5, P.baseLight, { emissive: true, noTop: true }, zScale);
-    R.drawDome(ctx, tx + 0.50, ty + 0.50, zb + 36, 0.22, 9, '#EEF3F8', { n: 16 }, zScale);
-    drawHqRoofBarrels(ctx, tx + 0.50, ty + 0.50, zb + 40, aim, 0.48, 2, 3.4, '#1F242B', zScale);
-    R.drawIsoDot(ctx, Iso.gridToScreen(tx + 0.50, ty + 0.50, zb + 46.5), 3.2, '#FFF3D6', true, zScale);
+    drawHqStaticBody(ctx, tx, ty, zb, lv, P, zScale);
+    drawHqDynamicOverlay(ctx, tx, ty, zb, lv, aim, timeSec, P, zScale);
   }
 
   function drawHqRoofBarrels(ctx, gx, gy, zBase, aimAngle, lenTiles, count, widthPx, color, zScale) {
@@ -2406,6 +2828,8 @@ window.ZS = window.ZS || {};
     getTrapThrustAmount,
     drawRazorPadTile,
     drawStructure,
+    drawHqStaticBody,
+    drawHqDynamicOverlay,
     drawHqByLevel,
     drawHqRoofBarrels,
     pushOrientedPart,
