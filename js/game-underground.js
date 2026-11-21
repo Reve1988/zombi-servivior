@@ -54,6 +54,7 @@ window.ZS = window.ZS || {};
   function createDefaultUnderground() {
     const grid = [];
     const b1StructGrid = [];
+    const corridorConnected = new Uint8Array(B1_SIZE * B1_SIZE);
     for (let y = 0; y < B1_SIZE; y++) {
       const row = [];
       const sRow = [];
@@ -62,10 +63,14 @@ window.ZS = window.ZS || {};
         const isElev = x === ELEV_POS.x && y === ELEV_POS.y;
         const isCore3x3 = isB1CenterCore3x3(x, y);
         const isPermCorridor = isCore3x3 && !isElev;
+        if (isPermCorridor) {
+          corridorConnected[y * B1_SIZE + x] = 1;
+        }
         row.push({
           excavated: isCore3x3,
           bedrock: isBedrock,
           permanentCorridor: isPermCorridor,
+          corridor: isPermCorridor,
           elevator: isElev,
           permanentCore: isElev,
           rockTier: getB1RockTier(x, y),
@@ -80,6 +85,7 @@ window.ZS = window.ZS || {};
 
     return {
       grid,
+      corridorConnected,
       rooms: {},
       nextRoomId: 1,
       doors: {},
@@ -88,6 +94,17 @@ window.ZS = window.ZS || {};
       lockedHighlightTimer: 0,
       rev: 1
     };
+  }
+
+  function isB1CorridorCell(cell) {
+    return !!(cell && cell.excavated && !cell.bedrock && !cell.elevator && (cell.permanentCorridor || cell.corridor));
+  }
+
+  function getB1PartitionGroup(cell) {
+    if (!cell || !cell.excavated || cell.bedrock || cell.elevator) return null;
+    if (isB1CorridorCell(cell)) return 'corridor';
+    if (cell.roomId != null) return `room:${cell.roomId}`;
+    return 'dirt';
   }
 
   function ensureUndergroundState() {
@@ -107,6 +124,10 @@ window.ZS = window.ZS || {};
     if (!Number.isFinite(ug.nextRoomId) || ug.nextRoomId < 1) ug.nextRoomId = 1;
     if (!Number.isFinite(ug.rev)) ug.rev = 1;
     if (ug.lockedHighlightTimer == null) ug.lockedHighlightTimer = 0;
+    if (!(ug.corridorConnected instanceof Uint8Array) || ug.corridorConnected.length !== B1_SIZE * B1_SIZE) {
+      ug.corridorConnected = new Uint8Array(B1_SIZE * B1_SIZE);
+      recomputeUndergroundConnectivity();
+    }
     return ug;
   }
 
@@ -136,6 +157,7 @@ window.ZS = window.ZS || {};
           excavated: !!c.excavated,
           bedrock: !!c.bedrock,
           permanentCorridor: !!c.permanentCorridor,
+          corridor: !!(c.permanentCorridor || c.corridor),
           elevator: !!c.elevator,
           permanentCore: !!c.permanentCore,
           rockTier: c.rockTier || 1,
@@ -177,17 +199,21 @@ window.ZS = window.ZS || {};
           base.grid[y][x] = {
             ...defCell,
             excavated: true,
+            corridor: !!defCell.permanentCorridor,
             roomId: null
           };
         } else {
+          const roomVal = sc.excavated && sc.roomId != null ? Number(sc.roomId) : null;
+          const corrVal = !!(sc.excavated && roomVal == null && sc.corridor);
           base.grid[y][x] = {
             excavated: !!sc.excavated,
             bedrock: false,
             permanentCorridor: false,
+            corridor: corrVal,
             elevator: false,
             permanentCore: false,
             rockTier: getB1RockTier(x, y),
-            roomId: sc.excavated && sc.roomId != null ? Number(sc.roomId) : null,
+            roomId: roomVal,
             dirtSeed: Number.isFinite(sc.dirtSeed) ? sc.dirtSeed : defCell.dirtSeed
           };
         }
@@ -462,6 +488,7 @@ window.ZS = window.ZS || {};
     const cell = ug.grid[ty][tx];
     state.digAp = Math.max(0, (state.digAp || 0) - check.cost);
     cell.excavated = true;
+    cell.corridor = false;
     cell.roomId = null;
     ug.rev += 1;
 
@@ -580,7 +607,7 @@ window.ZS = window.ZS || {};
     for (let y = 1; y < B1_SIZE - 1; y++) {
       for (let x = 1; x < B1_SIZE - 1; x++) {
         const c = ug.grid[y][x];
-        if (!c || !c.excavated || c.permanentCorridor || c.elevator || c.bedrock) {
+        if (!c || !c.excavated || c.permanentCorridor || c.corridor || c.elevator || c.bedrock) {
           if (c) c.roomId = null;
           continue;
         }
@@ -673,19 +700,29 @@ window.ZS = window.ZS || {};
     const c1 = getB1Cell(x1, y1);
     const c2 = getB1Cell(x2, y2);
     if (!c1 || !c2 || c1.bedrock || c2.bedrock || !c1.excavated || !c2.excavated) {
-      return { ok: false, reason: '굴착된 두 열린 타일 사이의 콘크리트 격벽에만 방폭문을 설치할 수 있습니다.' };
+      return { ok: false, reason: '전술 복도와 방 구역 사이의 콘크리트 격벽에만 방폭문을 설치할 수 있습니다.' };
     }
     if (c1.elevator || c2.elevator) {
       return { ok: false, reason: '승강기 코어 직결 경계에는 방폭문을 설치할 수 없습니다.' };
     }
-    if (c1.roomId === c2.roomId) {
-      return { ok: false, reason: '구역과 복도 또는 서로 다른 구역 사이의 콘크리트 격벽을 클릭하세요.' };
+    const c1Corr = isB1CorridorCell(c1);
+    const c2Corr = isB1CorridorCell(c2);
+    const c1Room = c1.roomId != null;
+    const c2Room = c2.roomId != null;
+    if ((c1Corr && c2Room) || (c2Corr && c1Room)) {
+      const key = getB1EdgeKey(x1, y1, x2, y2);
+      const ordered = x1 < x2 || (x1 === x2 && y1 < y2)
+        ? { a: [x1, y1], b: [x2, y2] }
+        : { a: [x2, y2], b: [x1, y1] };
+      return { ok: true, key, a: ordered.a, b: ordered.b };
     }
-    const key = getB1EdgeKey(x1, y1, x2, y2);
-    const ordered = x1 < x2 || (x1 === x2 && y1 < y2)
-      ? { a: [x1, y1], b: [x2, y2] }
-      : { a: [x2, y2], b: [x1, y1] };
-    return { ok: true, key, a: ordered.a, b: ordered.b };
+    if (c1Room && c2Room) {
+      return { ok: false, reason: '방과 방 사이에는 방폭문을 달 수 없습니다. [전술 복도]와 방 사이의 격벽에 설치하세요.' };
+    }
+    if (c1Corr && c2Corr) {
+      return { ok: false, reason: '복도와 복도 사이는 열린 통로이므로 방폭문이 필요하지 않습니다.' };
+    }
+    return { ok: false, reason: '굴착된 흙바닥 경계에는 방폭문을 설치할 수 없습니다. 먼저 [전술 복도]를 시공하세요.' };
   }
 
   function pruneInvalidB1Doors() {
@@ -712,15 +749,19 @@ window.ZS = window.ZS || {};
       if (ug.rooms[rKeys[i]]) ug.rooms[rKeys[i]].connected = false;
     }
 
-    const visited = new Uint8Array(B1_SIZE * B1_SIZE);
+    const corrConn = ug.corridorConnected instanceof Uint8Array && ug.corridorConnected.length === B1_SIZE * B1_SIZE
+      ? ug.corridorConnected
+      : (ug.corridorConnected = new Uint8Array(B1_SIZE * B1_SIZE));
+    corrConn.fill(0);
+
     const queue = [];
 
-    // Seed BFS from all 8 permanent corridor tiles surrounding (11, 11)
+    // Phase 1: BFS strictly through elevator-linked corridor tiles starting from permanent elevator hall
     for (let y = ELEV_POS.y - 1; y <= ELEV_POS.y + 1; y++) {
       for (let x = ELEV_POS.x - 1; x <= ELEV_POS.x + 1; x++) {
         const c = ug.grid[y] && ug.grid[y][x];
         if (c && c.excavated && c.permanentCorridor && !c.elevator) {
-          visited[y * B1_SIZE + x] = 1;
+          corrConn[y * B1_SIZE + x] = 1;
           queue.push([x, y]);
         }
       }
@@ -729,33 +770,38 @@ window.ZS = window.ZS || {};
     let head = 0;
     while (head < queue.length) {
       const [cx, cy] = queue[head++];
-      const curCell = ug.grid[cy][cx];
-      const curRoomId = curCell.roomId != null ? curCell.roomId : null;
-
       for (let k = 0; k < 4; k++) {
         const nx = cx + CARDINALS[k][0];
         const ny = cy + CARDINALS[k][1];
         if (nx < 1 || ny < 1 || nx >= B1_SIZE - 1 || ny >= B1_SIZE - 1) continue;
         const nIdx = ny * B1_SIZE + nx;
-        if (visited[nIdx]) continue;
+        if (corrConn[nIdx]) continue;
         const nCell = ug.grid[ny][nx];
-        if (!nCell || !nCell.excavated || nCell.bedrock || nCell.elevator) continue;
-
-        const nextRoomId = nCell.roomId != null ? nCell.roomId : null;
-        let canCross = false;
-        if (curRoomId === nextRoomId) {
-          canCross = true;
-        } else {
-          const edgeKey = getB1EdgeKey(cx, cy, nx, ny);
-          if (ug.doors[edgeKey]) canCross = true;
-        }
-        if (!canCross) continue;
-
-        visited[nIdx] = 1;
+        if (!isB1CorridorCell(nCell)) continue;
+        corrConn[nIdx] = 1;
         queue.push([nx, ny]);
-        if (nextRoomId != null && ug.rooms[nextRoomId]) {
-          ug.rooms[nextRoomId].connected = true;
-        }
+      }
+    }
+
+    // Phase 2: Activate only rooms linked via a Blast Door to a connected corridor tile
+    const doorKeys = Object.keys(ug.doors || {});
+    for (let i = 0; i < doorKeys.length; i++) {
+      const d = ug.doors[doorKeys[i]];
+      if (!d || !Array.isArray(d.a) || !Array.isArray(d.b)) continue;
+      const ax = d.a[0];
+      const ay = d.a[1];
+      const bx = d.b[0];
+      const by = d.b[1];
+      if (!isValidB1DoorEdge(ax, ay, bx, by).ok) continue;
+      const ca = ug.grid[ay] && ug.grid[ay][ax];
+      const cb = ug.grid[by] && ug.grid[by][bx];
+      if (!ca || !cb) continue;
+
+      if (corrConn[ay * B1_SIZE + ax] === 1 && cb.roomId != null && ug.rooms[cb.roomId]) {
+        ug.rooms[cb.roomId].connected = true;
+      }
+      if (corrConn[by * B1_SIZE + bx] === 1 && ca.roomId != null && ug.rooms[ca.roomId]) {
+        ug.rooms[ca.roomId].connected = true;
       }
     }
 
@@ -767,11 +813,20 @@ window.ZS = window.ZS || {};
     return { connectedRooms, totalRooms };
   }
 
+  function isB1CorridorConnected(tx, ty) {
+    const ug = ensureUndergroundState();
+    const cell = getB1Cell(tx, ty);
+    if (!isB1CorridorCell(cell)) return false;
+    if (cell.permanentCorridor) return true;
+    return !!(ug.corridorConnected && ug.corridorConnected[ty * B1_SIZE + tx] === 1);
+  }
+
   function isUndergroundTileConnected(tx, ty) {
     const ug = ensureUndergroundState();
     const cell = getB1Cell(tx, ty);
     if (!cell || !cell.excavated) return false;
-    if (cell.permanentCorridor || cell.elevator) return true;
+    if (cell.elevator || cell.permanentCorridor) return true;
+    if (cell.corridor) return isB1CorridorConnected(tx, ty);
     if (cell.roomId == null) return false;
     const r = ug.rooms[cell.roomId];
     return !!(r && r.connected);
@@ -786,11 +841,39 @@ window.ZS = window.ZS || {};
     };
   }
 
+  function finalizeB1LayoutChange(ug, soundType) {
+    reconcileB1Rooms();
+    pruneInvalidB1Doors();
+    recomputeUndergroundConnectivity();
+    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
+    else recomputeUndergroundEffects();
+    ug.rev += 1;
+
+    if (soundType === 'remove') {
+      if (ZS.Audio && ZS.Audio.playRemove) ZS.Audio.playRemove();
+    } else if (ZS.Audio && ZS.Audio.playBuild) {
+      ZS.Audio.playBuild();
+    }
+    G.saveGame();
+    G.notifyUi();
+  }
+
+  function findFirstB1TileGadgetCoord(ug, tiles) {
+    for (let i = 0; i < tiles.length; i++) {
+      const [vx, vy] = tiles[i];
+      if (ug.b1StructGrid[vy] && ug.b1StructGrid[vy][vx]) {
+        return tiles[i];
+      }
+    }
+    return null;
+  }
+
   function canZoneB1Rect(x0, y0, x1, y1, role) {
     if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
       return { ok: false, validTiles: [], blockedTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 지정할 수 있습니다.' };
     }
-    if (!getB1RoomDef(role)) {
+    const isCorridorRole = role === 'corridor';
+    if (!isCorridorRole && !getB1RoomDef(role)) {
       return { ok: false, validTiles: [], blockedTiles: [], reason: '알 수 없는 방 역할입니다.' };
     }
     const ug = ensureUndergroundState();
@@ -820,18 +903,20 @@ window.ZS = window.ZS || {};
       };
     }
 
-    // Include same-role adjacent rooms as merge targets
-    for (let i = 0; i < validTiles.length; i++) {
-      const [vx, vy] = validTiles[i];
-      for (let k = 0; k < 4; k++) {
-        const nx = vx + CARDINALS[k][0];
-        const ny = vy + CARDINALS[k][1];
-        if (nx < 1 || ny < 1 || nx >= B1_SIZE - 1 || ny >= B1_SIZE - 1) continue;
-        const nc = ug.grid[ny][nx];
-        if (nc && nc.roomId != null) {
-          const nRoom = ug.rooms[nc.roomId];
-          if (nRoom && nRoom.role === role) {
-            touchedRoomIds.add(nc.roomId);
+    // Include same-role adjacent rooms as merge targets (rooms only)
+    if (!isCorridorRole) {
+      for (let i = 0; i < validTiles.length; i++) {
+        const [vx, vy] = validTiles[i];
+        for (let k = 0; k < 4; k++) {
+          const nx = vx + CARDINALS[k][0];
+          const ny = vy + CARDINALS[k][1];
+          if (nx < 1 || ny < 1 || nx >= B1_SIZE - 1 || ny >= B1_SIZE - 1) continue;
+          const nc = ug.grid[ny][nx];
+          if (nc && nc.roomId != null) {
+            const nRoom = ug.rooms[nc.roomId];
+            if (nRoom && nRoom.role === role) {
+              touchedRoomIds.add(nc.roomId);
+            }
           }
         }
       }
@@ -847,6 +932,15 @@ window.ZS = window.ZS || {};
           reason: '구역 내부의 시설·가젯을 모두 제거한 뒤 수정하세요.'
         };
       }
+    }
+
+    if (findFirstB1TileGadgetCoord(ug, validTiles)) {
+      return {
+        ok: false,
+        validTiles,
+        blockedTiles,
+        reason: '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 구역을 변경하세요.'
+      };
     }
 
     return { ok: true, validTiles, blockedTiles, touchedRoomIds };
@@ -865,13 +959,29 @@ window.ZS = window.ZS || {};
     }
 
     const ug = ensureUndergroundState();
+    let changed = false;
+
+    if (role === 'corridor') {
+      for (let i = 0; i < check.validTiles.length; i++) {
+        const [vx, vy] = check.validTiles[i];
+        const vc = ug.grid[vy][vx];
+        if (!vc.corridor || vc.roomId != null) {
+          vc.roomId = null;
+          vc.corridor = true;
+          changed = true;
+        }
+      }
+      if (!changed) return true;
+      finalizeB1LayoutChange(ug, 'build');
+      return true;
+    }
+
     const sameRoleIds = [];
     for (const rid of check.touchedRoomIds) {
       const r = ug.rooms[rid];
       if (r && r.role === role) sameRoleIds.push(rid);
     }
 
-    let changed = false;
     const targetRoomId = sameRoleIds.length > 0 ? Math.min(...sameRoleIds) : ug.nextRoomId++;
     if (!ug.rooms[targetRoomId]) {
       ug.rooms[targetRoomId] = {
@@ -898,24 +1008,17 @@ window.ZS = window.ZS || {};
 
     for (let i = 0; i < check.validTiles.length; i++) {
       const [vx, vy] = check.validTiles[i];
-      if (ug.grid[vy][vx].roomId !== targetRoomId) {
-        ug.grid[vy][vx].roomId = targetRoomId;
+      const vc = ug.grid[vy][vx];
+      if (vc.roomId !== targetRoomId || vc.corridor) {
+        vc.roomId = targetRoomId;
+        vc.corridor = false;
         changed = true;
       }
     }
 
     if (!changed) return true;
 
-    reconcileB1Rooms();
-    pruneInvalidB1Doors();
-    recomputeUndergroundConnectivity();
-    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
-    else recomputeUndergroundEffects();
-    ug.rev += 1;
-
-    if (ZS.Audio && ZS.Audio.playBuild) ZS.Audio.playBuild();
-    G.saveGame();
-    G.notifyUi();
+    finalizeB1LayoutChange(ug, 'build');
     return true;
   }
 
@@ -935,14 +1038,15 @@ window.ZS = window.ZS || {};
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         const c = ug.grid[y][x];
-        if (!c || !c.excavated || c.roomId == null) continue;
+        if (!c || !c.excavated) continue;
+        if (c.roomId == null && !(c.corridor && !c.permanentCorridor)) continue;
         validTiles.push([x, y]);
-        touchedRoomIds.add(c.roomId);
+        if (c.roomId != null) touchedRoomIds.add(c.roomId);
       }
     }
 
     if (validTiles.length === 0) {
-      return { ok: false, validTiles, reason: '해제할 구역 타일이 없습니다.' };
+      return { ok: false, validTiles, reason: '해제할 구역 또는 전술 복도 타일이 없습니다.' };
     }
 
     for (const rid of touchedRoomIds) {
@@ -954,6 +1058,14 @@ window.ZS = window.ZS || {};
           reason: '구역 내부의 시설·가젯을 모두 제거한 뒤 수정하세요.'
         };
       }
+    }
+
+    if (findFirstB1TileGadgetCoord(ug, validTiles)) {
+      return {
+        ok: false,
+        validTiles,
+        reason: '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 해제하세요.'
+      };
     }
 
     return { ok: true, validTiles, touchedRoomIds };
@@ -974,18 +1086,10 @@ window.ZS = window.ZS || {};
     for (let i = 0; i < check.validTiles.length; i++) {
       const [vx, vy] = check.validTiles[i];
       ug.grid[vy][vx].roomId = null;
+      ug.grid[vy][vx].corridor = false;
     }
 
-    reconcileB1Rooms();
-    pruneInvalidB1Doors();
-    recomputeUndergroundConnectivity();
-    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
-    else recomputeUndergroundEffects();
-    ug.rev += 1;
-
-    if (ZS.Audio && ZS.Audio.playRemove) ZS.Audio.playRemove();
-    G.saveGame();
-    G.notifyUi();
+    finalizeB1LayoutChange(ug, 'remove');
     return true;
   }
 
@@ -1120,7 +1224,7 @@ window.ZS = window.ZS || {};
     let room = null;
     if (def.requiredRole) {
       room = cell.roomId != null ? ug.rooms[cell.roomId] : null;
-      if (cell.permanentCorridor || !room || room.role !== def.requiredRole) {
+      if (isB1CorridorCell(cell) || !room || room.role !== def.requiredRole) {
         const rDef = getB1RoomDef(def.requiredRole);
         const rName = (rDef && rDef.name) || def.requiredRole;
         return {
@@ -1155,7 +1259,7 @@ window.ZS = window.ZS || {};
       ok: true,
       hasVoucher,
       cost,
-      disconnected: !!(def.requiredRole && room && !room.connected)
+      disconnected: def.requiredRole ? !(room && room.connected) : !isUndergroundTileConnected(tx, ty)
     };
   }
 
@@ -1201,7 +1305,7 @@ window.ZS = window.ZS || {};
       const def = DATA.ITEMS[itemId];
       G.banner(
         `[${def ? def.name : itemId}] 배치 완료 (미연결 대기)`,
-        '방폭문으로 승강기 홀과 연결하면 설비 효과가 즉시 가동됩니다.',
+        '승강기에서 전술 복도와 방폭문을 연결하면 설비 효과가 즉시 가동됩니다.',
         'info'
       );
     }
@@ -1242,7 +1346,7 @@ window.ZS = window.ZS || {};
     let destRoom = null;
     if (def.requiredRole) {
       destRoom = destCell.roomId != null ? ug.rooms[destCell.roomId] : null;
-      if (destCell.permanentCorridor || !destRoom || destRoom.role !== def.requiredRole) {
+      if (isB1CorridorCell(destCell) || !destRoom || destRoom.role !== def.requiredRole) {
         const rDef = getB1RoomDef(def.requiredRole);
         const rName = (rDef && rDef.name) || def.requiredRole;
         return {
@@ -1254,7 +1358,7 @@ window.ZS = window.ZS || {};
     }
     return {
       ok: true,
-      disconnected: !!(def.requiredRole && destRoom && !destRoom.connected)
+      disconnected: def.requiredRole ? !(destRoom && destRoom.connected) : !isUndergroundTileConnected(toX, toY)
     };
   }
 
@@ -1414,9 +1518,9 @@ window.ZS = window.ZS || {};
         const cell = ug.grid[y] && ug.grid[y][x];
         const room = cell && cell.roomId != null ? ug.rooms[cell.roomId] : null;
         const roleMatch = def.requiredRole
-          ? !!(cell && cell.excavated && !cell.permanentCorridor && room && room.role === def.requiredRole)
+          ? !!(cell && cell.excavated && !isB1CorridorCell(cell) && room && room.role === def.requiredRole)
           : !!(cell && cell.excavated && !cell.bedrock && !cell.elevator);
-        const connected = def.requiredRole ? !!(roleMatch && room && room.connected) : roleMatch;
+        const connected = def.requiredRole ? !!(roleMatch && room && room.connected) : !!(roleMatch && isUndergroundTileConnected(x, y));
         const blackoutPaused = !!(connected && def.requiresPower && isBlackout);
 
         if (!connected) {
@@ -1429,7 +1533,7 @@ window.ZS = window.ZS || {};
             copyIndex: 0,
             mult: 0,
             adjacentBed: false,
-            statusLabel: roleMatch ? '출입문 미연결 — 대기' : '구역 불일치 — 대기'
+            statusLabel: roleMatch ? '복도·출입문 미연결 — 대기' : '구역 불일치 — 대기'
           };
           continue;
         }
@@ -1616,11 +1720,15 @@ window.ZS = window.ZS || {};
   function getB1Summary() {
     const ug = ensureUndergroundState();
     let excavatedCount = 0;
+    let corridorCount = 0;
     let gadgetCount = 0;
     for (let y = 1; y < B1_SIZE - 1; y++) {
       for (let x = 1; x < B1_SIZE - 1; x++) {
         const c = ug.grid[y][x];
-        if (c && c.excavated && !c.elevator && !c.permanentCorridor) excavatedCount += 1;
+        if (c && c.excavated && !c.elevator && !c.permanentCorridor) {
+          excavatedCount += 1;
+          if (c.corridor) corridorCount += 1;
+        }
         if (ug.b1StructGrid[y] && ug.b1StructGrid[y][x]) gadgetCount += 1;
       }
     }
@@ -1631,6 +1739,7 @@ window.ZS = window.ZS || {};
     }
     return {
       excavatedCount,
+      corridorCount,
       roomCount: rKeys.length,
       connectedRooms,
       doorCount: Object.keys(ug.doors).length,
@@ -1691,6 +1800,9 @@ window.ZS = window.ZS || {};
     getB1Cell,
     getB1EdgeKey,
     getB1RoomDef,
+    isB1CorridorCell,
+    isB1CorridorConnected,
+    getB1PartitionGroup,
     serializeUnderground,
     deserializeUnderground,
     enterUnderground,
@@ -1738,6 +1850,9 @@ window.ZS = window.ZS || {};
       getB1Cell,
       getB1EdgeKey,
       getB1RoomDef,
+      isB1CorridorCell,
+      isB1CorridorConnected,
+      getB1PartitionGroup,
       enterUnderground,
       exitUnderground,
       toggleActiveLayer,
