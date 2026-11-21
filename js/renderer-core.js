@@ -756,6 +756,24 @@ window.ZS = window.ZS || {};
     ctx.restore();
   }
 
+  function parseColorRgb(hex) {
+    let r = 255;
+    let g = 210;
+    let b = 122;
+    if (typeof hex === 'string' && hex[0] === '#') {
+      if (hex.length >= 7) {
+        r = parseInt(hex.slice(1, 3), 16) || 0;
+        g = parseInt(hex.slice(3, 5), 16) || 0;
+        b = parseInt(hex.slice(5, 7), 16) || 0;
+      } else if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16) || 0;
+        g = parseInt(hex[2] + hex[2], 16) || 0;
+        b = parseInt(hex[3] + hex[3], 16) || 0;
+      }
+    }
+    return { r, g, b };
+  }
+
   function getEmissiveGlowStamp(hex) {
     const key = hex || '#FFD27A';
     let stamp = emissiveStampCache.get(key);
@@ -766,20 +784,7 @@ window.ZS = window.ZS || {};
     stamp.height = sz;
     const sctx = stamp.getContext('2d');
     const half = sz * 0.5;
-    let r = 255;
-    let g = 210;
-    let b = 122;
-    if (key[0] === '#') {
-      if (key.length >= 7) {
-        r = parseInt(key.slice(1, 3), 16) || 0;
-        g = parseInt(key.slice(3, 5), 16) || 0;
-        b = parseInt(key.slice(5, 7), 16) || 0;
-      } else if (key.length === 4) {
-        r = parseInt(key[1] + key[1], 16) || 0;
-        g = parseInt(key[2] + key[2], 16) || 0;
-        b = parseInt(key[3] + key[3], 16) || 0;
-      }
-    }
+    const { r, g, b } = parseColorRgb(key);
     const grad = sctx.createRadialGradient(half, half, 1.5, half, half, half);
     grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.28)`);
     grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
@@ -2006,41 +2011,132 @@ window.ZS = window.ZS || {};
 
   function drawFloorTile(ctx, x, y, floorId, zScale) {
     const Iso = ZS.Iso;
+    const isPlain = isPlainDetailFallback();
     if (floorId === 'asphalt') {
-      Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 1.5, {
-        base: '#323842'
-      });
-      // Neutral white-gray lane dash (separated from Gold #FFC94A)
-      const p1 = Iso.gridToScreen(x + 0.35, y + 0.5, 1.8);
-      const p2 = Iso.gridToScreen(x + 0.65, y + 0.5, 1.8);
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = Math.max(1, 1.8 * zScale);
+      drawDetailedIsoBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 1.5, '#2B323C', { bevel: false, gradDrop: 0.05 }, zScale);
+      if (isPlain) return;
+
+      // Subtle tactical curb seam inset along tile perimeter
+      const cCol = Iso.resolveFaceColor('#3D4754', 1.0, false, 0) || '#3D4754';
+      const cA = Iso.gridToScreen(x + 0.05, y + 0.07, 1.55);
+      const cB = Iso.gridToScreen(x + 0.95, y + 0.07, 1.55);
+      const cC = Iso.gridToScreen(x + 0.05, y + 0.93, 1.55);
+      const cD = Iso.gridToScreen(x + 0.95, y + 0.93, 1.55);
+      ctx.strokeStyle = cCol;
+      ctx.lineWidth = Math.max(0.65, 0.85 * zScale);
       ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
+      ctx.moveTo(cA.x, cA.y);
+      ctx.lineTo(cB.x, cB.y);
+      ctx.moveTo(cC.x, cC.y);
+      ctx.lineTo(cD.x, cD.y);
+      ctx.stroke();
+
+      // Crisp double white road dashes (separated from Gold #FFC94A)
+      const dashCol = Iso.resolveFaceColor('#E2E8F0', 1.0, false, 0) || '#E2E8F0';
+      ctx.strokeStyle = dashCol;
+      ctx.lineWidth = Math.max(0.85, 1.25 * zScale);
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      const segs = [[0.18, 0.42], [0.58, 0.82]];
+      const ys = [0.45, 0.55];
+      for (let yi = 0; yi < ys.length; yi++) {
+        for (let si = 0; si < segs.length; si++) {
+          const p1 = Iso.gridToScreen(x + segs[si][0], y + ys[yi], 1.65);
+          const p2 = Iso.gridToScreen(x + segs[si][1], y + ys[yi], 1.65);
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+        }
+      }
       ctx.stroke();
     } else if (floorId === 'steel_deck') {
-      Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2, {
-        base: '#606f80',
-        stroke: 'rgba(210,230,250,0.22)'
-      });
-      const c = Iso.gridToScreen(x + 0.5, y + 0.5, 2.2);
-      ctx.fillStyle = 'rgba(220,235,255,0.3)';
-      ctx.fillRect(c.x - 2 * zScale, c.y - 1 * zScale, 4 * zScale, 2 * zScale);
+      drawDetailedIsoBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2.0, '#546270', { bevel: true, gradDrop: 0.05 }, zScale);
+      if (isPlain) return;
+
+      // Cross quadrant plate seam lines + 1px highlight lip
+      drawIsoFaceSeams(ctx, 'topX', x + 0.02, y + 0.02, 0, 0.96, 0.96, 2.0, 2, 'rgba(14, 20, 28, 0.46)', zScale);
+      drawIsoFaceSeams(ctx, 'topY', x + 0.02, y + 0.02, 0, 0.96, 0.96, 2.0, 2, 'rgba(14, 20, 28, 0.46)', zScale);
+      const hiCol = 'rgba(215, 232, 248, 0.18)';
+      ctx.strokeStyle = hiCol;
+      ctx.lineWidth = Math.max(0.5, 0.65 * zScale);
+      const sX0 = Iso.gridToScreen(x + 0.52, y + 0.05, 2.04);
+      const sX1 = Iso.gridToScreen(x + 0.52, y + 0.95, 2.04);
+      const sY0 = Iso.gridToScreen(x + 0.05, y + 0.52, 2.04);
+      const sY1 = Iso.gridToScreen(x + 0.95, y + 0.52, 2.04);
+      ctx.beginPath();
+      ctx.moveTo(sX0.x, sX0.y);
+      ctx.lineTo(sX1.x, sX1.y);
+      ctx.moveTo(sY0.x, sY0.y);
+      ctx.lineTo(sY1.x, sY1.y);
+      ctx.stroke();
+
+      // 4 corner micro rivets & subtle checker plate diamond ticks per quadrant
+      drawIsoCornerRivets(ctx, x + 0.04, y + 0.04, 2.02, 0.92, 0.92, 0.06, 0.75, '#C4D0DC', zScale);
+      ctx.strokeStyle = 'rgba(220, 236, 252, 0.28)';
+      ctx.lineWidth = Math.max(0.6, 0.78 * zScale);
+      ctx.beginPath();
+      const qCenters = [[0.27, 0.27], [0.73, 0.27], [0.27, 0.73], [0.73, 0.73]];
+      for (let i = 0; i < qCenters.length; i++) {
+        const qx = x + qCenters[i][0];
+        const qy = y + qCenters[i][1];
+        const tA = Iso.gridToScreen(qx - 0.055, qy + 0.025, 2.05);
+        const tB = Iso.gridToScreen(qx + 0.055, qy - 0.025, 2.05);
+        const tC = Iso.gridToScreen(qx - 0.025, qy - 0.055, 2.05);
+        const tD = Iso.gridToScreen(qx + 0.025, qy + 0.055, 2.05);
+        ctx.moveTo(tA.x, tA.y);
+        ctx.lineTo(tB.x, tB.y);
+        ctx.moveTo(tC.x, tC.y);
+        ctx.lineTo(tD.x, tD.y);
+      }
+      ctx.stroke();
     } else if (floorId === 'lounge_tile') {
-      const sub = (x + y) % 2 === 0 ? '#d8d2c5' : '#cbc4b5';
-      Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2, {
-        base: sub,
-        stroke: 'rgba(255,255,255,0.28)'
-      });
+      const sub = (x + y) % 2 === 0 ? '#CBC3B4' : '#BFB6A6';
+      drawDetailedIsoBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 2.0, sub, { bevel: true, gradDrop: 0.04 }, zScale);
+      if (isPlain) return;
+
+      // Refined 3x3 mosaic stone paver grout lines + sunlit subtle center tile glint
+      drawIsoFaceSeams(ctx, 'topX', x + 0.02, y + 0.02, 0, 0.96, 0.96, 2.0, 3, 'rgba(72, 65, 54, 0.30)', zScale);
+      drawIsoFaceSeams(ctx, 'topY', x + 0.02, y + 0.02, 0, 0.96, 0.96, 2.0, 3, 'rgba(72, 65, 54, 0.30)', zScale);
+      const centerPts = [
+        Iso.gridToScreen(x + 0.36, y + 0.36, 2.04),
+        Iso.gridToScreen(x + 0.64, y + 0.36, 2.04),
+        Iso.gridToScreen(x + 0.64, y + 0.64, 2.04),
+        Iso.gridToScreen(x + 0.36, y + 0.64, 2.04)
+      ];
+      drawPolyFace(ctx, centerPts, (x + y) % 2 === 0 ? '#D5CEC0' : '#C9C0B0', 1.0, false, false, zScale);
     } else if (floorId === 'hazard_mat') {
-      Iso.drawVoxelBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 1.5, {
-        base: '#c48650',
-        stroke: '#d69c68'
-      });
-      Iso.drawVoxelBox(ctx, x + 0.12, y + 0.12, 1.5, 0.76, 0.76, 0.7, {
-        base: '#3b424c'
-      });
+      // Base gunmetal frame (1.5px) + diagonal hazard corner trim + central non-slip mat (0.7px)
+      drawDetailedIsoBox(ctx, x + 0.02, y + 0.02, 0, 0.96, 0.96, 1.5, '#3B4552', { bevel: true, gradDrop: 0.05 }, zScale);
+      if (!isPlain) {
+        const hazY = '#DFAC2E';
+        const corners = [
+          [0.035, 0.035], [0.815, 0.035], [0.035, 0.815], [0.815, 0.815]
+        ];
+        for (let i = 0; i < corners.length; i++) {
+          const cx = x + corners[i][0];
+          const cy = y + corners[i][1];
+          const cPts = [
+            Iso.gridToScreen(cx, cy, 1.54),
+            Iso.gridToScreen(cx + 0.15, cy, 1.54),
+            Iso.gridToScreen(cx + 0.15, cy + 0.15, 1.54),
+            Iso.gridToScreen(cx, cy + 0.15, 1.54)
+          ];
+          drawPolyFace(ctx, cPts, hazY, 1.0, false, false, zScale);
+          const diagA = Iso.gridToScreen(cx + 0.02, cy + 0.13, 1.56);
+          const diagB = Iso.gridToScreen(cx + 0.13, cy + 0.02, 1.56);
+          ctx.strokeStyle = Iso.resolveFaceColor('#232B35', 1.0, false, 0) || '#232B35';
+          ctx.lineWidth = Math.max(0.8, 1.2 * zScale);
+          ctx.beginPath();
+          ctx.moveTo(diagA.x, diagA.y);
+          ctx.lineTo(diagB.x, diagB.y);
+          ctx.stroke();
+        }
+      }
+      drawDetailedIsoBox(ctx, x + 0.12, y + 0.12, 1.5, 0.76, 0.76, 0.7, '#2E3540', { bevel: true, gradDrop: 0.05 }, zScale);
+      if (!isPlain) {
+        drawIsoFaceSeams(ctx, 'topX', x + 0.15, y + 0.15, 1.5, 0.70, 0.70, 0.7, 4, 'rgba(12, 16, 22, 0.48)', zScale);
+        drawIsoFaceSeams(ctx, 'topY', x + 0.15, y + 0.15, 1.5, 0.70, 0.70, 0.7, 4, 'rgba(12, 16, 22, 0.42)', zScale);
+        drawIsoCornerRivets(ctx, x + 0.13, y + 0.13, 2.22, 0.74, 0.74, 0.045, 0.65, '#9AA8B6', zScale);
+      }
     }
   }
 
@@ -2333,11 +2429,11 @@ window.ZS = window.ZS || {};
       case 'hesco_wall': return level >= 3 ? 19 : 14;
       case 'blast_wall': return level >= 3 ? 29 : 25;
       case 'razor_pad': return [5.4, 5.8, 6.45][Math.min(3, Math.max(1, level || 1)) - 1];
-      case 'rifle_bunker': return level >= 3 ? 24 : 23;
+      case 'rifle_bunker': return level >= 3 ? 26 : 23;
       case 'shotgun_post': return 23;
-      case 'sniper_tower': return 53;
+      case 'sniper_tower': return 60;
       case 'vulcan_turret': return level >= 2 ? 24 : 21;
-      case 'missile_pod': return 22;
+      case 'missile_pod': return 23;
       case 'emp_coil': return 35;
       case 'solar_array': return [12, 17, 24, 34][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'wind_turbine': return [34, 46, 60, 74][Math.min(4, Math.max(1, level || 1)) - 1];
@@ -2602,50 +2698,69 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawGable(ctx, gx, gy, z, w, d, rise, roofHex, wallHex, zScale) {
+  function drawGable(ctx, gx, gy, z, w, d, rise, roofHex, wallHex, zScale, opts) {
     const Iso = ZS.Iso;
+    const o = opts || {};
     const cy = gy + d * 0.5;
-    drawPolyFace(
-      ctx,
-      [
-        Iso.gridToScreen(gx, gy, z),
-        Iso.gridToScreen(gx + w, gy, z),
-        Iso.gridToScreen(gx + w, cy, z + rise),
-        Iso.gridToScreen(gx, cy, z + rise)
-      ],
-      roofHex,
-      0.95,
-      false,
-      true,
-      zScale
-    );
-    drawPolyFace(
-      ctx,
-      [
-        Iso.gridToScreen(gx, gy + d, z),
-        Iso.gridToScreen(gx + w, gy + d, z),
-        Iso.gridToScreen(gx + w, cy, z + rise),
-        Iso.gridToScreen(gx, cy, z + rise)
-      ],
-      roofHex,
-      0.86,
-      false,
-      true,
-      zScale
-    );
-    drawPolyFace(
-      ctx,
-      [
-        Iso.gridToScreen(gx + w, gy, z),
-        Iso.gridToScreen(gx + w, gy + d, z),
-        Iso.gridToScreen(gx + w, cy, z + rise)
-      ],
-      wallHex,
-      0.66,
-      false,
-      true,
-      zScale
-    );
+    const b0 = Iso.gridToScreen(gx, gy, z);
+    const b1 = Iso.gridToScreen(gx + w, gy, z);
+    const b2 = Iso.gridToScreen(gx + w, gy + d, z);
+    const b3 = Iso.gridToScreen(gx, gy + d, z);
+    const r0 = Iso.gridToScreen(gx, cy, z + rise);
+    const r1 = Iso.gridToScreen(gx + w, cy, z + rise);
+
+    drawPolyFace(ctx, [b0, b1, r1, r0], roofHex, 0.96, false, true, zScale);
+    drawPolyFace(ctx, [b3, b2, r1, r0], roofHex, 0.85, false, true, zScale);
+    drawPolyFace(ctx, [b1, b2, r1], wallHex, 0.66, false, true, zScale);
+
+    if (isPlainDetailFallback()) return;
+
+    // Corrugated roof ribs / panel seam lines on both roof slopes
+    const ribs = o.ribs != null ? o.ribs : 5;
+    if (ribs > 1) {
+      ctx.strokeStyle = o.seamColor || 'rgba(12, 18, 24, 0.24)';
+      ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
+      ctx.beginPath();
+      for (let i = 1; i < ribs; i++) {
+        const sx = gx + (w * i) / ribs;
+        const pR = Iso.gridToScreen(sx, cy, z + rise);
+        const pF = Iso.gridToScreen(sx, gy + d, z);
+        const pB = Iso.gridToScreen(sx, gy, z);
+        ctx.moveTo(pR.x, pR.y);
+        ctx.lineTo(pF.x, pF.y);
+        ctx.moveTo(pR.x, pR.y);
+        ctx.lineTo(pB.x, pB.y);
+      }
+      ctx.stroke();
+    }
+
+    // Eave fascia overhang underside shadow along front eave & right rake
+    ctx.strokeStyle = 'rgba(10, 14, 20, 0.44)';
+    ctx.lineWidth = Math.max(0.85, 1.15 * zScale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(b3.x, b3.y + 0.7 * zScale);
+    ctx.lineTo(b2.x, b2.y + 0.7 * zScale);
+    ctx.lineTo(r1.x, r1.y + 0.6 * zScale);
+    ctx.moveTo(b2.x, b2.y + 0.7 * zScale);
+    ctx.lineTo(b1.x, b1.y + 0.7 * zScale);
+    ctx.stroke();
+
+    // 1px sunlit ridge cap + front-left gable rake highlight
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+    ctx.lineWidth = Math.max(0.7, 0.9 * zScale);
+    ctx.beginPath();
+    ctx.moveTo(r0.x, r0.y);
+    ctx.lineTo(r1.x, r1.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = Math.max(0.6, 0.75 * zScale);
+    ctx.beginPath();
+    ctx.moveTo(b3.x, b3.y);
+    ctx.lineTo(r0.x, r0.y);
+    ctx.stroke();
   }
 
   function drawSlantedSolarPanel(ctx, gx, gy, w, d, zBack, zFront, thick, frameHex, cellHex, gridHex, cols, rows, zScale) {
@@ -2779,8 +2894,9 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawHipRoof(ctx, gx, gy, z, w, d, h, hex, zScale) {
+  function drawHipRoof(ctx, gx, gy, z, w, d, h, hex, zScale, opts) {
     const Iso = ZS.Iso;
+    const o = opts || {};
     const apex = Iso.gridToScreen(gx + w * 0.5, gy + d * 0.5, z + h);
     const b0 = Iso.gridToScreen(gx, gy, z);
     const b1 = Iso.gridToScreen(gx + w, gy, z);
@@ -2790,6 +2906,41 @@ window.ZS = window.ZS || {};
     drawPolyFace(ctx, [b0, b3, apex], hex, 0.97, false, true, zScale);
     drawPolyFace(ctx, [b3, b2, apex], hex, 0.86, false, true, zScale);
     drawPolyFace(ctx, [b2, b1, apex], hex, 0.72, false, true, zScale);
+
+    if (isPlainDetailFallback()) return;
+
+    // Mid-slope horizontal seam & radial ribs on visible front faces
+    const cx = gx + w * 0.5;
+    const cy = gy + d * 0.5;
+    const m3 = Iso.gridToScreen((gx + cx) * 0.5, (gy + d + cy) * 0.5, z + h * 0.5);
+    const m2 = Iso.gridToScreen((gx + w + cx) * 0.5, (gy + d + cy) * 0.5, z + h * 0.5);
+    const m1 = Iso.gridToScreen((gx + w + cx) * 0.5, (gy + cy) * 0.5, z + h * 0.5);
+    ctx.strokeStyle = o.seamColor || 'rgba(12, 16, 22, 0.26)';
+    ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
+    ctx.beginPath();
+    ctx.moveTo(m3.x, m3.y);
+    ctx.lineTo(m2.x, m2.y);
+    ctx.lineTo(m1.x, m1.y);
+    ctx.stroke();
+
+    // Eave overhang shadow lip along front edges
+    ctx.strokeStyle = 'rgba(10, 14, 20, 0.44)';
+    ctx.lineWidth = Math.max(0.85, 1.1 * zScale);
+    ctx.beginPath();
+    ctx.moveTo(b3.x, b3.y + 0.65 * zScale);
+    ctx.lineTo(b2.x, b2.y + 0.65 * zScale);
+    ctx.lineTo(b1.x, b1.y + 0.65 * zScale);
+    ctx.stroke();
+
+    // Sunlit hip ridge highlight on top-left corner ribs
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = Math.max(0.65, 0.8 * zScale);
+    ctx.beginPath();
+    ctx.moveTo(b3.x, b3.y);
+    ctx.lineTo(apex.x, apex.y);
+    ctx.moveTo(b0.x, b0.y);
+    ctx.lineTo(apex.x, apex.y);
+    ctx.stroke();
   }
 
   function drawOctahedron(ctx, cx, cy, zc, r, hh, hex, isEmissive, zScale) {
@@ -2953,19 +3104,103 @@ window.ZS = window.ZS || {};
     }
   }
 
-  function drawSandbagRing(ctx, cx, cy, zBase, r, h, pass, zScale) {
+  function drawSandbagRing(ctx, cx, cy, zBase, r, h, pass, zScale, opts) {
     const Iso = ZS.Iso;
+    const o = opts || {};
+    const sandHex = o.sandHex || '#B7A179';
+    const isPlain = isPlainDetailFallback();
     if (pass === 'back') {
-      drawCyl(ctx, cx, cy, zBase, r, h, '#B5A27A', { n: 16 }, zScale);
-      drawCyl(ctx, cx, cy, zBase + h, r * 0.74, 0.02, '#5E5440', { n: 16, noSides: true, topEdge: false }, zScale);
+      drawCyl(ctx, cx, cy, zBase, r, h, sandHex, { n: 16 }, zScale);
+      if (!isPlain) {
+        // Top sandbag pillow joint ticks around the ring crown + sunlit back-left highlight arc
+        ctx.strokeStyle = Iso.resolveFaceColor('#6D5C3E', 0.72, false, 0) || '#4E422C';
+        ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
+        ctx.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2 + 0.2;
+          const p0 = Iso.gridToScreen(cx + Math.cos(a) * r * 0.73, cy + Math.sin(a) * r * 0.73, zBase + h + 0.05);
+          const p1 = Iso.gridToScreen(cx + Math.cos(a) * r * 0.96, cy + Math.sin(a) * r * 0.96, zBase + h + 0.05);
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 245, 220, 0.34)';
+        ctx.lineWidth = Math.max(0.65, 0.8 * zScale);
+        ctx.beginPath();
+        for (let k = 0; k <= 10; k++) {
+          const a = 0.72 * Math.PI + (k / 10) * 1.10 * Math.PI;
+          const p = Iso.gridToScreen(cx + Math.cos(a) * r * 0.96, cy + Math.sin(a) * r * 0.96, zBase + h + 0.08);
+          if (k === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+      }
+      drawCyl(ctx, cx, cy, zBase + h, r * 0.72, 0.02, '#4E4535', { n: 16, noSides: true, topEdge: false }, zScale);
     } else {
-      drawCyl(ctx, cx, cy, zBase, r, h, '#B5A27A', { n: 16, noTop: true }, zScale);
-      ctx.strokeStyle = Iso.resolveFaceColor('#B5A27A', 0.55, false, 0) || '#635943';
-      ctx.lineWidth = Math.max(0.7, 0.85 * zScale);
+      drawCyl(ctx, cx, cy, zBase, r, h, sandHex, { n: 16, noTop: true }, zScale);
+      if (isPlain) return;
+
+      const seamDark = Iso.resolveFaceColor('#6D5C3E', 0.72, false, 0) || '#4E422C';
+      const seamHi = 'rgba(255, 245, 220, 0.24)';
+      const courseZFracs = [0.27, 0.53, 0.78];
+
+      // 3 horizontal sandbag course seams + pillow highlight lines below each seam
+      for (let ci = 0; ci < courseZFracs.length; ci++) {
+        const zz = zBase + h * courseZFracs[ci];
+        ctx.strokeStyle = seamDark;
+        ctx.lineWidth = Math.max(0.75, 0.92 * zScale);
+        ctx.beginPath();
+        for (let k = 0; k <= 12; k++) {
+          const a = -0.25 * Math.PI + (k / 12) * Math.PI;
+          const p = Iso.gridToScreen(cx + Math.cos(a) * r, cy + Math.sin(a) * r, zz);
+          if (k === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = seamHi;
+        ctx.lineWidth = Math.max(0.5, 0.65 * zScale);
+        ctx.beginPath();
+        for (let k = 0; k <= 12; k++) {
+          const a = -0.25 * Math.PI + (k / 12) * Math.PI;
+          const p = Iso.gridToScreen(cx + Math.cos(a) * r, cy + Math.sin(a) * r, zz);
+          if (k === 0) ctx.moveTo(p.x, p.y + 0.75 * zScale);
+          else ctx.lineTo(p.x, p.y + 0.75 * zScale);
+        }
+        ctx.stroke();
+      }
+
+      // Staggered zigzag vertical sandbag joints across the courses
+      const bands = [0, 0.27, 0.53, 0.78, 1.0];
+      ctx.strokeStyle = seamDark;
+      ctx.lineWidth = Math.max(0.55, 0.68 * zScale);
       ctx.beginPath();
-      for (let k = 0; k <= 12; k++) {
-        const a = -Math.PI * 0.25 + (k / 12) * Math.PI;
-        const p = Iso.gridToScreen(cx + Math.cos(a) * r, cy + Math.sin(a) * r, zBase + h * 0.5);
+      for (let b = 0; b < bands.length - 1; b++) {
+        const z0 = zBase + h * bands[b] + 0.18;
+        const z1 = zBase + h * bands[b + 1] - 0.18;
+        if (z1 <= z0) continue;
+        const stagger = (b % 2) * 0.5;
+        const nJoints = 5;
+        for (let j = 0; j < nJoints; j++) {
+          const frac = (j + 0.35 + stagger * 0.45) / nJoints;
+          if (frac <= 0.06 || frac >= 0.94) continue;
+          const a = -0.25 * Math.PI + frac * Math.PI;
+          const p0 = Iso.gridToScreen(cx + Math.cos(a) * r, cy + Math.sin(a) * r, z0);
+          const p1 = Iso.gridToScreen(cx + Math.cos(a) * r, cy + Math.sin(a) * r, z1);
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+        }
+      }
+      ctx.stroke();
+
+      // Sunlit front-left sandbag top rim highlight arc
+      ctx.strokeStyle = 'rgba(255, 245, 220, 0.28)';
+      ctx.lineWidth = Math.max(0.65, 0.78 * zScale);
+      ctx.beginPath();
+      for (let k = 0; k <= 8; k++) {
+        const a = 0.22 * Math.PI + (k / 8) * 0.53 * Math.PI;
+        const p = Iso.gridToScreen(cx + Math.cos(a) * r, cy + Math.sin(a) * r, zBase + h);
         if (k === 0) ctx.moveTo(p.x, p.y);
         else ctx.lineTo(p.x, p.y);
       }
@@ -3437,15 +3672,17 @@ window.ZS = window.ZS || {};
     ctx.drawImage(glowStamp, center.x - rx, center.y - ry, rx * 2, ry * 2);
     ctx.restore();
 
-    // Soft outer golden isometric aura skirt on ground
+    // Soft outer semantic isometric aura skirt on ground
     const oPad = Math.max(0.01, pad - 0.045);
     const oSpan = 1 - oPad * 2;
     const oN = Iso.gridToScreen(tx + oPad, ty + oPad, 0.12);
     const oE = Iso.gridToScreen(tx + oPad + oSpan, ty + oPad, 0.12);
     const oS = Iso.gridToScreen(tx + oPad + oSpan, ty + oPad + oSpan, 0.12);
     const oW = Iso.gridToScreen(tx + oPad, ty + oPad + oSpan, 0.12);
+    const rgb = parseColorRgb(hex);
+    const auraAlpha = (hex === '#FFC94A' ? 0.16 : 0.18) * Math.min(1.2, inten);
     ctx.save();
-    ctx.fillStyle = hex === '#FFC94A' ? 'rgba(255, 201, 74, 0.16)' : 'rgba(255, 210, 122, 0.14)';
+    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${auraAlpha.toFixed(3)})`;
     ctx.beginPath();
     ctx.moveTo(oN.x, oN.y);
     ctx.lineTo(oE.x, oE.y);
@@ -3476,8 +3713,9 @@ window.ZS = window.ZS || {};
     drawIsoRibbon(ctx, pS, pW, 1.02, hex, true, zScale);
     drawIsoRibbon(ctx, pW, pN, 0.92, hex, true, zScale);
 
-    // 4 Corner beacon nodes on pad
+    // 4 Corner beacon nodes on pad (tinted toward pad semantic color, 0px cyan)
     const cOff = 0.012;
+    const nodeHex = Iso.mixHex(hex, '#FFFFFF', 0.72);
     const cPts = [
       Iso.gridToScreen(rx0 + cOff, ry0 + cOff, zRim + 0.25),
       Iso.gridToScreen(rx0 + rSpan - cOff, ry0 + cOff, zRim + 0.25),
@@ -3485,7 +3723,7 @@ window.ZS = window.ZS || {};
       Iso.gridToScreen(rx0 + cOff, ry0 + rSpan - cOff, zRim + 0.25)
     ];
     for (let i = 0; i < 4; i++) {
-      drawIsoDot(ctx, cPts[i], 1.45, '#FFF3D6', true, zScale);
+      drawIsoDot(ctx, cPts[i], 1.45, nodeHex, true, zScale);
     }
   }
 

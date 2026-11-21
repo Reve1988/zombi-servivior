@@ -131,7 +131,7 @@ ZS.DATA = (function () {
     piezoArc: '#FF8A3D',
     piezoSpark: '#FFD08A',
     trapBlade: '#DCE5EE',
-    habitatRoof: '#D96B38',
+    habitatRoof: '#C86438',
     repairNano: '#4ADE80',
 
     // 7. Diorama Military Material Tokens (#95)
