@@ -71,6 +71,9 @@ window.ZS = window.ZS || {};
     const reqTechId = ZS.Game.getItemRequiredTech ? ZS.Game.getItemRequiredTech(def.id) : null;
     const techDef = reqTechId && ZS.DATA.TECH_TREE ? ZS.DATA.TECH_TREE[reqTechId] : null;
     const techLv = reqTechId && ZS.Game.getTechLevel ? ZS.Game.getTechLevel(reqTechId) : 1;
+    const reqTechCost = reqTechId && ZS.Game.getTechCost
+      ? ZS.Game.getTechCost(reqTechId)
+      : (techDef && techDef.costRp != null ? techDef.costRp : null);
     const techLockedRaw = !!(reqTechId && techLv <= 0);
     const voucherBypass = techLockedRaw && !bossLocked && voucherCount > 0;
     const isLocked = bossLocked || (techLockedRaw && !voucherBypass);
@@ -79,10 +82,43 @@ window.ZS = window.ZS || {};
       voucherCount,
       reqTechId,
       reqTechName: techDef ? techDef.name : reqTechId,
+      reqTechCost,
       techLockedRaw,
       voucherBypass,
       isLocked
     };
+  }
+
+  function formatTechLockChipHtml(reqTechCost) {
+    if (reqTechCost != null) {
+      return `<span class="cost-chip locked-chip">${ozIcon('res-rp', 12, 'icon-rp')}<span>연구 ${reqTechCost}RP</span></span>`;
+    }
+    return `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>연구 필요</span></span>`;
+  }
+
+  function formatTechLockTitleSuffix(lock) {
+    if (!lock.techLockedRaw || lock.voucherBypass) return '';
+    return ` [필요 연구: ${lock.reqTechName || '연구 필요'}${lock.reqTechCost != null ? ` · ${lock.reqTechCost} RP` : ''}]`;
+  }
+
+  function buildItemCostChipsHtml(def, st) {
+    const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
+    const costKeys = ['wood', 'scrap', 'coin'].filter((k) => (c[k] || 0) > 0);
+    const isTriple = costKeys.length >= 3;
+    const iconSz = isTriple ? 11 : 13;
+    const resMap = {
+      wood: { icon: 'res-wood', cls: 'icon-wood' },
+      scrap: { icon: 'res-scrap', cls: 'icon-scrap' },
+      coin: { icon: 'res-coin', cls: 'icon-coin' }
+    };
+    let html = '';
+    costKeys.forEach((k) => {
+      const amt = c[k];
+      const meta = resMap[k];
+      const isShort = st[k] < amt;
+      html += `<span class="cost-chip ${isShort ? 'short' : ''}">${ozIcon(meta.icon, iconSz, isShort ? 'icon-danger' : meta.cls)}<span>${amt}</span></span>`;
+    });
+    return { html, isTriple };
   }
 
   function selectBuildCard(def) {
@@ -296,7 +332,8 @@ window.ZS = window.ZS || {};
     container.innerHTML = '';
 
     items.forEach((def, idx) => {
-      const { bossLocked, voucherCount, reqTechName, techLockedRaw, voucherBypass, isLocked } = getCardLockState(def, st);
+      const lock = getCardLockState(def, st);
+      const { bossLocked, voucherCount, reqTechCost, techLockedRaw, voucherBypass, isLocked } = lock;
 
       const card = document.createElement('div');
       card.className =
@@ -308,7 +345,8 @@ window.ZS = window.ZS || {};
 
       const tag = getCardTagInfo(def);
       const tagPlain = tag.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      card.title = `${def.name}${tagPlain ? ` (${tagPlain})` : ''} — ${def.desc}`;
+      const lockTip = formatTechLockTitleSuffix(lock);
+      card.title = `${def.name}${tagPlain ? ` (${tagPlain})` : ''} — ${def.desc}${lockTip}`;
 
       let badgeHtml = '';
       if (bossLocked) {
@@ -331,21 +369,11 @@ window.ZS = window.ZS || {};
       } else if (voucherCount > 0) {
         costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}</span></span>`;
       } else if (techLockedRaw) {
-        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>${escapeHtml(reqTechName || '연구 필요')}</span></span>`;
+        costHtml = formatTechLockChipHtml(reqTechCost);
       } else {
-        const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
-        const costKeys = ['wood', 'scrap', 'coin'].filter((k) => (c[k] || 0) > 0);
-        isTriple = costKeys.length >= 3;
-        const iconSz = isTriple ? 11 : 13;
-        if (c.wood) {
-          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', iconSz, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
-        }
-        if (c.scrap) {
-          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">${ozIcon('res-scrap', iconSz, st.scrap < c.scrap ? 'icon-danger' : 'icon-scrap')}<span>${c.scrap}</span></span>`;
-        }
-        if (c.coin) {
-          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">${ozIcon('res-coin', iconSz, st.coin < c.coin ? 'icon-danger' : 'icon-coin')}<span>${c.coin}</span></span>`;
-        }
+        const costBuilt = buildItemCostChipsHtml(def, st);
+        costHtml = costBuilt.html;
+        isTriple = costBuilt.isTriple;
       }
 
       const hotkeyHtml = idx < 9 ? `<span class="card-hotkey">${idx + 1}</span>` : '';
@@ -430,7 +458,8 @@ window.ZS = window.ZS || {};
     container.innerHTML = '';
 
     items.forEach((def, idx) => {
-      const { bossLocked, voucherCount, reqTechName, techLockedRaw, voucherBypass, isLocked } = getCardLockState(def, st);
+      const lock = getCardLockState(def, st);
+      const { bossLocked, voucherCount, reqTechCost, techLockedRaw, voucherBypass, isLocked } = lock;
 
       const card = document.createElement('div');
       card.className =
@@ -441,7 +470,8 @@ window.ZS = window.ZS || {};
 
       const tag = getCardTagInfo(def);
       const tagPlain = tag.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      card.title = `${def.name}${tagPlain ? ` (${tagPlain})` : ''} — ${def.desc}`;
+      const lockTip = formatTechLockTitleSuffix(lock);
+      card.title = `${def.name}${tagPlain ? ` (${tagPlain})` : ''} — ${def.desc}${lockTip}`;
 
       let badgeHtml = '';
       const floorCapped = def.layer === 'floor' && floorCappedAll;
@@ -456,24 +486,18 @@ window.ZS = window.ZS || {};
       }
 
       let costHtml = '';
+      let isTriple = false;
       if (bossLocked) {
         costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스 처치</span></span>`;
       } else if (voucherCount > 0) {
         const hasR1 = !!(st.divisionRank1Vouchers && (st.divisionRank1Vouchers[def.id] || 0) > 0);
         costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}${hasR1 ? ' ★' : ''}</span></span>`;
       } else if (techLockedRaw) {
-        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>${escapeHtml(reqTechName || '연구 필요')}</span></span>`;
+        costHtml = formatTechLockChipHtml(reqTechCost);
       } else {
-        const c = ZS.Game.getEffectiveBuildCost ? ZS.Game.getEffectiveBuildCost(def.id) : (def.cost || {});
-        if (c.wood) {
-          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', 13, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
-        }
-        if (c.scrap) {
-          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">${ozIcon('res-scrap', 13, st.scrap < c.scrap ? 'icon-danger' : 'icon-scrap')}<span>${c.scrap}</span></span>`;
-        }
-        if (c.coin) {
-          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">${ozIcon('res-coin', 13, st.coin < c.coin ? 'icon-danger' : 'icon-coin')}<span>${c.coin}</span></span>`;
-        }
+        const costBuilt = buildItemCostChipsHtml(def, st);
+        costHtml = costBuilt.html;
+        isTriple = costBuilt.isTriple;
       }
 
       const hotkeyHtml = idx < 9 ? `<span class="card-hotkey">${idx + 1}</span>` : '';
@@ -490,7 +514,7 @@ window.ZS = window.ZS || {};
         </div>
         <div class="card-meta">
           <span class="card-title">${escapeHtml(def.name)}</span>
-          <div class="card-costs">${costHtml}</div>
+          <div class="card-costs${isTriple ? ' triple-costs' : ''}">${costHtml}</div>
         </div>
       `;
 

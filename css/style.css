@@ -810,6 +810,60 @@ button, input, select {
   color: #9FB3C7;
 }
 
+@media (max-width: 1580px) {
+  #hud-top-left {
+    left: 12px;
+    min-width: 248px;
+    max-width: 274px;
+    padding: 9px 11px;
+  }
+
+  #hud-top-right {
+    right: 12px;
+  }
+
+  .tr-controls-row {
+    gap: 6px;
+  }
+
+  .wind-layer-btn {
+    height: 40px;
+    padding: 0 9px;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .b1-ap-chip {
+    padding: 2px 5px;
+    font-size: 12px;
+  }
+
+  .settings-trigger-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  #hud-secondary {
+    left: calc(50% - 54px);
+    padding: 4px 8px;
+  }
+
+  #hud-secondary .res-cell {
+    padding: 2px 8px;
+    gap: 5px;
+  }
+
+  #hud-secondary .res-val {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 1440px) {
+  #hud-secondary .pop-cap {
+    display: none;
+  }
+}
+
 .settings-wrap {
   position: relative;
   z-index: 48;
@@ -1000,7 +1054,7 @@ button, input, select {
 /* ================= COLLAPSIBLE DEBUG TOOLBAR (?debug=1) ================= */
 .debug-toolbar {
   position: fixed;
-  top: 156px;
+  top: 196px;
   left: 16px;
   z-index: 26;
   display: flex;
@@ -1977,7 +2031,8 @@ button, input, select {
   min-height: 154px;
   max-height: 154px;
   flex-shrink: 0;
-  padding: 6px 6px 7px;
+  padding: 6px 4px 7px;
+  overflow: hidden;
   cursor: pointer;
   transition: transform 0.13s ease, opacity 0.13s ease;
   display: flex;
@@ -2122,6 +2177,8 @@ button, input, select {
 
 .card-meta {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2129,12 +2186,15 @@ button, input, select {
 }
 
 .card-title {
+  width: 100%;
+  max-width: 100%;
   font-size: 12px;
   font-weight: 700;
   color: #F1F5F9;
   line-height: 1.18;
   text-align: center;
   word-break: keep-all;
+  overflow-wrap: anywhere;
   min-height: 28px;
   display: flex;
   align-items: center;
@@ -2142,6 +2202,9 @@ button, input, select {
 }
 
 .card-costs {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   flex-wrap: nowrap;
   justify-content: center;
@@ -2161,6 +2224,8 @@ button, input, select {
 }
 
 .cost-chip {
+  box-sizing: border-box;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -2173,6 +2238,11 @@ button, input, select {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.cost-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cost-chip.short {
@@ -4334,6 +4404,7 @@ body.main-menu-active #game-canvas {
 }
 
 .tech-branch-col {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -4443,11 +4514,13 @@ body.main-menu-active #game-canvas {
 }
 
 .tech-node-title {
+  min-width: 0;
   font-size: 13px;
   font-weight: 800;
   color: #F8FAFC;
   line-height: 1.3;
   word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .tech-lv-chip {
