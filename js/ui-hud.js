@@ -11,12 +11,15 @@ window.ZS = window.ZS || {};
     activeSkill: null, // null | 'airstrike'
     dockCollapsed: false,
     hudResCompact: false,
+    mainMenuOpen: true,
+    menuOptionsOpen: false,
     lastPhase: null,
     pointerClient: { x: 0, y: 0, inside: false }
   };
 
   let bannerTimer = null;
   let lastCozyPulseSeq = 0;
+  let lastWaveNumStr = '';
   let lastPhaseIconKey = '';
   let lastPowerIconKey = '';
   let lastCozySig = '';
@@ -70,13 +73,15 @@ window.ZS = window.ZS || {};
       const phaseIconEl = document.getElementById('hud-phase-icon');
       if (phaseIconEl && lastPhaseIconKey !== nextPhaseKey) {
         lastPhaseIconKey = nextPhaseKey;
-        phaseIconEl.className = isNightBlackout ? 'icon-slot icon-danger' : 'icon-slot';
-        phaseIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'phase-night', 20);
+        phaseIconEl.className = isNightBlackout ? 'icon-slot icon-danger' : 'icon-slot phase-night-icon';
+        phaseIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'phase-night', 26);
       }
       const phaseTextEl = document.getElementById('hud-phase-text');
       if (phaseTextEl) {
-        const nextTxt = isNightBlackout ? '블랙아웃 교전 중!' : '야간 방어 교전 중';
+        const nextTxt = isNightBlackout ? '블랙아웃!' : '야간 방어';
+        const nextCls = isNightBlackout ? 'wave-sub phase-alert' : 'wave-sub phase-night';
         if (phaseTextEl.textContent !== nextTxt) phaseTextEl.textContent = nextTxt;
+        if (phaseTextEl.className !== nextCls) phaseTextEl.className = nextCls;
       }
     }
 
@@ -85,14 +90,19 @@ window.ZS = window.ZS || {};
     const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
     const pwrBar = document.getElementById('res-power-bar');
     pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
-    pwrBar.style.background = pwrPct > 35 ? P.power : pwrPct > 5 ? P.healthMid : P.danger;
+    pwrBar.style.background =
+      pwrPct > 35
+        ? 'linear-gradient(180deg, #8FF6FF 0%, #5EF2FF 50%, #24B9CB 100%)'
+        : pwrPct > 5
+        ? P.healthMid
+        : P.danger;
 
     const nextPwrKey = isNightBlackout ? 'pwr-off' : 'pwr-on';
     const pwrIconEl = document.getElementById('res-power-icon');
     if (pwrIconEl && lastPowerIconKey !== nextPwrKey) {
       lastPowerIconKey = nextPwrKey;
       pwrIconEl.className = isNightBlackout ? 'res-icon icon-danger' : 'res-icon icon-power';
-      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', isNightBlackout ? 16 : 18);
+      pwrIconEl.innerHTML = ozIcon(isNightBlackout ? 'state-power-off' : 'res-power', 15);
     }
 
     document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
@@ -104,24 +114,36 @@ window.ZS = window.ZS || {};
     const P = ZS.DATA.PALETTE;
     const hq = st.structGrid[ZS.DATA.HQ_POS.y] && st.structGrid[ZS.DATA.HQ_POS.y][ZS.DATA.HQ_POS.x];
     const phaseIconEl = document.getElementById('hud-phase-icon');
+    const phaseTextEl = document.getElementById('hud-phase-text');
 
-    document.getElementById('hud-wave-num').textContent = `WAVE ${st.wave}`;
+    const waveStr = String(st.wave).padStart(2, '0');
+    if (waveStr !== lastWaveNumStr) {
+      lastWaveNumStr = waveStr;
+      document.getElementById('hud-wave-num').innerHTML = `WAVE <span class="wave-title-num">${waveStr}</span>`;
+    }
+
     if (st.phase === 'day') {
       if (lastPhaseIconKey !== 'day') {
         lastPhaseIconKey = 'day';
         phaseIconEl.className = 'icon-slot icon-coin';
-        phaseIconEl.innerHTML = ozIcon('phase-day', 20);
+        phaseIconEl.innerHTML = ozIcon('phase-day', 26);
       }
-      document.getElementById('hud-phase-text').textContent = '주간 정비 · 건설 페이즈';
+      if (phaseTextEl) {
+        phaseTextEl.textContent = '주간 정비';
+        phaseTextEl.className = 'wave-sub phase-day';
+      }
     } else if (st.phase === 'night') {
       syncNightPhaseAndPowerHud(st);
     } else {
       if (lastPhaseIconKey !== 'gameover') {
         lastPhaseIconKey = 'gameover';
         phaseIconEl.className = 'icon-slot icon-danger';
-        phaseIconEl.innerHTML = ozIcon('state-alert', 20);
+        phaseIconEl.innerHTML = ozIcon('state-alert', 26);
       }
-      document.getElementById('hud-phase-text').textContent = '작전 실패';
+      if (phaseTextEl) {
+        phaseTextEl.textContent = '작전 실패';
+        phaseTextEl.className = 'wave-sub phase-alert';
+      }
     }
 
     const hqInfo = ZS.Game.getHqLevelInfo(st.hqLevel);
@@ -249,18 +271,21 @@ window.ZS = window.ZS || {};
     }
     U.syncDockAndHudState();
 
-    // Toggle Day vs Night right-side action stacks
+    // Toggle Day vs Night action controls & top-right enemy counter
     const isDay = st.phase === 'day';
     document.getElementById('day-actions').classList.toggle('hidden', !isDay);
     document.getElementById('night-actions').classList.toggle('hidden', st.phase !== 'night');
-    document.getElementById('build-dock').style.opacity = isDay ? '1' : uiState.dockCollapsed ? '0.94' : '0.88';
+    document.getElementById('night-top-status')?.classList.toggle('hidden', st.phase !== 'night');
+    document.getElementById('build-dock').style.opacity = isDay ? '1' : uiState.dockCollapsed ? '0.96' : '0.90';
 
     renderReconCard(st);
 
     if (isDay) {
+      const startBtn = document.getElementById('btn-start-wave');
+      if (startBtn) startBtn.classList.toggle('boss-wave', st.wave % 5 === 0);
       document.getElementById('cta-wave-sub').innerHTML =
         st.wave % 5 === 0
-          ? `${ozIcon('state-alert', 14, 'icon-danger')}<span>WAVE ${st.wave} 보스전 개시</span>`
+          ? `${ozIcon('state-alert', 13, 'icon-danger')}<span>WAVE ${st.wave} 보스전 개시</span>`
           : `<span>WAVE ${st.wave} 야간 방어 돌입</span>`;
 
       const rep = ZS.Game.getRepairAllInfo();
@@ -269,11 +294,22 @@ window.ZS = window.ZS || {};
       repBtn.disabled = !rep.needed;
       if (rep.needed) {
         const repParts = [];
-        if (rep.woodCost > 0) repParts.push(`${ozIcon('res-wood', 13, 'icon-wood')}<span>${rep.woodCost}</span>`);
-        if (rep.scrapCost > 0) repParts.push(`${ozIcon('res-scrap', 13, 'icon-scrap')}<span>${rep.scrapCost}</span>`);
-        repLbl.innerHTML = `<span>비용:</span>${repParts.join('<span>·</span>')}`;
+        const titleParts = [];
+        if (rep.woodCost > 0) {
+          repParts.push(`${ozIcon('res-wood', 13, 'icon-wood')}<span>${rep.woodCost}</span>`);
+          titleParts.push(`목재 ${rep.woodCost}`);
+        }
+        if (rep.scrapCost > 0) {
+          repParts.push(`${ozIcon('res-scrap', 13, 'icon-scrap')}<span>${rep.scrapCost}</span>`);
+          titleParts.push(`고철 ${rep.scrapCost}`);
+        }
+        repLbl.innerHTML = repParts.join('');
+        repLbl.classList.remove('hidden');
+        repBtn.title = `기지 일괄 정비 (${titleParts.join(' · ')})`;
       } else {
         repLbl.textContent = '모든 시설 내구도 100%';
+        repLbl.classList.add('hidden');
+        repBtn.title = '기지 일괄 정비 — 모든 시설 내구도 100%';
       }
     } else if (st.phase === 'night') {
       updateCombatHud();
@@ -282,6 +318,8 @@ window.ZS = window.ZS || {};
     U.renderItemCards();
     if (uiState.inspectedTile && uiState.mode === 'inspect') {
       U.inspectTileAt(uiState.inspectedTile.tx, uiState.inspectedTile.ty);
+    } else if (U.syncDetailBarVisibility) {
+      U.syncDetailBarVisibility();
     }
     if (!document.getElementById('trader-modal').classList.contains('hidden')) {
       U.renderTraderModal();
@@ -313,12 +351,29 @@ window.ZS = window.ZS || {};
     el.classList.toggle('boss', isBossWave);
 
     const SIDE_NAMES = ['북동', '남동', '남서', '북서'];
+    // Isometric diamond (center 60,42; N=60,10; E=108,42; S=60,74; W=12,42)
     const SIDE_EDGES = {
-      0: [32, 3, 61, 22, 46.5, 12.5],
-      1: [61, 22, 32, 41, 46.5, 31.5],
-      2: [32, 41, 3, 22, 17.5, 31.5],
-      3: [3, 22, 32, 3, 17.5, 12.5]
+      0: [60, 10, 108, 42, 84, 26, -0.832, 0.555],
+      1: [108, 42, 60, 74, 84, 58, -0.832, -0.555],
+      2: [60, 74, 12, 42, 36, 58, 0.832, -0.555],
+      3: [12, 42, 60, 10, 36, 26, 0.832, 0.555]
     };
+
+    // 4x4 internal isometric radar grid lines
+    const gridLines = [1, 2, 3]
+      .map((step) => {
+        const u = step / 4;
+        const ax = 60 - 48 * u;
+        const ay = 10 + 32 * u;
+        const bx = 108 - 48 * u;
+        const by = 42 + 32 * u;
+        const cx = 60 + 48 * u;
+        const cy = 10 + 32 * u;
+        const dx = 12 + 48 * u;
+        const dy = 42 + 32 * u;
+        return `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="rgba(130, 195, 215, 0.16)" stroke-width="0.9"/><line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${dx.toFixed(1)}" y2="${dy.toFixed(1)}" stroke="rgba(130, 195, 215, 0.16)" stroke-width="0.9"/>`;
+      })
+      .join('');
 
     const kinds = intel.sideKinds || ['none', 'none', 'none', 'none'];
     const linesSvg = [0, 1, 2, 3]
@@ -327,21 +382,45 @@ window.ZS = window.ZS || {};
         const e = SIDE_EDGES[sd];
         const strokeAttr =
           k === 'boss'
-            ? 'stroke="#E040FB" stroke-width="4"'
+            ? 'stroke="#E040FB" stroke-width="3.6"'
             : k === 'main'
-            ? 'stroke="#FF4D6D" stroke-width="4"'
+            ? 'stroke="#FF4D6D" stroke-width="3.4"'
             : k === 'sub'
             ? 'stroke="#FF8FA3" stroke-width="2.2"'
             : k === 'min'
-            ? 'stroke="#FF8FA3" stroke-width="1.6" stroke-dasharray="3 3"'
-            : 'stroke="#46525F" stroke-width="1.6"';
+            ? 'stroke="#FF8FA3" stroke-width="1.5" stroke-dasharray="3 3"'
+            : 'stroke="#3A4D5E" stroke-width="1.4"';
         return `<line x1="${e[0]}" y1="${e[1]}" x2="${e[2]}" y2="${e[3]}" ${strokeAttr} stroke-linecap="round"/>`;
+      })
+      .join('');
+
+    // Inward directional chevron arrows on threatened edges
+    const arrowsSvg = [0, 1, 2, 3]
+      .map((sd) => {
+        const k = kinds[sd];
+        if (!k || k === 'none' || k === 'min') return '';
+        const e = SIDE_EDGES[sd];
+        const mx = e[4];
+        const my = e[5];
+        const ix = e[6];
+        const iy = e[7];
+        const tx = -iy;
+        const ty = ix;
+        const col = k === 'boss' ? '#E040FB' : k === 'main' ? '#FF4D6D' : '#FF8FA3';
+        const reach = k === 'sub' ? 8.5 : 11;
+        const back = k === 'sub' ? -2 : -3;
+        const wing = k === 'sub' ? 4.8 : 6.2;
+        const pTip = `${(mx + ix * reach).toFixed(1)},${(my + iy * reach).toFixed(1)}`;
+        const pW1 = `${(mx + ix * back + tx * wing).toFixed(1)},${(my + iy * back + ty * wing).toFixed(1)}`;
+        const pNotch = `${(mx + ix * (back + 3.2)).toFixed(1)},${(my + iy * (back + 3.2)).toFixed(1)}`;
+        const pW2 = `${(mx + ix * back - tx * wing).toFixed(1)},${(my + iy * back - ty * wing).toFixed(1)}`;
+        return `<polygon points="${pTip} ${pW1} ${pNotch} ${pW2}" fill="${col}" stroke="#0E1722" stroke-width="0.9" stroke-linejoin="round"/>`;
       })
       .join('');
 
     const bossDot =
       intel.bossSide != null
-        ? `<circle cx="${SIDE_EDGES[intel.bossSide][4]}" cy="${SIDE_EDGES[intel.bossSide][5]}" r="4" fill="#E040FB"/>`
+        ? `<circle cx="${SIDE_EDGES[intel.bossSide][4]}" cy="${SIDE_EDGES[intel.bossSide][5]}" r="6.2" fill="rgba(224, 64, 251, 0.28)"/><circle cx="${SIDE_EDGES[intel.bossSide][4]}" cy="${SIDE_EDGES[intel.bossSide][5]}" r="3.4" fill="#E040FB" stroke="#FFFFFF" stroke-width="0.9"/>`
         : '';
 
     const mainSides = [];
@@ -355,16 +434,16 @@ window.ZS = window.ZS || {};
     let patDesc = '';
     if (intel.pattern === 'single') {
       patTitle = `${mainSides[0] || '북동'} 정면 침공`;
-      patDesc = '1개 방위 100%<br>전면 집중 돌파';
+      patDesc = '1개 방위 100% 집중 돌파';
     } else if (intel.pattern === 'flank') {
       patTitle = `${mainSides[0] || ''}·${subSides[0] || ''} 측면`;
-      patDesc = `주력 ${mainSides[0] || ''} 75%<br>견제 ${subSides[0] || ''} 25%`;
+      patDesc = `주력 ${mainSides[0] || ''} 75% · 견제 ${subSides[0] || ''} 25%`;
     } else if (intel.pattern === 'dual') {
       patTitle = `${mainSides.join('·')} 협공`;
-      patDesc = '주공 2면 각 45%<br>기습 2면 합 10%';
+      patDesc = '주공 2면 각 45% · 기습 10%';
     } else {
       patTitle = '전방위 포위';
-      patDesc = `주공 ${mainSides.join('·')} 35%<br>보조 ${subSides.join('·')} 15%`;
+      patDesc = `주공 ${mainSides.join('·')} 35% · 보조 15%`;
     }
 
     const ENEMY_ORDER = [
@@ -385,7 +464,7 @@ window.ZS = window.ZS || {};
         id === 'shocker' ||
         (id === 'runner' && intel.wave === 2) ||
         (id === 'brute' && intel.wave === 3);
-      return `<span class="recon-chip${isNew ? ' new' : ''}" title="${escapeHtml(label)} ${cnt}기">${ozIcon(`en-${id}`, 14)}<span>${cnt}</span></span>`;
+      return `<span class="recon-chip${isNew ? ' new' : ''}" title="${escapeHtml(label)} ${cnt}기">${ozIcon(`en-${id}`, 13)}<span>${cnt}</span></span>`;
     }).join('');
 
     const bossRowHtml =
@@ -393,30 +472,35 @@ window.ZS = window.ZS || {};
         ? `<div class="recon-boss-row">${ozIcon('en-boss', 15)}<span>알파 타이탄${counts.boss > 1 ? ` ×${counts.boss}` : ''} · ${SIDE_NAMES[intel.bossSide]}</span></div>`
         : '';
 
+    const waveBadge = String(intel.wave).padStart(2, '0');
     el.innerHTML = `
       <div class="recon-head">
-        <span class="recon-title">${ozIcon('recon-compass', 15)}<span>정찰 브리핑 · WAVE ${intel.wave}</span></span>
+        <span class="recon-title">${ozIcon('recon-compass', 15)}<span>정찰 레이더 · W${waveBadge}</span></span>
         <button id="btn-toggle-recon-paths" type="button" class="recon-toggle${showPaths ? ' on' : ''}" title="${showPaths ? '예상 경로선 숨기기' : '예상 경로선 표시'}">${ozIcon('recon-route', 15)}</button>
       </div>
-      <div class="recon-body">
-        <svg class="recon-compass" viewBox="0 0 64 44" aria-hidden="true">
-          <polygon points="32,3 61,22 32,41 3,22" fill="rgba(78, 102, 83, 0.35)"/>
+      <div class="recon-radar-wrap">
+        <svg class="recon-compass" viewBox="0 0 120 84" aria-hidden="true">
+          <polygon points="60,10 108,42 60,74 12,42" fill="rgba(22, 48, 56, 0.90)"/>
+          ${gridLines}
           ${linesSvg}
-          <circle cx="32" cy="22" r="3" fill="#FFD27A"/>
+          <circle cx="60" cy="42" r="7.5" fill="rgba(255, 210, 122, 0.22)"/>
+          <circle cx="60" cy="42" r="3.4" fill="#FFD27A" stroke="#0B1119" stroke-width="0.8"/>
+          ${arrowsSvg}
           ${bossDot}
         </svg>
-        <div class="recon-pat">${escapeHtml(patTitle)}<small>${patDesc}</small></div>
       </div>
+      <div class="recon-pat">${escapeHtml(patTitle)}<small>${escapeHtml(patDesc)}</small></div>
       <div class="recon-chips">${chipsHtml}</div>
       ${bossRowHtml}
       <div class="recon-foot">
-        <span>총 <strong>${intel.totalCount || 0}기</strong></span>
-        <span>${showPaths ? `경로 ${pathLen} · 공성 ${breachLen}` : '경로선 숨김'}</span>
+        <span class="recon-total-badge">${ozIcon('hud-enemy', 15, 'icon-danger')}<strong>×${intel.totalCount || 0}</strong></span>
+        <span class="recon-route-stat">${showPaths ? `경로 ${pathLen} · 공성 ${breachLen}` : '경로선 숨김'}</span>
       </div>
     `;
   }
 
   function showWaveBanner(title, sub, tone) {
+    if (uiState.mainMenuOpen) return;
     const el = document.getElementById('wave-banner');
     el.className = `wave-banner ${tone || 'info'}`;
     document.getElementById('banner-title').textContent = title;

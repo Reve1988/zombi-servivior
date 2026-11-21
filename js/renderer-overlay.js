@@ -627,11 +627,48 @@ window.ZS = window.ZS || {};
       }
     }
 
+    if (R.hoverOccludedByFront && !uiState.mainMenuOpen && uiState.pointerClient && uiState.pointerClient.inside && uiState.hoverTile) {
+      const { tx, ty } = uiState.hoverTile;
+      if (tx >= 0 && ty >= 0 && tx < N && ty < N) {
+        let rimStroke = 'rgba(255, 255, 255, 0.78)';
+        let rimFill = 'rgba(255, 255, 255, 0.08)';
+        if (state.phase === 'day') {
+          if (uiState.mode === 'remove') {
+            rimStroke = P.danger;
+            rimFill = P.dangerFill;
+          } else if (uiState.mode === 'build' && uiState.selectedItemId && ZS.Game.canPlaceItem) {
+            const check = ZS.Game.canPlaceItem(uiState.selectedItemId, tx, ty);
+            rimStroke = check && check.ok ? P.health : P.danger;
+            rimFill = check && check.ok ? P.healthFill : P.dangerFill;
+          } else if (uiState.mode === 'move' && uiState.movingSource) {
+            const srcCell = state.structGrid[uiState.movingSource.ty] && state.structGrid[uiState.movingSource.ty][uiState.movingSource.tx];
+            const srcUnit = srcCell && (srcCell.mounted || srcCell);
+            const srcDef = srcUnit ? DATA.ITEMS[srcUnit.id] : null;
+            const dest = state.structGrid[ty] && state.structGrid[ty][tx];
+            const inBounds = tx > 0 && ty > 0 && tx < N - 1 && ty < N - 1;
+            const canMountDest = !!(dest && srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && !dest.mounted);
+            const canDrop = inBounds && (!dest || canMountDest);
+            rimStroke = canDrop ? P.health : P.danger;
+            rimFill = canDrop ? P.healthFill : P.dangerFill;
+          }
+        }
+        ctx.save();
+        ctx.setLineDash([4 * zScale, 3 * zScale]);
+        Iso.drawTilePoly(ctx, tx, ty, 2, rimFill, rimStroke, 1.6 * zScale);
+        ctx.restore();
+      }
+    }
+
     // 2. Depth-sorted Structure HP Bars, Power-OFF Warnings, and Zombie HP Bars
     const nightEyes = [];
     for (let i = 0; i < renderList.length; i++) {
       const item = renderList[i];
       if (item.kind === 'struct') {
+        const structOccAlpha = item.occAlpha != null ? item.occAlpha : 1.0;
+        if (structOccAlpha < 0.995) {
+          ctx.save();
+          ctx.globalAlpha *= structOccAlpha;
+        }
         const st = item.st;
         const tx = item.tx;
         const ty = item.ty;
@@ -742,6 +779,7 @@ window.ZS = window.ZS || {};
             drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, Math.min(1.65, zScale)), zScale, P);
           }
         }
+        if (structOccAlpha < 0.995) ctx.restore();
       } else if (item.kind === 'zombie') {
         const z = item.z;
         const zDef = DATA.ZOMBIES[z.type] || DATA.ZOMBIES.walker;
@@ -946,7 +984,7 @@ window.ZS = window.ZS || {};
     const x0 = c.x - ((lv - 1) * gap) * 0.5 + (hasRank ? 7 * scale : 0);
 
     ctx.save();
-    ctx.globalAlpha = isNight ? 0.70 : 1.0;
+    ctx.globalAlpha *= isNight ? 0.70 : 1.0;
     for (let i = 0; i < lv; i++) {
       let r = rBase;
       if (animTimer > 0 && i === lv - 1) {
@@ -1097,10 +1135,10 @@ window.ZS = window.ZS || {};
       R.emissiveList = null;
 
       if (def.layer === 'floor') {
-        const zoom = (sz / 82) * 1.02;
+        const zoom = (sz * 0.88) / 68;
         Iso.cam.zoom = zoom;
         Iso.cam.x = 0;
-        Iso.cam.y = Iso.TILE_H * 0.5 - 1.5;
+        Iso.cam.y = 17.5;
 
         const t = [Iso.gridToScreen(0, 0, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(0, 1, 0)];
         const l = [Iso.gridToScreen(0, 1, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 1, -4.5), Iso.gridToScreen(0, 1, -4.5)];
@@ -1111,17 +1149,19 @@ window.ZS = window.ZS || {};
         R.drawFloorTile(tctx, 0, 0, resolvedId, zoom);
       } else {
         const topZ = resolvedId === 'command_hq' ? 36 : R.getStructVisualTopZ(resolvedId, tier);
-        const extraTop = resolvedId === 'wind_turbine' && tier >= 3 ? 14 : 3;
-        const spanY = Math.max(44, topZ + extraTop + 22);
-        const zoom = Math.min((sz * 0.88) / 72, (sz * 0.88) / spanY);
+        const extraTop = resolvedId === 'wind_turbine' ? (tier >= 3 ? 18 : 6) : 4;
+        const wyTop = Math.min(-2, 16 - (topZ + extraTop));
+        const wyBot = 38.5;
+        const spanY = Math.max(40, wyBot - wyTop);
+        const zoom = Math.min((sz * 0.87) / 72, (sz * 0.87) / spanY);
         Iso.cam.zoom = zoom;
         Iso.cam.x = 0;
-        Iso.cam.y = Iso.TILE_H * 0.5 - (topZ + extraTop - 16) * 0.5;
+        Iso.cam.y = (wyTop + wyBot) * 0.5;
 
         // Miniature diorama turf plinth under structure
         const t = [Iso.gridToScreen(0, 0, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(0, 1, 0)];
-        const l = [Iso.gridToScreen(0, 1, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 1, -4), Iso.gridToScreen(0, 1, -4)];
-        const r = [Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 0, -4), Iso.gridToScreen(1, 1, -4)];
+        const l = [Iso.gridToScreen(0, 1, 0), Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 1, -4.5), Iso.gridToScreen(0, 1, -4.5)];
+        const r = [Iso.gridToScreen(1, 1, 0), Iso.gridToScreen(1, 0, 0), Iso.gridToScreen(1, 0, -4.5), Iso.gridToScreen(1, 1, -4.5)];
         R.drawPolyFace(tctx, l, '#3A3027', 1.0, false, false, zoom);
         R.drawPolyFace(tctx, r, '#2C241D', 1.0, false, false, zoom);
         R.drawPolyFace(tctx, t, '#55705A', 1.0, false, false, zoom);

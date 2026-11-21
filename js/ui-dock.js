@@ -17,10 +17,12 @@ window.ZS = window.ZS || {};
     wrap.innerHTML = '';
     ZS.DATA.CATEGORIES.forEach((cat) => {
       const btn = document.createElement('button');
+      btn.type = 'button';
       btn.className = 'tab-btn' + (uiState.activeCategory === cat.id ? ' active' : '');
       const iconId = cat.iconId || (cat.id === 'defense' ? 'cat-defense' : cat.id === 'infra' ? 'cat-infra' : 'cat-decor');
-      btn.innerHTML = `${ozIcon(iconId, 16)}<span>${escapeHtml(cat.label)}</span>`;
-      btn.title = cat.desc;
+      btn.innerHTML = ozIcon(iconId, 20);
+      btn.setAttribute('aria-label', cat.label);
+      btn.title = `${cat.label} — ${cat.desc}`;
       btn.addEventListener('click', () => {
         uiState.activeCategory = cat.id;
         renderCategoryTabs();
@@ -28,6 +30,38 @@ window.ZS = window.ZS || {};
       });
       wrap.appendChild(btn);
     });
+  }
+
+  function getCardLockState(def, st) {
+    const bossLocked = !!(def.unlockedByBoss && !st.bossDefeated);
+    const voucherCount = (st.freeVouchers[def.id] || 0) + (def.id === 'field_tent' ? st.freeVouchers.shelter_pod || 0 : 0);
+    const reqHq = def.reqHqLevel || 1;
+    const hqLockedRaw = (st.hqLevel || 1) < reqHq;
+    const voucherBypass = hqLockedRaw && !bossLocked && voucherCount > 0;
+    const isLocked = bossLocked || (hqLockedRaw && !voucherBypass);
+    return { bossLocked, voucherCount, reqHq, hqLockedRaw, voucherBypass, isLocked };
+  }
+
+  function selectBuildCard(def) {
+    if (!def) return;
+    const st = ZS.Game.state;
+    const lock = getCardLockState(def, st);
+    if (lock.isLocked) {
+      ZS.Audio.playError();
+      if (lock.bossLocked) {
+        U.showWaveBanner('특수 기념비 잠김', 'WAVE 5 알파 타이탄 변이체를 격파하면 해금됩니다.', 'warn');
+      } else {
+        const reqInfo = ZS.Game.getHqLevelInfo(lock.reqHq);
+        U.showWaveBanner(
+          `지휘 본부 Lv.${lock.reqHq} 필요`,
+          `[${def.name}] 시설은 지휘 본부를 Lv.${lock.reqHq}(${reqInfo.name})로 증축하면 건설할 수 있습니다.`,
+          'warn'
+        );
+      }
+      inspectTileAt(ZS.DATA.HQ_POS.x, ZS.DATA.HQ_POS.y);
+      return;
+    }
+    setToolMode('build', def.id);
   }
 
   function getCardTagInfo(def) {
@@ -65,13 +99,13 @@ window.ZS = window.ZS || {};
         cls: 'tag-manned'
       };
     }
+    if (def.id === 'repair_bay' && def.aura && def.aura.regenPerSec) {
+      return {
+        html: `${ozIcon('act-repair', 13, 'icon-heal')}<span>수리 +${def.aura.regenPerSec}/s ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`,
+        cls: 'tag-manned'
+      };
+    }
     if (def.category === 'decor') {
-      if (def.id === 'repair_bay' && def.aura && def.aura.regenPerSec) {
-        return {
-          html: `${ozIcon('act-repair', 13, 'icon-heal')}<span>수리 +${def.aura.regenPerSec}/s ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`,
-          cls: 'tag-manned'
-        };
-      }
       const pwrPrefix = def.requiresPower ? `${ozIcon('res-power', 13, 'icon-power')}<span>전등 ·</span>` : '';
       if (preview && preview.isDiminished) {
         return { html: `${pwrPrefix}<span>+${preview.gain} (50%)</span>`, cls: 'tag-cozy-dim' };
@@ -116,18 +150,14 @@ window.ZS = window.ZS || {};
     if (nextSig === lastDockSig && container.childElementCount > 0) {
       return;
     }
+    const categoryChanged = lastDockCategory !== uiState.activeCategory;
     lastDockSig = nextSig;
     lastDockCategory = uiState.activeCategory;
 
     container.innerHTML = '';
 
-    items.forEach((def) => {
-      const bossLocked = def.unlockedByBoss && !st.bossDefeated;
-      const voucherCount = (st.freeVouchers[def.id] || 0) + (def.id === 'field_tent' ? st.freeVouchers.shelter_pod || 0 : 0);
-      const reqHq = def.reqHqLevel || 1;
-      const hqLockedRaw = (st.hqLevel || 1) < reqHq;
-      const voucherBypass = hqLockedRaw && !bossLocked && voucherCount > 0;
-      const isLocked = bossLocked || (hqLockedRaw && !voucherBypass);
+    items.forEach((def, idx) => {
+      const { bossLocked, voucherCount, reqHq, hqLockedRaw, voucherBypass, isLocked } = getCardLockState(def, st);
 
       const card = document.createElement('div');
       card.className =
@@ -137,75 +167,66 @@ window.ZS = window.ZS || {};
         (voucherBypass ? ' voucher-bypass' : '');
 
       const tag = getCardTagInfo(def);
+      const tagPlain = tag.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      card.title = `${def.name}${tagPlain ? ` (${tagPlain})` : ''} — ${def.desc}`;
 
       let badgeHtml = '';
       const floorCapped = def.layer === 'floor' && floorCappedAll;
       if (bossLocked) {
-        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 14, 'icon-muted')}<span>보스</span></span>`;
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스</span></span>`;
       } else if (voucherBypass) {
-        badgeHtml = `<span class="card-voucher-badge">${ozIcon('state-voucher', 14, 'icon-coin')}<span>보급권 ${voucherCount}</span></span>`;
+        badgeHtml = `<span class="card-voucher-badge">${ozIcon('state-voucher', 12, 'icon-coin')}<span>보급 ${voucherCount}</span></span>`;
       } else if (hqLockedRaw) {
-        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
+        badgeHtml = `<span class="card-lock-badge">${ozIcon('state-lock', 12, 'icon-muted')}<span>Lv.${reqHq}</span></span>`;
       } else if (floorCapped) {
-        badgeHtml = `<span class="card-cap-badge">상한 도달</span>`;
+        badgeHtml = `<span class="card-cap-badge">상한</span>`;
       }
 
       let costHtml = '';
       if (bossLocked) {
-        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 14, 'icon-muted')}<span>보스 처치 해금</span></span>`;
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>보스 처치</span></span>`;
       } else if (voucherCount > 0) {
-        costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 14, 'icon-heal')}<span>보급권 ${voucherCount}</span></span>`;
+        costHtml = `<span class="cost-chip free">${ozIcon('state-voucher', 12, 'icon-heal')}<span>보급권 ${voucherCount}</span></span>`;
       } else if (hqLockedRaw) {
-        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 14, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
+        costHtml = `<span class="cost-chip locked-chip">${ozIcon('state-lock', 12, 'icon-muted')}<span>본부 Lv.${reqHq}</span></span>`;
       } else {
         const c = def.cost || {};
         if (c.wood) {
-          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', 14, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
+          costHtml += `<span class="cost-chip ${st.wood < c.wood ? 'short' : ''}">${ozIcon('res-wood', 13, st.wood < c.wood ? 'icon-danger' : 'icon-wood')}<span>${c.wood}</span></span>`;
         }
         if (c.scrap) {
-          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">${ozIcon('res-scrap', 14, st.scrap < c.scrap ? 'icon-danger' : 'icon-scrap')}<span>${c.scrap}</span></span>`;
+          costHtml += `<span class="cost-chip ${st.scrap < c.scrap ? 'short' : ''}">${ozIcon('res-scrap', 13, st.scrap < c.scrap ? 'icon-danger' : 'icon-scrap')}<span>${c.scrap}</span></span>`;
         }
         if (c.coin) {
-          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">${ozIcon('res-coin', 14, st.coin < c.coin ? 'icon-danger' : 'icon-coin')}<span>${c.coin}</span></span>`;
+          costHtml += `<span class="cost-chip ${st.coin < c.coin ? 'short' : ''}">${ozIcon('res-coin', 13, st.coin < c.coin ? 'icon-danger' : 'icon-coin')}<span>${c.coin}</span></span>`;
         }
       }
 
-      const thumbUrl = ZS.Renderer.renderItemThumbnail ? ZS.Renderer.renderItemThumbnail(def.id, 40) : '';
+      const hotkeyHtml = idx < 9 ? `<span class="card-hotkey">${idx + 1}</span>` : '';
+      const thumbUrl = ZS.Renderer.renderItemThumbnail ? ZS.Renderer.renderItemThumbnail(def.id, 88) : '';
       const thumbHtml = thumbUrl
-        ? `<img class="card-thumb" src="${thumbUrl}" width="38" height="38" alt="" />`
-        : `<span class="card-thumb icon-slot">${ozIcon('cat-defense', 20)}</span>`;
+        ? `<img class="card-thumb" src="${thumbUrl}" width="84" height="84" alt="" />`
+        : `<span class="card-thumb icon-slot">${ozIcon('cat-defense', 28)}</span>`;
 
       card.innerHTML = `
+        ${hotkeyHtml}
         ${badgeHtml}
-        <div class="card-top">
+        <div class="card-visual">
           ${thumbHtml}
-          <span class="card-title">${escapeHtml(def.name)}</span>
         </div>
-        <span class="card-tag ${tag.cls}">${tag.html}</span>
-        <div class="card-costs">${costHtml}</div>
+        <div class="card-meta">
+          <span class="card-title">${escapeHtml(def.name)}</span>
+          <div class="card-costs">${costHtml}</div>
+        </div>
       `;
 
       card.addEventListener('click', () => {
-        if (isLocked) {
-          ZS.Audio.playError();
-          if (bossLocked) {
-            U.showWaveBanner('특수 기념비 잠김', 'WAVE 5 알파 타이탄 변이체를 격파하면 해금됩니다.', 'warn');
-          } else {
-            const reqInfo = ZS.Game.getHqLevelInfo(reqHq);
-            U.showWaveBanner(
-              `지휘 본부 Lv.${reqHq} 필요`,
-              `[${def.name}] 시설은 지휘 본부를 Lv.${reqHq}(${reqInfo.name})로 증축하면 건설할 수 있습니다.`,
-              'warn'
-            );
-          }
-          inspectTileAt(ZS.DATA.HQ_POS.x, ZS.DATA.HQ_POS.y);
-          return;
-        }
-        setToolMode('build', def.id);
+        selectBuildCard(def);
       });
 
       container.appendChild(card);
     });
+    if (categoryChanged) container.scrollLeft = 0;
   }
 
   function setToolMode(mode, itemId) {
@@ -252,8 +273,17 @@ window.ZS = window.ZS || {};
     document.getElementById('tool-inspect').classList.toggle('active', mode === 'inspect');
     document.getElementById('tool-move').classList.toggle('active', mode === 'move');
     document.getElementById('tool-remove').classList.toggle('active', mode === 'remove');
+    syncDetailBarVisibility();
     renderItemCards();
     updateCursorTooltip();
+  }
+
+  function syncDetailBarVisibility() {
+    const bar = document.getElementById('detail-bar');
+    if (!bar) return;
+    const hasConfirm = !!document.getElementById('btn-confirm-demolish');
+    const isIdle = uiState.mode === 'inspect' && !uiState.inspectedTile && !hasConfirm;
+    bar.classList.toggle('idle-hidden', isIdle);
   }
 
   function syncDockAndHudState() {
@@ -261,15 +291,20 @@ window.ZS = window.ZS || {};
     if (dockEl) {
       dockEl.classList.toggle('collapsed', !!uiState.dockCollapsed);
     }
-    const topHudEl = document.getElementById('top-hud');
-    if (topHudEl) {
-      topHudEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
+    const secHudEl = document.getElementById('hud-secondary');
+    if (secHudEl) {
+      secHudEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
+    }
+    const topLeftEl = document.getElementById('hud-top-left');
+    if (topLeftEl) {
+      topLeftEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
     }
     const hudResBtn = document.getElementById('btn-toggle-hud-res');
     if (hudResBtn) {
-      hudResBtn.innerHTML = ozIcon(uiState.hudResCompact ? 'ui-chevron-down' : 'ui-chevron-up', 15);
+      hudResBtn.innerHTML = ozIcon(uiState.hudResCompact ? 'ui-chevron-down' : 'ui-chevron-up', 14);
       hudResBtn.title = uiState.hudResCompact ? '보조 자원 라벨 펼치기' : '보조 자원 간소화';
     }
+    syncDetailBarVisibility();
   }
 
   function setDockCollapsed(flag) {
@@ -290,7 +325,7 @@ window.ZS = window.ZS || {};
       lastTipStateKey = '';
     };
 
-    if (!uiState.pointerClient.inside || !uiState.hoverTile || st.phase !== 'day') {
+    if (uiState.mainMenuOpen || !uiState.pointerClient.inside || !uiState.hoverTile || st.phase !== 'day') {
       hideTip();
       return;
     }
@@ -397,7 +432,10 @@ window.ZS = window.ZS || {};
 
   function setDetailHtml(html, actionsHtml) {
     const bar = document.getElementById('detail-bar');
-    if (bar) bar.classList.remove('composite');
+    if (bar) {
+      bar.classList.remove('composite');
+      bar.classList.remove('idle-hidden');
+    }
     document.getElementById('detail-text').innerHTML = html;
     const actEl = document.getElementById('detail-actions');
     if (actEl) {
@@ -407,7 +445,10 @@ window.ZS = window.ZS || {};
 
   function setCompositeDetailHtml(innerHtml) {
     const bar = document.getElementById('detail-bar');
-    if (bar) bar.classList.add('composite');
+    if (bar) {
+      bar.classList.add('composite');
+      bar.classList.remove('idle-hidden');
+    }
     document.getElementById('detail-text').innerHTML = innerHtml;
     const actEl = document.getElementById('detail-actions');
     if (actEl) {
@@ -959,8 +1000,10 @@ window.ZS = window.ZS || {};
   Object.assign(U, {
     renderCategoryTabs,
     getCardTagInfo,
+    selectBuildCard,
     renderItemCards,
     setToolMode,
+    syncDetailBarVisibility,
     syncDockAndHudState,
     setDockCollapsed,
     updateCursorTooltip,

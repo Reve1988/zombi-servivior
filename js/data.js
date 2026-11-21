@@ -131,8 +131,27 @@ ZS.DATA = (function () {
     piezoArc: '#FF8A3D',
     piezoSpark: '#FFD08A',
     trapBlade: '#DCE5EE',
-    habitatRoof: '#D96B38',
-    repairNano: '#4ADE80'
+    habitatRoof: '#C86438',
+    repairNano: '#4ADE80',
+
+    // 7. Diorama Military Material Tokens (#95)
+    milOlive: '#6B7A5E',
+    milOliveDark: '#4D5943',
+    milOliveLight: '#859576',
+    milSand: '#B7A179',
+    milSandDark: '#8F7B56',
+    milSandSeam: '#6D5C3E',
+    milGunmetal: '#3B4552',
+    milGunmetalDark: '#262E38',
+    milSlate: '#525E6B',
+    milSteelTrim: '#8A96A4',
+    milBrushed: '#B8C4D0',
+    milSolarCell: '#1A3048',
+    milSolarCellDeep: '#122235',
+    milSolarGrid: '#89A1B8',
+    milSolarGlint: '#B8D0E6',
+    hqAmberCore: '#FFF3D6',
+    hqGoldTrim: '#E2A83B'
   };
 
   const WALL_TIERS = {
@@ -149,10 +168,10 @@ ZS.DATA = (function () {
   };
 
   const WIND_TIERS = {
-    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'infra_wind', topZ: 30 },
-    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 6, scrap: 32, coin: 10 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'infra_wind', topZ: 44 },
+    1: { level: 1, name: '마이크로 풍력발전기', reqHqLevel: 1, cost: { wood: 8, scrap: 18 }, maxHp: 140, dayCharge: 14, nightGen: 0.65, powerCap: 10, cozy: 1, cozyGroup: 'infra_wind', topZ: 34 },
+    2: { level: 2, name: '소형 풍력발전기', reqHqLevel: 2, upCost: { wood: 6, scrap: 32, coin: 10 }, maxHp: 195, dayCharge: 28, nightGen: 1.35, powerCap: 18, cozy: 3, cozyGroup: 'infra_wind', topZ: 46 },
     3: { level: 3, name: '중형 풍력발전기', reqHqLevel: 3, upCost: { wood: 8, scrap: 54, coin: 24 }, maxHp: 265, dayCharge: 48, nightGen: 2.40, powerCap: 30, cozy: 5, cozyGroup: 'infra_wind', topZ: 60 },
-    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 10, scrap: 88, coin: 46 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'infra_wind', topZ: 70 }
+    4: { level: 4, name: '대형 풍력발전기', reqHqLevel: 4, upCost: { wood: 10, scrap: 88, coin: 46 }, maxHp: 360, dayCharge: 75, nightGen: 3.80, powerCap: 50, cozy: 8, cozyGroup: 'infra_wind', topZ: 74 }
   };
 
   const BATTERY_TIERS = {
@@ -199,7 +218,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.5.1',
+  VERSION: 'v0.6.0',
   GRID_SIZE: 22,
   HQ_POS: { x: 10, y: 10 },
   PALETTE,
@@ -320,7 +339,7 @@ ZS.DATA = (function () {
 
   CATEGORIES: [
     { id: 'defense', iconId: 'cat-defense', label: '방어·화력', desc: '방벽, 무전력 요원 초소, 전력 자동포탑' },
-    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소', desc: '주간 태양광·야간 풍력 발전기, 배터리, 요원 숙소' },
+    { id: 'infra',   iconId: 'cat-infra',   label: '전력·숙소·정비', desc: '주간 태양광·야간 풍력 발전기, 배터리, 요원 숙소, 현장 수리 정비' },
     { id: 'decor',   iconId: 'cat-decor',   label: '모던 꾸미기', desc: '바닥재, 전술 조명, 라운지 가구 & 버프' }
   ],
 
@@ -637,6 +656,20 @@ ZS.DATA = (function () {
       lightColor: 'rgba(255, 206, 112, 0.34)',
       desc: '[요원 숙소 · 4단 진화] 요원 수용량을 확장하고 매일 아침 신규 요원이 합류합니다. 모듈러 숙소·강화 작전 생활관(+6명)으로 진화합니다.'
     },
+    repair_bay: {
+      id: 'repair_bay',
+      name: '현장 수리 거치대',
+      category: 'infra',
+      layer: 'struct',
+      subType: 'decor',
+      reqHqLevel: 1,
+      cost: { wood: 10, scrap: 14 },
+      maxHp: 165,
+      cozy: 5,
+      cozyGroup: 'repair_t1',
+      aura: { radius: 2.2, regenPerSec: 2.5 },
+      desc: '[3단 진화 자동 수리] 수리 거치대(1단·2.2칸 +2.5/s) → 로봇 정비 베이(2단·2.6칸 +5/s) → 나노 드론 정비소(3단·3.2칸 +9.5/s·야간 조명).'
+    },
 
     // ================= MODERN DECOR & TACTICAL SUPPORT =================
     gas_heater: {
@@ -705,20 +738,6 @@ ZS.DATA = (function () {
       lightColor: 'rgba(255, 208, 148, 0.36)',
       aura: { radius: 2.7, fireRate: 0.15 },
       desc: '[내장 배터리 발광] 시원한 에너지 드링크 보급! 반경 2.7칸 내 연사속도를 +15% 높입니다.'
-    },
-    repair_bay: {
-      id: 'repair_bay',
-      name: '현장 수리 거치대',
-      category: 'decor',
-      layer: 'struct',
-      subType: 'decor',
-      reqHqLevel: 1,
-      cost: { wood: 10, scrap: 14 },
-      maxHp: 165,
-      cozy: 5,
-      cozyGroup: 'repair_t1',
-      aura: { radius: 2.2, regenPerSec: 2.5 },
-      desc: '[3단 진화 자동 수리] 수리 거치대(1단·2.2칸 +2.5/s) → 로봇 정비 베이(2단·2.6칸 +5/s) → 나노 드론 정비소(3단·3.2칸 +9.5/s·야간 조명).'
     },
     lounge_set: {
       id: 'lounge_set',
