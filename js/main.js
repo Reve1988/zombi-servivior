@@ -74,10 +74,133 @@ window.ZS = window.ZS || {};
     return !!(U.isTechPopModalOpen && U.isTechPopModalOpen());
   }
 
+  function isGameOverModalOpen() {
+    const modal = document.getElementById('gameover-modal');
+    return !!(modal && !modal.classList.contains('hidden'));
+  }
+
+  function renderGameOverModal() {
+    const st = ZS.Game.state;
+    if (!st) return;
+
+    const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef(st.divisionId) : null;
+    const divName = (divDef && divDef.name) || '기동방위대';
+    const divIconId = (divDef && divDef.iconId) || 'div-mobile';
+    const divIconCls = divDef && divDef.isElectricDivision ? 'icon-power' : 'icon-coin';
+    const waveNum = Math.max(1, Math.floor(Number(st.wave) || 1));
+    const wavePad = String(waveNum).padStart(2, '0');
+    const prevBest = Number(st.gameOverPrevBestWave) || 0;
+    const isNewBest = waveNum > prevBest && waveNum >= 2;
+    const totalKills = Math.max(0, Math.floor(Number(st.totalKills) || 0));
+    const cozyLv = (st.cozyTier && st.cozyTier.level) || 1;
+    const cozyTitle = (st.cozyTier && st.cozyTier.title) || '임시 전초기지';
+    const researchedCount = st.researchedTechs ? Object.keys(st.researchedTechs).length : 0;
+
+    const subEl = document.getElementById('gameover-modal-sub');
+    if (subEl) {
+      subEl.textContent = `WAVE ${wavePad} 야간 방어전 중 지휘 본부가 함락되어 전초기지 통신이 두절되었습니다.`;
+    }
+
+    const unlockBox = document.getElementById('gameover-unlock-box');
+    const unlocked = Array.isArray(st.gameOverUnlockedDivisions) ? st.gameOverUnlockedDivisions : [];
+    if (unlockBox) {
+      if (unlocked.length > 0) {
+        unlockBox.innerHTML = `${ozIcon('state-rank', 16, 'icon-coin')}<span>이번 작전 신규 해금 분과: <b>${escapeHtml(unlocked.join(', '))}</b></span>`;
+        unlockBox.classList.remove('hidden');
+      } else {
+        unlockBox.innerHTML = '';
+        unlockBox.classList.add('hidden');
+      }
+    }
+
+    const gridEl = document.getElementById('gameover-stats-grid');
+    if (gridEl) {
+      const bestPill = isNewBest ? '<span class="gameover-best-pill">최고 기록</span>' : '';
+      const cells = [
+        {
+          icon: 'phase-night',
+          iconCls: 'icon-danger',
+          label: '도달 웨이브',
+          valHtml: `<span class="gameover-stat-val">WAVE ${wavePad}</span>${bestPill}`
+        },
+        {
+          icon: divIconId,
+          iconCls: divIconCls,
+          label: '지휘 분과 · 본부',
+          valHtml: `<span class="gameover-stat-val">${escapeHtml(divName)} · Lv.${st.hqLevel || 1}</span>`
+        },
+        {
+          icon: 'hud-enemy',
+          iconCls: 'icon-danger',
+          label: '총 격파 감염체',
+          valHtml: `<span class="gameover-stat-val">${totalKills}기</span>`
+        },
+        {
+          icon: 'res-agent',
+          iconCls: '',
+          label: '생존 인원 · 상한',
+          valHtml: `<span class="gameover-stat-val">${st.agents || 0} / ${st.popCap || 4}명</span>`
+        },
+        {
+          icon: 'res-cozy',
+          iconCls: 'icon-coin',
+          label: '최종 안락함',
+          valHtml: `<span class="gameover-stat-val">Lv.${cozyLv} · ${escapeHtml(cozyTitle)}</span>`
+        },
+        {
+          icon: 'res-rp',
+          iconCls: 'icon-rp',
+          label: '완료 연구 · 잔여 RP',
+          valHtml: `<span class="gameover-stat-val">${researchedCount}건 · ${Math.floor(st.rp || 0)} RP</span>`
+        }
+      ];
+      gridEl.innerHTML = cells
+        .map(
+          (c) => `
+          <div class="gameover-stat-cell">
+            <span class="gameover-stat-label">${ozIcon(c.icon, 13, c.iconCls)}<span>${escapeHtml(c.label)}</span></span>
+            <div class="gameover-stat-val-row">${c.valHtml}</div>
+          </div>`
+        )
+        .join('');
+    }
+  }
+
+  function closeGameOverModal() {
+    const modal = document.getElementById('gameover-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function openGameOverModal() {
+    const modal = document.getElementById('gameover-modal');
+    if (!modal) return;
+    isPanning = false;
+    isLeftPainting = false;
+    uiState.hoverTile = null;
+    uiState.inspectedTile = null;
+    uiState.movingSource = null;
+    uiState.activeSkill = null;
+    uiState.hoverB1DoorEdge = null;
+    document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
+    document.getElementById('trader-modal')?.classList.add('hidden');
+    document.getElementById('guide-modal')?.classList.add('hidden');
+    document.getElementById('settings-popover')?.classList.add('hidden');
+    document.getElementById('wave-banner')?.classList.add('hidden');
+    closeConfirmModal();
+    if (U.closeTechPopModal) U.closeTechPopModal();
+    if (U.setToolMode) U.setToolMode('inspect');
+    if (U.updateCursorTooltip) U.updateCursorTooltip();
+    renderGameOverModal();
+    modal.classList.remove('hidden');
+  }
+
   function closeDivisionModal() {
     const modal = document.getElementById('division-modal');
     if (modal) modal.classList.add('hidden');
     uiState.divisionModalOpen = false;
+    if (ZS.Game && ZS.Game.state && ZS.Game.state.phase === 'gameover' && !uiState.mainMenuOpen) {
+      openGameOverModal();
+    }
   }
 
   function getDivisionClassSuffix(divId) {
@@ -328,6 +451,8 @@ window.ZS = window.ZS || {};
       uiState.movingSource = null;
       uiState.activeSkill = null;
       uiState.pointerClient.inside = false;
+      closeConfirmModal();
+      closeGameOverModal();
       document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
       document.getElementById('trader-modal')?.classList.add('hidden');
       if (U.closeTechPopModal) U.closeTechPopModal();
@@ -345,6 +470,7 @@ window.ZS = window.ZS || {};
     if (ZS.Game.state.phase === 'gameover') {
       ZS.Game.loadGame();
     }
+    closeGameOverModal();
     uiState.inspectedTile = null;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
@@ -362,6 +488,7 @@ window.ZS = window.ZS || {};
     }
     closeDivisionModal();
     closeConfirmModal();
+    closeGameOverModal();
     uiState.inspectedTile = null;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
@@ -582,7 +709,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) return;
       if (e.button === 2) {
         const shouldTrackRotate =
           ZS.Game.state.activeLayer === 'underground' &&
@@ -629,7 +756,7 @@ window.ZS = window.ZS || {};
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) {
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) {
         uiState.pointerClient.inside = false;
         uiState.hoverTile = null;
         uiState.hoverB1DoorEdge = null;
@@ -721,7 +848,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener(
       'wheel',
       (e) => {
-        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen()) return;
+        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.91;
         ZS.Iso.zoomAtScreen(factor, e.clientX, e.clientY);
@@ -786,6 +913,9 @@ window.ZS = window.ZS || {};
           if (U.closeTechPopModal) U.closeTechPopModal();
           return;
         }
+        if (isGameOverModalOpen()) {
+          return;
+        }
         if (uiState.mainMenuOpen) {
           if (uiState.menuOptionsOpen) setMenuOptionsOpen(false);
           return;
@@ -797,7 +927,7 @@ window.ZS = window.ZS || {};
         return;
       }
 
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isGameOverModalOpen()) return;
 
       keys[e.code] = true;
       const activeTag = document.activeElement && document.activeElement.tagName;
@@ -1150,6 +1280,21 @@ window.ZS = window.ZS || {};
         closeConfirmModal();
       }
     });
+
+    // Dedicated Game Over Modal Controls
+    document.getElementById('btn-gameover-retry')?.addEventListener('click', () => {
+      const divId = (ZS.Game && ZS.Game.state && ZS.Game.state.divisionId) || 'mobile_corps';
+      closeGameOverModal();
+      executeStartNewOperation(divId);
+    });
+    document.getElementById('btn-gameover-division')?.addEventListener('click', () => {
+      closeGameOverModal();
+      openDivisionModal();
+    });
+    document.getElementById('btn-gameover-title')?.addEventListener('click', () => {
+      closeGameOverModal();
+      returnToTitleMenu();
+    });
   }
 
   // ================= MAIN ANIMATION LOOP (Fixed 60 FPS Limiter) =================
@@ -1331,6 +1476,10 @@ window.ZS = window.ZS || {};
     renderDivisionModal,
     openDivisionModal,
     closeDivisionModal,
+    isGameOverModalOpen,
+    renderGameOverModal,
+    openGameOverModal,
+    closeGameOverModal,
     setMenuOptionsOpen,
     syncSettingsButtons,
     refreshMainMenuState,

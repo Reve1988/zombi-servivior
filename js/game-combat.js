@@ -326,18 +326,20 @@ window.ZS = window.ZS || {};
 
   // ================= MAIN SIMULATION STEP =================
   function update(rawDt) {
-    if (state.phase === 'gameover') return;
     G._inSimStep = true;
     try {
+      const isGameOver = state.phase === 'gameover';
       // Smooth day/night ambient transition
       const targetNight = state.isNight ? 1 : 0;
       state.nightAlpha += (targetNight - state.nightAlpha) * Math.min(1, rawDt * 2.6);
 
       const dt = rawDt * (state.phase === 'night' ? state.gameSpeed : 1);
 
-      // Cooldowns
-      if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
-      if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
+      // Cooldowns (pause active tactical timers once command HQ falls)
+      if (!isGameOver) {
+        if (state.skills.repairCd > 0) state.skills.repairCd = Math.max(0, state.skills.repairCd - dt);
+        if (state.skills.airstrikeCd > 0) state.skills.airstrikeCd = Math.max(0, state.skills.airstrikeCd - dt);
+      }
 
       // Update HQ / structure / cozy tier-up / screen shake / blackout flicker animations
       if (state.cozyTierUpTimer > 0) {
@@ -350,7 +352,7 @@ window.ZS = window.ZS || {};
       if (state.blackoutFlickerTimer > 0) {
         state.blackoutFlickerTimer = Math.max(0, state.blackoutFlickerTimer - rawDt);
       }
-      if (G.updateUnderground) {
+      if (!isGameOver && G.updateUnderground) {
         G.updateUnderground(rawDt);
       }
       const hqSt = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];

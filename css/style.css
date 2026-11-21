@@ -4615,6 +4615,277 @@ body.main-menu-active #game-canvas {
   color: #FBBF24;
 }
 
+/* ================= GAME OVER OPERATION REPORT MODAL ================= */
+.gameover-backdrop {
+  z-index: 50;
+  background: radial-gradient(circle at 50% 42%, rgba(56, 14, 26, 0.72) 0%, rgba(5, 10, 18, 0.88) 76%);
+}
+
+.gameover-plate {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 92vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 20px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.84));
+  animation: gameoverFadeIn 0.22s ease-out;
+}
+
+@keyframes gameoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.gameover-plate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: var(--chamfer-10);
+  background: linear-gradient(155deg, rgba(255, 77, 109, 0.82) 0%, #58283A 44%, #1A1724 100%);
+}
+
+.gameover-plate::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: var(--chamfer-8);
+  background:
+    radial-gradient(circle at 10px 10px, rgba(244, 186, 198, 0.42) 0 1.4px, rgba(7, 12, 19, 0.78) 1.5px 2.5px, transparent 2.7px),
+    radial-gradient(circle at calc(100% - 10px) 10px, rgba(244, 186, 198, 0.42) 0 1.4px, rgba(7, 12, 19, 0.78) 1.5px 2.5px, transparent 2.7px),
+    radial-gradient(circle at 10px calc(100% - 10px), rgba(244, 186, 198, 0.32) 0 1.4px, rgba(7, 12, 19, 0.78) 1.5px 2.5px, transparent 2.7px),
+    radial-gradient(circle at calc(100% - 10px) calc(100% - 10px), rgba(244, 186, 198, 0.32) 0 1.4px, rgba(7, 12, 19, 0.78) 1.5px 2.5px, transparent 2.7px),
+    linear-gradient(180deg, rgba(255, 77, 109, 0.14) 0, transparent 26px),
+    linear-gradient(180deg, #211824 0%, #131924 72%, #0E131D 100%);
+}
+
+.gameover-hazard-strip {
+  height: 6px;
+  margin: -4px 4px 0;
+  border-radius: 2px;
+  background: repeating-linear-gradient(-45deg, #FF4D6D 0 8px, #21151B 8px 16px);
+  opacity: 0.92;
+}
+
+.gameover-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.gameover-alert-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(255, 77, 109, 0.16);
+  border: 1px solid rgba(255, 77, 109, 0.56);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gameover-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.gameover-code-line {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #FF8FA3;
+}
+
+.gameover-title {
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: #F8FAFC;
+}
+
+.gameover-sub {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #CBD8E6;
+}
+
+.gameover-unlock-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 201, 74, 0.45);
+  background: rgba(255, 201, 74, 0.11);
+  color: #FFE08A;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.gameover-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gameover-stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(148, 178, 210, 0.18);
+  background: rgba(11, 17, 27, 0.72);
+  min-width: 0;
+}
+
+.gameover-stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9FB3C7;
+}
+
+.gameover-stat-val-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gameover-stat-val {
+  font-size: 15px;
+  font-weight: 900;
+  color: #F1F5F9;
+  line-height: 1.25;
+}
+
+.gameover-best-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 201, 74, 0.18);
+  border: 1px solid rgba(255, 201, 74, 0.45);
+  color: #FFC94A;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gameover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 178, 210, 0.16);
+}
+
+.gameover-btn {
+  position: relative;
+  z-index: 1;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: visible;
+  transition: transform 0.13s ease, color 0.13s ease;
+}
+
+.gameover-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: var(--chamfer-6);
+}
+
+.gameover-btn::after {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: var(--chamfer-5);
+}
+
+.gameover-btn:hover {
+  transform: translateY(-1px);
+}
+
+.gameover-btn.secondary {
+  color: #DCE7F3;
+}
+
+.gameover-btn.secondary::before {
+  background: linear-gradient(155deg, #566E87 0%, #2C3D50 54%, #16202B 100%);
+}
+
+.gameover-btn.secondary::after {
+  background: linear-gradient(180deg, #213042 0%, #141D28 100%);
+}
+
+.gameover-btn.secondary:hover::before {
+  background: linear-gradient(155deg, #8DA6C2 0%, #445B75 54%, #1E2C3C 100%);
+}
+
+.gameover-btn.primary {
+  color: #FFF4D2;
+}
+
+.gameover-btn.primary::before {
+  background: linear-gradient(155deg, #FFD97D 0%, #F59E0B 52%, #B45309 100%);
+}
+
+.gameover-btn.primary::after {
+  background:
+    linear-gradient(180deg, rgba(255, 201, 74, 0.24) 0, transparent 10px),
+    linear-gradient(180deg, #4B2E12 0%, #29180B 100%);
+}
+
+.gameover-btn.primary:hover::before {
+  background: linear-gradient(155deg, #FFE8A3 0%, #FFC94A 48%, #D97706 100%);
+}
+
+@media (max-width: 560px) {
+  .gameover-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gameover-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 @media (max-width: 1120px) {
   .tech-branches-grid {
     grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));

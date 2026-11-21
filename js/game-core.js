@@ -23,6 +23,9 @@ window.ZS = window.ZS || {};
     shakeTimer: 0,
     shakeDuration: 0.25,
     shakeAmp: 0,
+    totalKills: 0,
+    gameOverUnlockedDivisions: [],
+    gameOverPrevBestWave: 0,
     bossDefeated: false,
     gameSpeed: 1,
 
@@ -318,6 +321,9 @@ window.ZS = window.ZS || {};
     rec.unlocked = true;
     meta.divisions[id] = rec;
     saveCommanderMeta(meta);
+    if (Array.isArray(state.gameOverUnlockedDivisions) && divs[id].name && state.gameOverUnlockedDivisions.indexOf(divs[id].name) === -1) {
+      state.gameOverUnlockedDivisions.push(divs[id].name);
+    }
     return true;
   }
 
@@ -1330,6 +1336,9 @@ window.ZS = window.ZS || {};
     state.blackoutFlickerTimer = 0;
     state.shakeTimer = 0;
     state.shakeAmp = 0;
+    state.totalKills = 0;
+    state.gameOverUnlockedDivisions = [];
+    state.gameOverPrevBestWave = 0;
     state.bossDefeated = false;
     state.gameSpeed = 1;
 
@@ -1781,6 +1790,8 @@ window.ZS = window.ZS || {};
         wave: state.wave,
         hqLevel: state.hqLevel,
         bossDefeated: state.bossDefeated,
+        totalKills: state.totalKills || 0,
+        runUnlockedDivisions: Array.isArray(state.gameOverUnlockedDivisions) ? state.gameOverUnlockedDivisions.slice() : [],
         wood: state.wood,
         scrap: state.scrap,
         coin: state.coin,
@@ -1914,6 +1925,22 @@ window.ZS = window.ZS || {};
       state.blackoutFlickerTimer = 0;
       state.shakeTimer = 0;
       state.shakeAmp = 0;
+      if (Number.isFinite(Number(d.totalKills))) {
+        state.totalKills = Math.max(0, Math.floor(Number(d.totalKills)));
+      } else {
+        let sumKills = 0;
+        for (let yy = 0; yy < N; yy++) {
+          for (let xx = 0; xx < N; xx++) {
+            const cell = state.structGrid[yy] && state.structGrid[yy][xx];
+            if (!cell) continue;
+            sumKills += cell.kills || 0;
+            if (cell.mounted) sumKills += cell.mounted.kills || 0;
+          }
+        }
+        state.totalKills = sumKills;
+      }
+      state.gameOverUnlockedDivisions = Array.isArray(d.runUnlockedDivisions) ? d.runUnlockedDivisions.slice() : [];
+      state.gameOverPrevBestWave = 0;
       state.dyingZombies = [];
       state.groundDecals = [];
       state.muzzleFlashes = [];
