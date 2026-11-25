@@ -249,10 +249,11 @@ window.ZS = window.ZS || {};
     if (apChip) {
       apChip.textContent = unlocked ? `${Math.floor(st.digAp || 0)} AP` : 'Lv.2';
     }
+    const lv2Wave = ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(2) : 10;
     btn.title = !unlocked
-      ? (st.wave || 1) >= 20
+      ? (st.wave || 1) >= lv2Wave
         ? '지하 쉘터 B1: 먼저 중앙 지휘 본부를 Lv.2로 증축하세요!'
-        : '지하 쉘터 B1: WAVE 20 도달 후 지휘 본부 Lv.2 증축 시 개방'
+        : `지하 쉘터 B1: WAVE ${lv2Wave} 도달 후 지휘 본부 Lv.2 증축 시 개방`
       : !isDay
       ? '야간 방어 중에는 지하로 이동할 수 없습니다 (주간 전용)'
       : isUg

@@ -855,11 +855,11 @@ window.ZS = window.ZS || {};
       state.digAp = Math.min(digCap, (state.digAp || 0) + digGain);
     }
 
-    // 4. Morning Survivor Arrival (every day below 6 agents, every 2 waves at 6+ agents)
+    // 4. Morning Survivor Arrival (every day below 8 agents, every 2 waves at 8+ agents)
     let arrivedAgent = 0;
     let recruitNote = '';
     if (state.agents < state.popCap) {
-      if (state.agents < 6) {
+      if (state.agents < 8) {
         if (G.grantAgents) G.grantAgents(1);
         else state.agents += 1;
         arrivedAgent = 1;

@@ -67,34 +67,38 @@ window.ZS = window.ZS || {};
   function computeWaveHpScale(waveNum) {
     const w = Math.max(1, waveNum || 1);
     if (w <= 10) {
-      return 1 + (w - 1) * 0.22;
+      return 1 + (w - 1) * 0.16;
     }
     if (w <= 20) {
       const d = w - 10;
-      return 2.98 + d * 0.30 + d * d * 0.012;
+      return 2.44 + d * 0.21 + d * d * 0.003;
     }
-    if (w <= 40) {
+    if (w <= 35) {
       const d = w - 20;
-      return 7.18 + d * 0.48 + d * d * 0.020;
+      return 4.84 + d * 0.34 + d * d * 0.008;
     }
-    const d4 = w - 40;
-    return 24.78 + d4 * 0.85 + Math.pow(d4, 1.3) * 0.12;
+    if (w <= 50) {
+      const d = w - 35;
+      return 11.74 + d * 0.56 + d * d * 0.015;
+    }
+    const d5 = w - 50;
+    return 23.515 + d5 * 0.90 + Math.pow(d5, 1.3) * 0.14;
   }
 
   function computeBossHpScale(waveNum) {
     const tier = Math.max(1, Math.floor((waveNum || 5) / 5));
-    if (tier <= 5) {
+    if (tier <= 6) {
       const quad = Math.max(0, tier - 2);
-      return 1 + (tier - 1) * 0.80 + quad * quad * 0.35;
+      return 1 + (tier - 1) * 0.55 + quad * quad * 0.20;
     }
-    const dt = tier - 5;
-    return 7.35 + dt * 2.80 + Math.pow(dt, 1.35) * 0.65;
+    const dt = tier - 6;
+    return 6.95 + dt * 2.40 + Math.pow(dt, 1.35) * 0.55;
   }
 
   function buildWaveQueue(waveNum, sideWeights, bossSide) {
     const q = [];
     const hpScale = computeWaveHpScale(waveNum);
-    const rawCount = 11 + waveNum * 4.8 + Math.max(0, waveNum - 8) * 1.8;
+    const rawCount = 10 + waveNum * 3.8 + Math.max(0, waveNum - 12) * 1.2;
     const countBase = Math.min(
       185,
       Math.round(rawCount <= 165 ? rawCount : 165 + 20 * (1 - Math.exp(-(rawCount - 165) / 85)))
@@ -235,7 +239,7 @@ window.ZS = window.ZS || {};
     const maxHp = Math.round(def.hp * entry.hpScale);
     const hqCx = DATA.HQ_POS.x + 0.5;
     const hqCy = DATA.HQ_POS.y + 0.5;
-    const dmgWaveScale = 1 + Math.min(state.wave - 1, 29) * 0.09 + Math.max(0, state.wave - 30) * 0.045;
+    const dmgWaveScale = 1 + Math.min(state.wave - 1, 29) * 0.06 + Math.max(0, state.wave - 30) * 0.04;
     state.zombies.push({
       uid: G.nextZombieUid++,
       type: entry.type,
