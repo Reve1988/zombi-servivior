@@ -71,7 +71,7 @@ window.ZS = window.ZS || {};
   }
 
   function isTechModalOpen() {
-    return !!(U.isTechPopModalOpen && U.isTechPopModalOpen());
+    return !!(U.isAnyPopTechModalOpen && U.isAnyPopTechModalOpen());
   }
 
   function isGameOverModalOpen() {
@@ -932,10 +932,16 @@ window.ZS = window.ZS || {};
       keys[e.code] = true;
       const activeTag = document.activeElement && document.activeElement.tagName;
       const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      if (!isTyping && e.code === 'KeyP' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSettingsOpen(false);
+        if (U.togglePopModal) U.togglePopModal();
+        return;
+      }
       if (!isTyping && e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         setSettingsOpen(false);
-        if (U.toggleTechPopModal) U.toggleTechPopModal('all');
+        if (U.toggleTechModal) U.toggleTechModal();
         return;
       }
       if (!isTyping && e.code === 'KeyB' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1103,43 +1109,62 @@ window.ZS = window.ZS || {};
       ZS.Game.refreshTraderOffers(true);
     });
 
-    const openTech = (focusArea) => {
+    const openPop = () => {
       setSettingsOpen(false);
-      if (U.openTechPopModal) U.openTechPopModal(focusArea);
+      if (U.openPopModal) U.openPopModal();
+    };
+    const openTech = (focusTechId) => {
+      setSettingsOpen(false);
+      if (U.openTechModal) U.openTechModal(focusTechId);
     };
     const popPillEl = document.getElementById('pop-pill');
     if (popPillEl) {
-      popPillEl.addEventListener('click', () => openTech('pop'));
+      popPillEl.addEventListener('click', openPop);
       popPillEl.addEventListener('keydown', (e) => {
         if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
-          openTech('pop');
+          openPop();
         }
       });
     }
     const rpPillEl = document.getElementById('rp-pill');
     if (rpPillEl) {
-      rpPillEl.addEventListener('click', () => openTech('tech'));
+      rpPillEl.addEventListener('click', () => openTech());
       rpPillEl.addEventListener('keydown', (e) => {
         if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
-          openTech('tech');
+          openTech();
         }
       });
     }
-    const openTechBtn = document.getElementById('btn-open-tech');
-    if (openTechBtn) {
-      openTechBtn.addEventListener('click', () => {
-        setSettingsOpen(false);
-        if (U.toggleTechPopModal) U.toggleTechPopModal('all');
-      });
-    }
-    document.getElementById('btn-close-tech')?.addEventListener('click', () => {
-      if (U.closeTechPopModal) U.closeTechPopModal();
+    document.getElementById('btn-open-pop')?.addEventListener('click', () => {
+      setSettingsOpen(false);
+      if (U.togglePopModal) U.togglePopModal();
     });
-    document.getElementById('tech-pop-modal')?.addEventListener('mousedown', (e) => {
-      if (e.target && e.target.id === 'tech-pop-modal') {
-        if (U.closeTechPopModal) U.closeTechPopModal();
+    document.getElementById('btn-open-tech')?.addEventListener('click', () => {
+      setSettingsOpen(false);
+      if (U.toggleTechModal) U.toggleTechModal();
+    });
+    document.getElementById('btn-pop-to-tech')?.addEventListener('click', () => {
+      openTech();
+    });
+    document.getElementById('btn-tech-to-pop')?.addEventListener('click', () => {
+      openPop();
+    });
+    document.getElementById('btn-close-pop')?.addEventListener('click', () => {
+      if (U.closePopModal) U.closePopModal();
+    });
+    document.getElementById('btn-close-tech')?.addEventListener('click', () => {
+      if (U.closeTechModal) U.closeTechModal();
+    });
+    document.getElementById('pop-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'pop-modal') {
+        if (U.closePopModal) U.closePopModal();
+      }
+    });
+    document.getElementById('tech-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'tech-modal') {
+        if (U.closeTechModal) U.closeTechModal();
       }
     });
 

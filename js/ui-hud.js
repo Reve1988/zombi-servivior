@@ -321,13 +321,20 @@ window.ZS = window.ZS || {};
 
     // Population (3-job) & Research Points (RP) display
     const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
+    const assignedCount = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
+    const unassignedCount = Math.max(0, (st.agents || 0) - assignedCount);
     const popEl = document.getElementById('res-pop');
     if (popEl) {
       popEl.innerHTML = `${st.agents}/${st.popCap} <span class="pop-cap">(전${jobs.combat} 연${jobs.research} 생${jobs.prod})</span>`;
     }
     const popPillEl = document.getElementById('pop-pill');
     if (popPillEl) {
-      popPillEl.title = `작전 요원 ${st.agents}/${st.popCap}명 (초소 배치 ${st.popUsed}/${jobs.combat} · 연구 ${jobs.research} · 생산 ${jobs.prod}) — 클릭하여 직무 분배 [T]`;
+      popPillEl.title = `작전 요원 ${st.agents}/${st.popCap}명 (초소 ${st.popUsed}/${jobs.combat} · 연구 ${jobs.research} · 생산 ${jobs.prod}${unassignedCount > 0 ? ` · 대기 ${unassignedCount}` : ''}) — 클릭하여 인구 배치 [P]`;
+    }
+    const unassignedChipEl = document.getElementById('hud-unassigned-chip');
+    if (unassignedChipEl) {
+      unassignedChipEl.textContent = `+${unassignedCount}`;
+      unassignedChipEl.classList.toggle('hidden', unassignedCount <= 0);
     }
     const rpEl = document.getElementById('res-rp');
     if (rpEl) {
@@ -335,7 +342,7 @@ window.ZS = window.ZS || {};
     }
     const rpPillEl = document.getElementById('rp-pill');
     if (rpPillEl) {
-      rpPillEl.title = `연구포인트(RP) · 현재 본부 Lv.${st.hqLevel || 1} 연구 티어 인가 (잔여 RP는 상위 본부 증축 시까지 누적 이월 — 클릭해 연구창 [T])`;
+      rpPillEl.title = `연구포인트(RP) · 현재 본부 Lv.${st.hqLevel || 1} 연구 티어 인가 (잔여 RP 누적 이월 — 클릭하여 연구 트리 [T])`;
     }
 
     // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip (dirty-memoized)
@@ -501,9 +508,8 @@ window.ZS = window.ZS || {};
     if (!document.getElementById('trader-modal').classList.contains('hidden')) {
       U.renderTraderModal();
     }
-    const techModal = document.getElementById('tech-pop-modal');
-    if (techModal && !techModal.classList.contains('hidden') && U.renderTechPopModal) {
-      U.renderTechPopModal();
+    if (U.isAnyPopTechModalOpen && U.isAnyPopTechModalOpen() && U.renderOpenPopTechModals) {
+      U.renderOpenPopTechModals();
     }
     U.updateCursorTooltip();
   }
@@ -725,9 +731,15 @@ window.ZS = window.ZS || {};
       if (rpEl) {
         rpEl.textContent = `${Math.floor(st.rp || 0)} RP`;
       }
-      const techModal = document.getElementById('tech-pop-modal');
-      if (techModal && !techModal.classList.contains('hidden') && U.renderTechPopModal) {
-        U.renderTechPopModal();
+      const unassignedChipEl = document.getElementById('hud-unassigned-chip');
+      if (unassignedChipEl) {
+        const assignedCount = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
+        const unassignedCount = Math.max(0, (st.agents || 0) - assignedCount);
+        unassignedChipEl.textContent = `+${unassignedCount}`;
+        unassignedChipEl.classList.toggle('hidden', unassignedCount <= 0);
+      }
+      if (U.isAnyPopTechModalOpen && U.isAnyPopTechModalOpen() && U.renderOpenPopTechModals) {
+        U.renderOpenPopTechModals();
       }
     }
     document.getElementById('res-cozy').textContent = `Lv.${st.cozyTier.level}`;
