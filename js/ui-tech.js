@@ -368,22 +368,14 @@ window.ZS = window.ZS || {};
     }
 
     const spareCombat = Math.max(0, (jobs.combat || 0) - popUsed);
-    const hqRatePct = Math.min(25, spareCombat * 5);
-    const scavWood = (st.hqLevel || 1) === 1 ? spareCombat * 2 : 0;
-    const scavScrap = (st.hqLevel || 1) === 1 ? spareCombat * 1 : 0;
-
     const drill1Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_1') : 0;
-    const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
     const rpGainPreview = getDailyRpPreview(st);
-    const bossRpBonus = Math.round(6 * (1 + (st.b1BossRpMult || 0)));
 
     const prodCount = jobs.prod || 0;
     const prodWoodPreview = Math.round(prodCount * 5 + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0));
     const prodScrapPreview = Math.round(prodCount * 4 + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0));
-    const prodCoinPreview = Math.round(st.b1SupplyCoin || 0);
     const digPerProd = drill1Lv > 0 ? 4 : 3;
     const digGainPreview = Math.round((2 + prodCount * digPerProd) * (1 + (st.b1DigApBonusMult || st.b1DigMult || 0)));
-    const digCapPreview = Math.max(16, (2 + prodCount * digPerProd) * 2 + (drill1Lv > 0 ? 8 : 0));
 
     const b1Open = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
     const combatAtFloor = (jobs.combat || 0) <= popUsed;
@@ -416,15 +408,14 @@ window.ZS = window.ZS || {};
           ? `초소 고정 인원(${popUsed}명) 미만으로 감원 불가`
           : '전투요원 1명을 미배정 대기 풀로 감원',
         plusTitle: plusLockHint || '미배정 요원 1명을 전투요원으로 배정',
-        statLeftIcon: 'cat-defense',
-        statLeftCls: popUsed > 0 ? 'icon-coin' : 'icon-muted',
-        statLeftTop: `초소 고정 ${popUsed}명`,
-        statLeftSub: popUsed > 0 ? (combatAtFloor ? '감원 하한선' : '전선 초소 배치') : '고정 인원 없음',
-        statRightIcon: 'stat-dmg',
-        statRightCls: spareCombat > 0 ? 'icon-heal' : 'icon-muted',
-        statRightTop: `예비 ${spareCombat}명 · 연사 +${hqRatePct}%`,
-        statRightSub: (st.hqLevel || 1) === 1 ? `채집 +${scavWood}목/+${scavScrap}고` : '본부 화기 지원',
-        floorNote: combatAtFloor && popUsed > 0 ? '초소 배치 인원은 감원 불가' : '미배정 풀로 1명 이동 가능'
+        stats: [
+          {
+            icon: 'cat-defense',
+            cls: popUsed > 0 ? 'icon-coin' : 'icon-muted',
+            main: `초소 ${popUsed}/${jobs.combat || 0}명`,
+            sub: spareCombat > 0 ? `여유 ${spareCombat}명` : '전원 초소 배치'
+          }
+        ]
       },
       {
         role: 'research',
@@ -437,17 +428,14 @@ window.ZS = window.ZS || {};
         canPlus: !isGameOver && canAddAny,
         minusTitle: (jobs.research || 0) <= 0 ? '감원할 연구요원 없음' : '연구요원 1명을 미배정 대기 풀로 감원',
         plusTitle: plusLockHint || '미배정 요원 1명을 연구요원으로 배정',
-        statLeftIcon: 'res-rp',
-        statLeftCls: 'icon-rp',
-        statLeftTop: `+${rpGainPreview} RP / 일`,
-        statLeftSub: `기본 +${hqInfo.baseRpPerScientist || 2} RP/인${drill2Lv > 0 || (st.b1LabMult || 0) > 0 ? ` · 증폭` : ''}`,
-        statRightIcon: 'hud-enemy',
-        statRightCls: 'icon-rp',
-        statRightTop: `보스 +${bossRpBonus} RP`,
-        statRightSub: (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0) > 0
-          ? `연구실 고정 +${Math.round((st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0))}`
-          : '새벽 자동 정산',
-        floorNote: '연구트리(T) 해금 포인트 생산'
+        stats: [
+          {
+            icon: 'res-rp',
+            cls: 'icon-rp',
+            main: `+${rpGainPreview} RP / 일`,
+            sub: `1인당 +${hqInfo.baseRpPerScientist || 2} RP`
+          }
+        ]
       },
       {
         role: 'prod',
@@ -460,15 +448,29 @@ window.ZS = window.ZS || {};
         canPlus: !isGameOver && canAddAny,
         minusTitle: (jobs.prod || 0) <= 0 ? '감원할 생산요원 없음' : '생산요원 1명을 미배정 대기 풀로 감원',
         plusTitle: plusLockHint || '미배정 요원 1명을 생산요원으로 배정',
-        statLeftIcon: 'res-wood',
-        statLeftCls: 'icon-wood',
-        statLeftTop: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
-        statLeftSub: prodCoinPreview > 0 ? `코인 +${prodCoinPreview}/일 포함` : '새벽 자원 채굴',
-        statRightIcon: 'b1-dig',
-        statRightCls: b1Open ? 'icon-ap' : 'icon-muted',
-        statRightTop: b1Open ? `+${digGainPreview} AP / 일` : '본부 Lv.2 개방',
-        statRightSub: b1Open ? `보유 ${st.digAp || 0}/${st.digApCap || digCapPreview} AP` : '지하 굴착(AP) 준비',
-        floorNote: b1Open ? '지하 암반 굴착력(AP) 생산' : '목재·고철 보급 생산'
+        stats: b1Open
+          ? [
+              {
+                icon: 'res-wood',
+                cls: 'icon-wood',
+                main: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
+                sub: '일일 자원'
+              },
+              {
+                icon: 'b1-dig',
+                cls: 'icon-ap',
+                main: `+${digGainPreview} AP / 일`,
+                sub: '지하 굴착력'
+              }
+            ]
+          : [
+              {
+                icon: 'res-wood',
+                cls: 'icon-wood',
+                main: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
+                sub: '일일 자원 생산'
+              }
+            ]
       }
     ];
 
@@ -479,23 +481,23 @@ window.ZS = window.ZS || {};
           <div class="pop-role-bar"></div>
           <header class="pop-role-head">
             <span class="pop-role-title">${escapeHtml(rc.title)}</span>
-            <span class="pop-role-sub">${escapeHtml(rc.floorNote)}</span>
           </header>
           <div class="pop-role-hero">
             <span class="pop-role-emblem">${ozIcon(rc.iconId, 44, rc.iconCls)}</span>
             <strong class="pop-role-count">${rc.count}</strong>
           </div>
-          <div class="pop-role-stats">
-            <div class="pop-stat-box">
-              <span class="pop-stat-icon">${ozIcon(rc.statLeftIcon, 16, rc.statLeftCls)}</span>
-              <span class="pop-stat-main">${escapeHtml(rc.statLeftTop)}</span>
-              <span class="pop-stat-sub">${escapeHtml(rc.statLeftSub)}</span>
-            </div>
-            <div class="pop-stat-box">
-              <span class="pop-stat-icon">${ozIcon(rc.statRightIcon, 16, rc.statRightCls)}</span>
-              <span class="pop-stat-main">${escapeHtml(rc.statRightTop)}</span>
-              <span class="pop-stat-sub">${escapeHtml(rc.statRightSub)}</span>
-            </div>
+          <div class="pop-role-stats ${rc.stats.length === 1 ? 'single' : ''}">
+            ${rc.stats
+              .map(
+                (sb) => `
+              <div class="pop-stat-box">
+                <span class="pop-stat-icon">${ozIcon(sb.icon, 16, sb.cls)}</span>
+                <span class="pop-stat-main">${escapeHtml(sb.main)}</span>
+                <span class="pop-stat-sub">${escapeHtml(sb.sub)}</span>
+              </div>
+            `
+              )
+              .join('')}
           </div>
           <div class="pop-stepper">
             <button
@@ -696,7 +698,6 @@ window.ZS = window.ZS || {};
             <strong class="tech-insp-title">${escapeHtml(t.name)}</strong>
             <span class="tech-insp-badge ${stInfo.stateCls}">${escapeHtml(stInfo.stateLabel)}</span>
           </div>
-          <div class="tech-insp-sub">${escapeHtml(branch.name)} · ${escapeHtml(t.desc)}</div>
         </div>
       </div>
 

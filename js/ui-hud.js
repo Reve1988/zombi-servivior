@@ -96,7 +96,7 @@ window.ZS = window.ZS || {};
     }
 
     const pwrVal = Math.round(st.power);
-    document.getElementById('res-power').textContent = `${pwrVal} / ${st.powerCap}`;
+    document.getElementById('res-power').textContent = isNightBlackout ? '정전' : `${pwrVal} / ${st.powerCap}`;
     const pwrPct = st.powerCap > 0 ? Math.min(100, (st.power / st.powerCap) * 100) : 0;
     const pwrBar = document.getElementById('res-power-bar');
     pwrBar.style.width = `${Math.max(0, pwrPct)}%`;
@@ -116,7 +116,8 @@ window.ZS = window.ZS || {};
     }
 
     document.querySelector('.power-pill').classList.toggle('blackout', isNightBlackout);
-    document.getElementById('res-power-sub').textContent = formatPowerSubText(st);
+    const subEl = document.getElementById('res-power-sub');
+    if (subEl) subEl.textContent = '';
   }
 
   function syncDivisionBadge(st) {
@@ -139,34 +140,17 @@ window.ZS = window.ZS || {};
     if (sig === lastDivBadgeSig) return;
     lastDivBadgeSig = sig;
 
-    let statusText = def.badgeTag || '표준 교리';
-    let statusCls = 'active-gold';
+    let dotCls = 'on';
     let badgeVariantCls = 'div-mobile';
     if (divId === 'iron_engineers') {
       badgeVariantCls = 'div-iron';
-      statusText = '축성 +35% · 수리 12s';
-      statusCls = 'active-heal';
+      dotCls = 'on-heal';
     } else if (divId === 'nightwatch') {
       badgeVariantCls = 'div-nightwatch';
-      if (isNight && blackout) {
-        statusText = '야간 유격 활성';
-        statusCls = 'active-heal';
-      } else {
-        statusText = 'XP ×2 · 정전 유격';
-        statusCls = '';
-      }
+      dotCls = isNight && blackout ? 'on-heal' : 'on';
     } else if (divId === 'arc_tech') {
       badgeVariantCls = 'div-arc';
-      if (arcActive) {
-        statusText = 'ARC ≥70%';
-        statusCls = 'arc-active';
-      } else if (blackout) {
-        statusText = '정전 대기';
-        statusCls = 'warn-dim';
-      } else {
-        statusText = `ARC <70% (${pwrPct}%)`;
-        statusCls = 'warn-dim';
-      }
+      dotCls = arcActive ? 'arc-on' : 'off';
     }
 
     badgeEl.className = `hud-division-badge ${badgeVariantCls}`;
@@ -176,8 +160,8 @@ window.ZS = window.ZS || {};
     if (iconEl) iconEl.innerHTML = ozIcon(def.iconId || 'div-mobile', 15);
     if (nameEl) nameEl.textContent = def.name || divId;
     if (statusEl) {
-      statusEl.className = `div-badge-status${statusCls ? ' ' + statusCls : ''}`;
-      statusEl.textContent = statusText;
+      statusEl.className = `div-status-dot ${dotCls}`;
+      statusEl.textContent = '';
     }
 
     const prosList = Array.isArray(def.pros) ? def.pros : [];
@@ -325,11 +309,12 @@ window.ZS = window.ZS || {};
     const unassignedCount = Math.max(0, (st.agents || 0) - assignedCount);
     const popEl = document.getElementById('res-pop');
     if (popEl) {
-      popEl.innerHTML = `${st.agents}/${st.popCap} <span class="pop-cap">(전${jobs.combat} 연${jobs.research} 생${jobs.prod})</span>`;
+      popEl.textContent = `${st.agents}/${st.popCap}`;
     }
     const popPillEl = document.getElementById('pop-pill');
     if (popPillEl) {
-      popPillEl.title = `작전 요원 ${st.agents}/${st.popCap}명 (초소 ${st.popUsed}/${jobs.combat} · 연구 ${jobs.research} · 생산 ${jobs.prod}${unassignedCount > 0 ? ` · 대기 ${unassignedCount}` : ''}) — 클릭하여 인구 배치 [P]`;
+      popPillEl.classList.toggle('has-unassigned', unassignedCount > 0);
+      popPillEl.title = `작전 요원 ${st.agents}/${st.popCap}명 (미배정 ${unassignedCount}명) — 클릭하여 인구 배치 [P]`;
     }
     const unassignedChipEl = document.getElementById('hud-unassigned-chip');
     if (unassignedChipEl) {
@@ -342,7 +327,7 @@ window.ZS = window.ZS || {};
     }
     const rpPillEl = document.getElementById('rp-pill');
     if (rpPillEl) {
-      rpPillEl.title = `연구포인트(RP) · 현재 본부 Lv.${st.hqLevel || 1} 연구 티어 인가 (잔여 RP 누적 이월 — 클릭하여 연구 트리 [T])`;
+      rpPillEl.title = `연구포인트(RP) · 클릭하여 연구 트리 [T]`;
     }
 
     // Cozy Morale Lv.1~8 display, 8-segment bar, heart stroke scaling & table tooltip (dirty-memoized)
@@ -388,50 +373,23 @@ window.ZS = window.ZS || {};
         segWrap.innerHTML = segHtml;
       }
 
-      const floorCap = ZS.DATA.COZY_FLOOR_CAP || 60;
-      const rowsHtml = tiers
-        .map(
-          (t) => `
-          <tr class="${t.level === tier.level ? 'current-tier' : ''}">
-            <td>Lv.${t.level}</td>
-            <td>${escapeHtml(t.title)}</td>
-            <td>${t.min}</td>
-            <td>+${Math.round(t.agentDmg * 100)}%</td>
-            <td>+${Math.round(t.fireRate * 100)}%</td>
-            <td>+${Math.round(t.coinBonus * 100)}%</td>
-            <td>+${Math.round((t.xpBonus || 0) * 100)}%</td>
-            <td>${Math.round(t.freeRepair * 100)}%</td>
-          </tr>`
-        )
-        .join('');
+      const buffParts = [];
+      if (tier.agentDmg > 0) buffParts.push(`화력 +${Math.round(tier.agentDmg * 100)}%`);
+      if (tier.fireRate > 0) buffParts.push(`연사 +${Math.round(tier.fireRate * 100)}%`);
+      if (tier.coinBonus > 0) buffParts.push(`코인 +${Math.round(tier.coinBonus * 100)}%`);
+      if ((tier.xpBonus || 0) > 0) buffParts.push(`숙련 +${Math.round(tier.xpBonus * 100)}%`);
+      const buffLine = buffParts.length > 0 ? buffParts.join(' · ') : '모던 꾸미기로 등급 상승';
 
       document.getElementById('cozy-tooltip').innerHTML = `
         <div class="cozy-popover-head">
           <span class="inline-icon-text" style="font-weight:800;color:${P.gold};">${ozIcon('res-cozy', 15, 'icon-coin')}<span>${escapeHtml(tier.title)} (Lv.${tier.level})</span></span>
-          <span style="font-size:12px;color:#e6eef7;">총 <b>${st.cozyScore}점</b></span>
+          <span style="font-size:12px;color:#e6eef7;"><b>${st.cozyScore}점</b></span>
         </div>
-        <div class="cozy-popover-meta">
-          바닥재 ${st.cozyFloorScore || 0}/${floorCap}점${(st.cozyFloorRaw || 0) >= floorCap ? ' (상한)' : ''} · 구조물 ${st.cozyStructScore || 0}점${st.cozySynergyScore ? ` · 라운지 +${st.cozySynergyScore}` : ''} · 다양성 <span style="color:${P.gold}">+${st.cozyDiversityBonus}</span>
-        </div>
-        <table class="cozy-table">
-          <thead>
-            <tr>
-              <th>등급</th>
-              <th>타이틀</th>
-              <th>요구</th>
-              <th>요원화력</th>
-              <th>연사</th>
-              <th>코인</th>
-              <th>숙련XP</th>
-              <th>수리</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
+        <div class="cozy-buff-line">${escapeHtml(buffLine)}</div>
         ${
           nextTier
-            ? `<div class="cozy-popover-foot">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b> 필요</div>`
-            : `<div class="cozy-popover-foot" style="color:${P.gold};">★ 최고 안락함 등급(Lv.8) 달성!</div>`
+            ? `<div class="cozy-popover-foot">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b></div>`
+            : `<div class="cozy-popover-foot" style="color:${P.gold};">★ 최고 안락함 등급(Lv.8) 달성</div>`
         }
       `;
     }
@@ -618,19 +576,14 @@ window.ZS = window.ZS || {};
     }
 
     let patTitle = intel.patternLabel || '침공 경보';
-    let patDesc = '';
     if (intel.pattern === 'single') {
       patTitle = `${mainSides[0] || '북동'} 정면 침공`;
-      patDesc = '1개 방위 100% 집중 돌파';
     } else if (intel.pattern === 'flank') {
       patTitle = `${mainSides[0] || ''}·${subSides[0] || ''} 측면`;
-      patDesc = `주력 ${mainSides[0] || ''} 75% · 견제 ${subSides[0] || ''} 25%`;
     } else if (intel.pattern === 'dual') {
       patTitle = `${mainSides.join('·')} 협공`;
-      patDesc = '주공 2면 각 45% · 기습 10%';
     } else {
       patTitle = '전방위 포위';
-      patDesc = `주공 ${mainSides.join('·')} 35% · 보조 15%`;
     }
 
     const ENEMY_ORDER = [
@@ -676,12 +629,11 @@ window.ZS = window.ZS || {};
           ${bossDot}
         </svg>
       </div>
-      <div class="recon-pat">${escapeHtml(patTitle)}<small>${escapeHtml(patDesc)}</small></div>
+      <div class="recon-pat">${escapeHtml(patTitle)}</div>
       <div class="recon-chips">${chipsHtml}</div>
       ${bossRowHtml}
       <div class="recon-foot">
         <span class="recon-total-badge">${ozIcon('hud-enemy', 15, 'icon-danger')}<strong>×${intel.totalCount || 0}</strong></span>
-        <span class="recon-route-stat">${showPaths ? `경로 ${pathLen} · 공성 ${breachLen}` : '경로선 숨김'}</span>
       </div>
     `;
   }
@@ -791,53 +743,41 @@ window.ZS = window.ZS || {};
     const coinTotal = (report.totalCoin || 0) + (report.supplyCoin || 0);
     const jobs = report.jobs || { combat: 0, research: 0, prod: 0 };
 
-    const woodParts = [`기본 +${report.woodReward || 0}`];
-    if (report.prodWood > 0) woodParts.push(`생산 +${report.prodWood}`);
-    if (report.scavengeWood > 0) woodParts.push(`수색 +${report.scavengeWood}`);
-
-    const scrapParts = [`기본 +${report.scrapReward || 0}`];
-    if (report.prodScrap > 0) scrapParts.push(`생산 +${report.prodScrap}`);
-    if (report.scavengeScrap > 0) scrapParts.push(`수색 +${report.scavengeScrap}`);
-
-    const coinParts = [`기본 +${report.baseCoin || 0}`];
-    if (report.bonusCoin > 0) coinParts.push(`안락함 +${report.bonusCoin}`);
-    if (report.supplyCoin > 0) coinParts.push(`물류 +${report.supplyCoin}`);
-
     const cells = [
       {
         icon: 'res-wood',
         iconCls: 'icon-wood',
-        label: '목재 정산',
+        label: '목재 획득',
         val: `+${woodTotal}`,
-        sub: woodParts.join(' · ')
+        sub: ''
       },
       {
         icon: 'res-scrap',
         iconCls: 'icon-scrap',
-        label: '고철 정산',
+        label: '고철 획득',
         val: `+${scrapTotal}`,
-        sub: scrapParts.join(' · ')
+        sub: ''
       },
       {
         icon: 'res-coin',
         iconCls: 'icon-coin',
         label: '코인 보상',
         val: `+${coinTotal}`,
-        sub: coinParts.join(' · ')
+        sub: ''
       },
       {
         icon: 'res-rp',
         iconCls: 'icon-rp',
         label: '연구 포인트',
         val: `+${report.rpGain || 0} RP`,
-        sub: `현재 보유 ${Math.floor(report.totalRp || 0)} RP`
+        sub: `보유 ${Math.floor(report.totalRp || 0)} RP`
       },
       {
         icon: 'act-repair',
         iconCls: 'icon-heal',
-        label: '충전 · 야간 정비',
+        label: '전력 충전 · 정비',
         val: `전력 +${report.gainedPower || 0}`,
-        sub: `무료 자동 수리 ${report.freeRepairPct || 0}% 완료`
+        sub: '주간 충전 완료'
       },
       report.b1Open
         ? {
@@ -850,9 +790,9 @@ window.ZS = window.ZS || {};
         : {
             icon: 'res-agent',
             iconCls: 'icon-coin',
-            label: '현재 배정 현황',
+            label: '생존 인원',
             val: `${report.totalAgents || 0}/${report.popCap || 4}명`,
-            sub: `전투 ${jobs.combat || 0} · 연구 ${jobs.research || 0} · 생산 ${jobs.prod || 0}`
+            sub: ''
           }
     ];
 
@@ -862,7 +802,7 @@ window.ZS = window.ZS || {};
         <div class="wr-stat-cell">
           <span class="wr-stat-label">${ozIcon(c.icon, 14, c.iconCls)}<span>${escapeHtml(c.label)}</span></span>
           <strong class="wr-stat-val">${escapeHtml(c.val)}</strong>
-          <span class="wr-stat-sub">${escapeHtml(c.sub)}</span>
+          ${c.sub ? `<span class="wr-stat-sub">${escapeHtml(c.sub)}</span>` : ''}
         </div>
       `
       )
@@ -898,16 +838,17 @@ window.ZS = window.ZS || {};
       lastPopSig = nextPopSig;
       const popEl = document.getElementById('res-pop');
       if (popEl) {
-        popEl.innerHTML = `${st.agents}/${st.popCap} <span class="pop-cap">(전${jobs.combat} 연${jobs.research} 생${jobs.prod})</span>`;
+        popEl.textContent = `${st.agents}/${st.popCap}`;
       }
+      const assignedCount = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
+      const unassignedCount = Math.max(0, (st.agents || 0) - assignedCount);
+      document.getElementById('pop-pill')?.classList.toggle('has-unassigned', unassignedCount > 0);
       const rpEl = document.getElementById('res-rp');
       if (rpEl) {
         rpEl.textContent = `${Math.floor(st.rp || 0)} RP`;
       }
       const unassignedChipEl = document.getElementById('hud-unassigned-chip');
       if (unassignedChipEl) {
-        const assignedCount = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
-        const unassignedCount = Math.max(0, (st.agents || 0) - assignedCount);
         unassignedChipEl.textContent = `+${unassignedCount}`;
         unassignedChipEl.classList.toggle('hidden', unassignedCount <= 0);
       }

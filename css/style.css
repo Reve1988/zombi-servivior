@@ -547,8 +547,8 @@ button, input, select {
   position: absolute;
   top: calc(100% + 12px);
   right: -12px;
-  width: 428px;
-  padding: 12px 14px;
+  width: 280px;
+  padding: 11px 13px;
   background: #0E1622;
   border: 1.5px solid var(--col-gold-soft);
   border-radius: 8px;
@@ -565,57 +565,22 @@ button, input, select {
   margin-bottom: 5px;
 }
 
-.cozy-popover-meta {
+.cozy-buff-line {
   font-size: 12px;
-  color: #A9BCCF;
-  margin-bottom: 6px;
+  font-weight: 700;
+  color: #FFE49E;
+  line-height: 1.35;
 }
 
 .cozy-popover-foot {
-  margin-top: 7px;
-  font-size: 12px;
-  color: #A9BCCF;
-}
-
-.cozy-table {
-  width: 100%;
-  border-collapse: collapse;
   margin-top: 6px;
   font-size: 12px;
-}
-
-.cozy-table th {
-  text-align: center;
   color: #A9BCCF;
-  font-weight: 600;
-  padding: 3px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-.cozy-table th:nth-child(2) {
-  text-align: left;
-}
-
-.cozy-table td {
-  text-align: center;
-  color: #d3dfec;
-  padding: 3px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.cozy-table td:nth-child(2) {
-  text-align: left;
-  white-space: nowrap;
-}
-
-.cozy-table tr.current-tier {
-  background: rgba(255, 201, 74, 0.15);
-  color: #FFC94A;
-  font-weight: 800;
-}
-
-.cozy-table tr.current-tier td {
-  color: #FFC94A;
+.pop-pill.has-unassigned {
+  border-color: rgba(255, 201, 74, 0.72);
+  box-shadow: 0 0 12px rgba(255, 201, 74, 0.24);
 }
 
 .cozy-pill:hover .cozy-popover {
@@ -1331,7 +1296,7 @@ button, input, select {
 .recon-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 6px;
   padding-top: 6px;
   border-top: 1px solid rgba(148, 178, 210, 0.16);
@@ -3587,40 +3552,28 @@ body.main-menu-active #game-canvas {
   text-overflow: ellipsis;
 }
 
-.div-badge-status {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(34, 49, 68, 0.72);
-  border: 1px solid rgba(148, 178, 210, 0.24);
-  color: #CBD9E8;
-  white-space: nowrap;
+.div-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #FFC94A;
+  box-shadow: 0 0 6px rgba(255, 201, 74, 0.65);
   flex-shrink: 0;
 }
 
-.div-badge-status.active-gold {
-  background: rgba(255, 201, 74, 0.16);
-  border-color: rgba(255, 201, 74, 0.45);
-  color: #FFE49E;
+.div-status-dot.on-heal {
+  background: #4ADE80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.65);
 }
 
-.div-badge-status.active-heal {
-  background: rgba(74, 222, 128, 0.16);
-  border-color: rgba(74, 222, 128, 0.48);
-  color: #BBF7D0;
+.div-status-dot.arc-on {
+  background: #5EF2FF;
+  box-shadow: 0 0 7px rgba(94, 242, 255, 0.78);
 }
 
-.div-badge-status.arc-active {
-  background: rgba(94, 242, 255, 0.18);
-  border-color: rgba(94, 242, 255, 0.60);
-  color: #B4FAFF;
-}
-
-.div-badge-status.warn-dim {
-  background: rgba(255, 77, 109, 0.14);
-  border-color: rgba(255, 77, 109, 0.38);
-  color: #FECDD3;
+.div-status-dot.off {
+  background: #FF4D6D;
+  box-shadow: 0 0 5px rgba(255, 77, 109, 0.55);
 }
 
 .division-popover {
@@ -4558,6 +4511,10 @@ body.main-menu-active #game-canvas {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+}
+
+.pop-role-stats.single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .pop-stat-box {
