@@ -716,7 +716,6 @@ window.ZS = window.ZS || {};
     const codeEl = document.getElementById('wave-report-code');
     const highlightsEl = document.getElementById('wave-report-highlights');
     const gridEl = document.getElementById('wave-report-grid');
-    const shortcutsEl = document.getElementById('wave-report-shortcuts');
     if (!modal || !highlightsEl || !gridEl) return;
 
     const clearedPad = String(Math.max(1, Math.floor(report.clearedWave || 1))).padStart(2, '0');
@@ -732,7 +731,7 @@ window.ZS = window.ZS || {};
         icon: 'res-agent',
         iconCls: 'icon-coin',
         title: `생존자 ${report.arrivedAgent}명이 쉘터에 합류하였습니다.`,
-        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 · 아래 [인구 배치] 또는 [P] 키로 새 요원의 직무를 배정하세요.`
+        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 · 인구 배치 [P]에서 새 요원의 직무를 배정하세요.`
       });
     } else if (report.popFull) {
       alerts.push({
@@ -868,25 +867,6 @@ window.ZS = window.ZS || {};
       `
       )
       .join('');
-
-    if (shortcutsEl) {
-      shortcutsEl.innerHTML = `
-        <button id="btn-wr-open-pop" type="button" class="wr-shortcut-btn">
-          ${ozIcon('res-agent', 14, 'icon-coin')}<span>인구 배치 [P]</span>
-        </button>
-        <button id="btn-wr-open-tech" type="button" class="wr-shortcut-btn">
-          ${ozIcon('res-rp', 14, 'icon-rp')}<span>연구 트리 [T]</span>
-        </button>
-      `;
-      document.getElementById('btn-wr-open-pop')?.addEventListener('click', () => {
-        closeWaveReportModal();
-        if (U.openPopModal) U.openPopModal();
-      });
-      document.getElementById('btn-wr-open-tech')?.addEventListener('click', () => {
-        closeWaveReportModal();
-        if (U.openTechModal) U.openTechModal();
-      });
-    }
 
     document.getElementById('wave-banner')?.classList.add('hidden');
     modal.classList.remove('hidden');

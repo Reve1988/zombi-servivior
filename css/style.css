@@ -4837,38 +4837,10 @@ body.main-menu-active #game-canvas {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   padding-top: 10px;
   border-top: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.wave-report-shortcuts {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.wr-shortcut-btn {
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.36);
-  background: linear-gradient(180deg, #243144 0%, #172130 100%);
-  color: #E2E8F0;
-  font-size: 12px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: border-color 0.12s ease, transform 0.12s ease;
-}
-
-.wr-shortcut-btn:hover {
-  border-color: #FFC94A;
-  color: #FFF4D2;
-  transform: translateY(-1px);
 }
 
 .wave-report-confirm-btn {
