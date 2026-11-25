@@ -855,11 +855,11 @@ window.ZS = window.ZS || {};
       state.digAp = Math.min(digCap, (state.digAp || 0) + digGain);
     }
 
-    // 4. Morning Survivor Arrival (every day below 6 agents, every 2 waves at 6+ agents)
+    // 4. Morning Survivor Arrival (every day below 8 agents, every 2 waves at 8+ agents)
     let arrivedAgent = 0;
     let recruitNote = '';
     if (state.agents < state.popCap) {
-      if (state.agents < 6) {
+      if (state.agents < 8) {
         if (G.grantAgents) G.grantAgents(1);
         else state.agents += 1;
         arrivedAgent = 1;
@@ -899,27 +899,63 @@ window.ZS = window.ZS || {};
       newlyUnlocked.push(G.getDivisionDef('arc_tech').name);
     }
 
-    const rpMsg = rpGain > 0 ? ` · 연구 +${rpGain} RP` : '';
-    const prodMsg = prodWood > 0 || prodScrap > 0 ? ` · 생산 +${prodWood}W/+${prodScrap}S` : '';
-    const supplyCoinMsg = supplyCoin > 0 ? ` · 물류 +${supplyCoin}C` : '';
-    const scavMsg = scavengeWood > 0 ? ` · 수색 +${scavengeWood}W/+${scavengeScrap}S` : '';
-    const digMsg = digGain > 0 ? ` · 굴착력 +${digGain} AP` : '';
-    const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
-    G.banner(
-      `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
-      `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 전력 +${gainedPower}${rpMsg}${prodMsg}${supplyCoinMsg}${scavMsg}${digMsg}${agentMsg}`,
-      'good'
-    );
-    if (newlyUnlocked.length > 0) {
-      G.banner(
-        `사령관 분과 영구 해금: ${newlyUnlocked.join(', ')}`,
-        '새 작전 개시 시 사령관 지휘 분과 선택 창에서 즉시 출격할 수 있습니다!',
-        'good'
-      );
+    const hqLevels = DATA.HQ_LEVELS || [];
+    let unlockedHqLevel = null;
+    for (let hi = 0; hi < hqLevels.length; hi++) {
+      const hl = hqLevels[hi];
+      if (hl.level > (state.hqLevel || 1) && hl.reqWave === state.wave) {
+        unlockedHqLevel = hl.level;
+        break;
+      }
     }
 
     G.saveGame();
     G.notifyUi();
+
+    if (ZS._UI && ZS._UI.openWaveReportModal) {
+      ZS._UI.openWaveReportModal({
+        clearedWave,
+        nextWave: state.wave,
+        woodReward,
+        scrapReward,
+        baseCoin,
+        bonusCoin,
+        totalCoin,
+        supplyCoin,
+        prodWood,
+        prodScrap,
+        scavengeWood,
+        scavengeScrap,
+        gainedPower,
+        freeRepairPct: Math.round(freeRatio * 100),
+        rpGain,
+        totalRp: state.rp || 0,
+        digGain,
+        digAp: state.digAp || 0,
+        digApCap: state.digApCap || 0,
+        b1Open: (state.hqLevel || 1) >= 2 && !!state.undergroundUnlocked,
+        arrivedAgent,
+        popFull: state.agents >= state.popCap,
+        recruitWaiting: arrivedAgent === 0 && state.agents < state.popCap && (state.agentRecruitProgress || 0) > 0,
+        totalAgents: state.agents,
+        popCap: state.popCap,
+        jobs: { ...(state.jobs || { combat: state.agents, research: 0, prod: 0 }) },
+        unlockedHqLevel,
+        newlyUnlocked
+      });
+    } else {
+      const rpMsg = rpGain > 0 ? ` · 연구 +${rpGain} RP` : '';
+      const prodMsg = prodWood > 0 || prodScrap > 0 ? ` · 생산 +${prodWood}W/+${prodScrap}S` : '';
+      const supplyCoinMsg = supplyCoin > 0 ? ` · 물류 +${supplyCoin}C` : '';
+      const scavMsg = scavengeWood > 0 ? ` · 수색 +${scavengeWood}W/+${scavengeScrap}S` : '';
+      const digMsg = digGain > 0 ? ` · 굴착력 +${digGain} AP` : '';
+      const agentMsg = arrivedAgent > 0 ? ` · 생존자 +${arrivedAgent}명` : recruitNote;
+      G.banner(
+        `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
+        `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 전력 +${gainedPower}${rpMsg}${prodMsg}${supplyCoinMsg}${scavMsg}${digMsg}${agentMsg}`,
+        'good'
+      );
+    }
   }
 
   function triggerGameOver() {

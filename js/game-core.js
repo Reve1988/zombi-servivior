@@ -520,23 +520,11 @@ window.ZS = window.ZS || {};
           state.jobs[role] += 1;
           changed = true;
         } else {
-          const donorOrder = ['prod', 'combat', 'research'];
-          let donor = null;
-          for (let i = 0; i < donorOrder.length; i++) {
-            const dRole = donorOrder[i];
-            if (dRole === role) continue;
-            const hasSpare = dRole === 'combat'
-              ? state.jobs.combat > (state.popUsed || 0)
-              : (state.jobs[dRole] || 0) > 0;
-            if (hasSpare) {
-              donor = dRole;
-              break;
-            }
+          if (!changed) {
+            ZS.Audio.playError();
+            banner('미배정 인원 없음', '전원 배치 중입니다. 다른 직무에서 (-)로 감원한 뒤 (+)로 배정하세요.', 'warn');
           }
-          if (!donor) break;
-          state.jobs[donor] -= 1;
-          state.jobs[role] += 1;
-          changed = true;
+          break;
         }
       }
     }
