@@ -74,6 +74,10 @@ window.ZS = window.ZS || {};
     return !!(U.isAnyPopTechModalOpen && U.isAnyPopTechModalOpen());
   }
 
+  function isWaveReportModalOpen() {
+    return !!(U.isWaveReportModalOpen && U.isWaveReportModalOpen());
+  }
+
   function isGameOverModalOpen() {
     const modal = document.getElementById('gameover-modal');
     return !!(modal && !modal.classList.contains('hidden'));
@@ -186,7 +190,7 @@ window.ZS = window.ZS || {};
     document.getElementById('guide-modal')?.classList.add('hidden');
     document.getElementById('settings-popover')?.classList.add('hidden');
     document.getElementById('wave-banner')?.classList.add('hidden');
-    document.getElementById('arrival-toast')?.classList.add('hidden');
+    if (U.closeWaveReportModal) U.closeWaveReportModal();
     closeConfirmModal();
     if (U.closeTechPopModal) U.closeTechPopModal();
     if (U.setToolMode) U.setToolMode('inspect');
@@ -456,7 +460,7 @@ window.ZS = window.ZS || {};
       closeGameOverModal();
       document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
       document.getElementById('trader-modal')?.classList.add('hidden');
-      document.getElementById('arrival-toast')?.classList.add('hidden');
+      if (U.closeWaveReportModal) U.closeWaveReportModal();
       if (U.closeTechPopModal) U.closeTechPopModal();
       U.updateCursorTooltip();
       refreshMainMenuState();
@@ -711,7 +715,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) return;
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isWaveReportModalOpen() || isGameOverModalOpen()) return;
       if (e.button === 2) {
         const shouldTrackRotate =
           ZS.Game.state.activeLayer === 'underground' &&
@@ -758,7 +762,7 @@ window.ZS = window.ZS || {};
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) {
+      if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isWaveReportModalOpen() || isGameOverModalOpen()) {
         uiState.pointerClient.inside = false;
         uiState.hoverTile = null;
         uiState.hoverB1DoorEdge = null;
@@ -850,7 +854,7 @@ window.ZS = window.ZS || {};
     canvas.addEventListener(
       'wheel',
       (e) => {
-        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isGameOverModalOpen()) return;
+        if (uiState.mainMenuOpen || isConfirmModalOpen() || isDivisionModalOpen() || isTechModalOpen() || isWaveReportModalOpen() || isGameOverModalOpen()) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.91;
         ZS.Iso.zoomAtScreen(factor, e.clientX, e.clientY);
@@ -911,6 +915,10 @@ window.ZS = window.ZS || {};
           guideEl.classList.add('hidden');
           return;
         }
+        if (isWaveReportModalOpen()) {
+          if (U.closeWaveReportModal) U.closeWaveReportModal();
+          return;
+        }
         if (isTechModalOpen()) {
           if (U.closeTechPopModal) U.closeTechPopModal();
           return;
@@ -937,13 +945,22 @@ window.ZS = window.ZS || {};
       if (!isTyping && e.code === 'KeyP' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         setSettingsOpen(false);
+        if (U.closeWaveReportModal) U.closeWaveReportModal();
         if (U.togglePopModal) U.togglePopModal();
         return;
       }
       if (!isTyping && e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         setSettingsOpen(false);
+        if (U.closeWaveReportModal) U.closeWaveReportModal();
         if (U.toggleTechModal) U.toggleTechModal();
+        return;
+      }
+      if (isWaveReportModalOpen()) {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          if (U.closeWaveReportModal) U.closeWaveReportModal();
+        }
         return;
       }
       if (!isTyping && e.code === 'KeyB' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1143,20 +1160,14 @@ window.ZS = window.ZS || {};
       setSettingsOpen(false);
       if (U.togglePopModal) U.togglePopModal();
     });
-    const arrivalToastEl = document.getElementById('arrival-toast');
-    if (arrivalToastEl) {
-      arrivalToastEl.addEventListener('click', () => {
-        arrivalToastEl.classList.add('hidden');
-        openPop();
-      });
-      arrivalToastEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          arrivalToastEl.classList.add('hidden');
-          openPop();
-        }
-      });
-    }
+    document.getElementById('btn-close-wave-report')?.addEventListener('click', () => {
+      if (U.closeWaveReportModal) U.closeWaveReportModal();
+    });
+    document.getElementById('wave-report-modal')?.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.id === 'wave-report-modal') {
+        if (U.closeWaveReportModal) U.closeWaveReportModal();
+      }
+    });
     document.getElementById('btn-open-tech')?.addEventListener('click', () => {
       setSettingsOpen(false);
       if (U.toggleTechModal) U.toggleTechModal();

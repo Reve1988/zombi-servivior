@@ -27,7 +27,6 @@ window.ZS = window.ZS || {};
   };
 
   let bannerTimer = null;
-  let arrivalTimer = null;
   let lastCozyPulseSeq = 0;
   let lastWaveNumStr = '';
   let lastPhaseIconKey = '';
@@ -701,21 +700,197 @@ window.ZS = window.ZS || {};
     }, 4200);
   }
 
-  function showArrivalToast(count, totalAgents, popCap) {
-    const n = Math.max(0, Math.floor(Number(count) || 0));
-    if (uiState.mainMenuOpen || n <= 0) return;
-    const el = document.getElementById('arrival-toast');
-    const titleEl = document.getElementById('arrival-toast-title');
-    const subEl = document.getElementById('arrival-toast-sub');
-    if (!el || !titleEl || !subEl) return;
-    titleEl.textContent = `생존자 ${n}명이 쉘터에 합류하였습니다.`;
-    subEl.textContent = `현재 총원 ${totalAgents || 0}/${popCap || 4}명 · 클릭하거나 [P] 키로 직무를 배치하세요`;
-    el.classList.remove('hidden');
+  function isWaveReportModalOpen() {
+    const modal = document.getElementById('wave-report-modal');
+    return !!(modal && !modal.classList.contains('hidden'));
+  }
 
-    if (arrivalTimer) clearTimeout(arrivalTimer);
-    arrivalTimer = setTimeout(() => {
-      el.classList.add('hidden');
-    }, 5200);
+  function closeWaveReportModal() {
+    const modal = document.getElementById('wave-report-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function openWaveReportModal(report) {
+    if (uiState.mainMenuOpen || !report) return;
+    const modal = document.getElementById('wave-report-modal');
+    const codeEl = document.getElementById('wave-report-code');
+    const highlightsEl = document.getElementById('wave-report-highlights');
+    const gridEl = document.getElementById('wave-report-grid');
+    const shortcutsEl = document.getElementById('wave-report-shortcuts');
+    if (!modal || !highlightsEl || !gridEl) return;
+
+    const clearedPad = String(Math.max(1, Math.floor(report.clearedWave || 1))).padStart(2, '0');
+    const nextPad = String(Math.max(2, Math.floor(report.nextWave || 2))).padStart(2, '0');
+    if (codeEl) {
+      codeEl.textContent = `WAVE ${clearedPad} 방어 성공 · 다음 목표 WAVE ${nextPad}`;
+    }
+
+    const alerts = [];
+    if (report.arrivedAgent > 0) {
+      alerts.push({
+        cls: 'is-arrival',
+        icon: 'res-agent',
+        iconCls: 'icon-coin',
+        title: `생존자 ${report.arrivedAgent}명이 쉘터에 합류하였습니다.`,
+        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 · 아래 [인구 배치] 또는 [P] 키로 새 요원의 직무를 배정하세요.`
+      });
+    } else if (report.popFull) {
+      alerts.push({
+        cls: 'is-info',
+        icon: 'res-agent',
+        iconCls: 'icon-muted',
+        title: `요원 수용 한도 도달 (${report.totalAgents}/${report.popCap}명)`,
+        sub: '전술 막사나 모듈러 숙소를 증설하면 다음 새벽부터 생존자 합류가 재개됩니다.'
+      });
+    } else if (report.recruitWaiting) {
+      alerts.push({
+        cls: 'is-info',
+        icon: 'res-agent',
+        iconCls: 'icon-coin',
+        title: '신규 생존자 합류 대기 중 (1/2)',
+        sub: '다음 웨이브 방어에 성공하면 쉘터에 생존자 +1명이 추가로 합류합니다.'
+      });
+    }
+
+    if (report.unlockedHqLevel) {
+      const b1Note = report.unlockedHqLevel === 2 ? '와 지하 쉘터(B1)' : '';
+      alerts.push({
+        cls: 'is-hq',
+        icon: 'hud-hq',
+        iconCls: 'icon-heal',
+        title: `지휘 본부 Lv.${report.unlockedHqLevel} 증축 조건 달성!`,
+        sub: `중앙 지휘 본부를 클릭해 증축하면 상위 공학 연구 티어${b1Note}가 개방됩니다.`
+      });
+    }
+
+    if (Array.isArray(report.newlyUnlocked) && report.newlyUnlocked.length > 0) {
+      alerts.push({
+        cls: 'is-unlock',
+        icon: 'state-rank',
+        iconCls: 'icon-coin',
+        title: `사령관 지휘 분과 영구 해금: ${report.newlyUnlocked.join(', ')}`,
+        sub: '다음 새 작전 개시 시 지휘 분과 선택 창에서 즉시 출격할 수 있습니다.'
+      });
+    }
+
+    highlightsEl.innerHTML = alerts
+      .map(
+        (a) => `
+        <div class="wr-highlight ${a.cls}">
+          <span class="wr-hl-icon" aria-hidden="true">${ozIcon(a.icon, 20, a.iconCls)}</span>
+          <div class="wr-hl-copy">
+            <div class="wr-hl-title">${escapeHtml(a.title)}</div>
+            <div class="wr-hl-sub">${escapeHtml(a.sub)}</div>
+          </div>
+        </div>
+      `
+      )
+      .join('');
+
+    const woodTotal = (report.woodReward || 0) + (report.prodWood || 0) + (report.scavengeWood || 0);
+    const scrapTotal = (report.scrapReward || 0) + (report.prodScrap || 0) + (report.scavengeScrap || 0);
+    const coinTotal = (report.totalCoin || 0) + (report.supplyCoin || 0);
+    const jobs = report.jobs || { combat: 0, research: 0, prod: 0 };
+
+    const woodParts = [`기본 +${report.woodReward || 0}`];
+    if (report.prodWood > 0) woodParts.push(`생산 +${report.prodWood}`);
+    if (report.scavengeWood > 0) woodParts.push(`수색 +${report.scavengeWood}`);
+
+    const scrapParts = [`기본 +${report.scrapReward || 0}`];
+    if (report.prodScrap > 0) scrapParts.push(`생산 +${report.prodScrap}`);
+    if (report.scavengeScrap > 0) scrapParts.push(`수색 +${report.scavengeScrap}`);
+
+    const coinParts = [`기본 +${report.baseCoin || 0}`];
+    if (report.bonusCoin > 0) coinParts.push(`안락함 +${report.bonusCoin}`);
+    if (report.supplyCoin > 0) coinParts.push(`물류 +${report.supplyCoin}`);
+
+    const cells = [
+      {
+        icon: 'res-wood',
+        iconCls: 'icon-wood',
+        label: '목재 정산',
+        val: `+${woodTotal}`,
+        sub: woodParts.join(' · ')
+      },
+      {
+        icon: 'res-scrap',
+        iconCls: 'icon-scrap',
+        label: '고철 정산',
+        val: `+${scrapTotal}`,
+        sub: scrapParts.join(' · ')
+      },
+      {
+        icon: 'res-coin',
+        iconCls: 'icon-coin',
+        label: '코인 보상',
+        val: `+${coinTotal}`,
+        sub: coinParts.join(' · ')
+      },
+      {
+        icon: 'res-rp',
+        iconCls: 'icon-rp',
+        label: '연구 포인트',
+        val: `+${report.rpGain || 0} RP`,
+        sub: `현재 보유 ${Math.floor(report.totalRp || 0)} RP`
+      },
+      {
+        icon: 'act-repair',
+        iconCls: 'icon-heal',
+        label: '충전 · 야간 정비',
+        val: `전력 +${report.gainedPower || 0}`,
+        sub: `무료 자동 수리 ${report.freeRepairPct || 0}% 완료`
+      },
+      report.b1Open
+        ? {
+            icon: 'b1-dig',
+            iconCls: 'icon-ap',
+            label: '지하 굴착력',
+            val: `+${report.digGain || 0} AP`,
+            sub: `보유 ${report.digAp || 0}/${report.digApCap || 16} AP`
+          }
+        : {
+            icon: 'res-agent',
+            iconCls: 'icon-coin',
+            label: '현재 배정 현황',
+            val: `${report.totalAgents || 0}/${report.popCap || 4}명`,
+            sub: `전투 ${jobs.combat || 0} · 연구 ${jobs.research || 0} · 생산 ${jobs.prod || 0}`
+          }
+    ];
+
+    gridEl.innerHTML = cells
+      .map(
+        (c) => `
+        <div class="wr-stat-cell">
+          <span class="wr-stat-label">${ozIcon(c.icon, 14, c.iconCls)}<span>${escapeHtml(c.label)}</span></span>
+          <strong class="wr-stat-val">${escapeHtml(c.val)}</strong>
+          <span class="wr-stat-sub">${escapeHtml(c.sub)}</span>
+        </div>
+      `
+      )
+      .join('');
+
+    if (shortcutsEl) {
+      shortcutsEl.innerHTML = `
+        <button id="btn-wr-open-pop" type="button" class="wr-shortcut-btn">
+          ${ozIcon('res-agent', 14, 'icon-coin')}<span>인구 배치 [P]</span>
+        </button>
+        <button id="btn-wr-open-tech" type="button" class="wr-shortcut-btn">
+          ${ozIcon('res-rp', 14, 'icon-rp')}<span>연구 트리 [T]</span>
+        </button>
+      `;
+      document.getElementById('btn-wr-open-pop')?.addEventListener('click', () => {
+        closeWaveReportModal();
+        if (U.openPopModal) U.openPopModal();
+      });
+      document.getElementById('btn-wr-open-tech')?.addEventListener('click', () => {
+        closeWaveReportModal();
+        if (U.openTechModal) U.openTechModal();
+      });
+    }
+
+    document.getElementById('wave-banner')?.classList.add('hidden');
+    modal.classList.remove('hidden');
+    document.getElementById('btn-close-wave-report')?.focus();
   }
 
   let lastStrikeTargeting = null;
@@ -886,7 +1061,9 @@ window.ZS = window.ZS || {};
     updateCombatHud,
     renderReconCard,
     showWaveBanner,
-    showArrivalToast,
+    isWaveReportModalOpen,
+    openWaveReportModal,
+    closeWaveReportModal,
     updateLiveNightNumbers,
     initDebugToolbar
   });

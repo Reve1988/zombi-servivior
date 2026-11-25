@@ -317,17 +317,6 @@
     <div id="banner-sub" class="banner-sub"></div>
   </div>
 
-  <!-- Wave-End Survivor Arrival Alarm Toast -->
-  <div id="arrival-toast" class="arrival-toast hidden" role="status" aria-live="polite" tabindex="0" title="클릭하여 인구 직무 배치 [P] 열기">
-    <span class="arrival-toast-icon" aria-hidden="true">
-      <svg class="oz-icon icon-coin" width="20" height="20" viewBox="0 0 24 24"><use href="#oz-res-agent"></use></svg>
-    </span>
-    <div class="arrival-toast-copy">
-      <div id="arrival-toast-title" class="arrival-toast-title"></div>
-      <div id="arrival-toast-sub" class="arrival-toast-sub"></div>
-    </div>
-  </div>
-
   <!-- Collapsible Staging / Local Debug Toolbar (strictly double-gated by isDevEnvironment && ?debug=1) -->
   <div id="debug-toolbar" class="debug-toolbar hidden"></div>
 
@@ -681,6 +670,30 @@
       </div>
       <div id="tech-graph-wrap" class="tech-graph-wrap"></div>
       <div id="tech-inspector-bar" class="tech-inspector-bar"></div>
+    </div>
+  </div>
+
+  <!-- Dedicated Dawn Operation Settlement Report Modal -->
+  <div id="wave-report-modal" class="modal-backdrop wave-report-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="wave-report-title">
+    <div class="modal-card wave-report-card">
+      <div class="wave-report-head">
+        <span class="wave-report-badge" aria-hidden="true">
+          <svg class="oz-icon icon-coin" width="24" height="24" viewBox="0 0 24 24"><use href="#oz-phase-day"></use></svg>
+        </span>
+        <div class="wave-report-head-copy">
+          <div id="wave-report-code" class="wave-report-code">WAVE 01 방어 성공 · 주간 정비 개시</div>
+          <h2 id="wave-report-title" class="wave-report-title">새벽 작전 정산 보고서</h2>
+        </div>
+      </div>
+      <div id="wave-report-highlights" class="wave-report-highlights"></div>
+      <div id="wave-report-grid" class="wave-report-grid"></div>
+      <div class="wave-report-actions">
+        <div id="wave-report-shortcuts" class="wave-report-shortcuts"></div>
+        <button id="btn-close-wave-report" class="wave-report-confirm-btn" type="button">
+          <svg class="oz-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-stat-check"></use></svg>
+          <span>확인</span>
+        </button>
+      </div>
     </div>
   </div>
 
