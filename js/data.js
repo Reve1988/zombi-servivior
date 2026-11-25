@@ -238,7 +238,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.8.0',
+  VERSION: 'v0.8.1',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
   B1_SIZE: 23,
@@ -487,7 +487,7 @@ ZS.DATA = (function () {
     },
     {
       level: 2,
-      reqWave: 20,
+      reqWave: 10,
       name: '전술 작전 본부',
       cost: { wood: 140, scrap: 120, coin: 85 },
       maxHp: 1350,
@@ -515,7 +515,7 @@ ZS.DATA = (function () {
     },
     {
       level: 3,
-      reqWave: 40,
+      reqWave: 20,
       name: '통합 요새 사령부',
       cost: { wood: 260, scrap: 240, coin: 170 },
       maxHp: 2100,
@@ -541,7 +541,7 @@ ZS.DATA = (function () {
     },
     {
       level: 4,
-      reqWave: 60,
+      reqWave: 35,
       name: '이지스 코어 사령부',
       cost: { wood: 420, scrap: 400, coin: 300 },
       maxHp: 3100,
@@ -567,7 +567,7 @@ ZS.DATA = (function () {
     },
     {
       level: 5,
-      reqWave: 80,
+      reqWave: 50,
       name: '오메가 시타델 사령부',
       cost: { wood: 650, scrap: 640, coin: 520 },
       maxHp: 4600,
@@ -593,7 +593,7 @@ ZS.DATA = (function () {
     }
   ],
 
-  // 5-Branch RP Tech Tree gated by HQ Lv.1~5 (Wave 1/20/40/60/80)
+  // 5-Branch RP Tech Tree gated by HQ Lv.1~5 (Wave 1/10/20/35/50)
   TECH_BRANCHES: [
     { id: 'defense_eng', name: '방어선 공학', desc: '성벽·게이트·트랩 진화 및 복합 장갑 연구', accent: '#4ADE80' },
     { id: 'infantry_weap', name: '보병 화기 개량', desc: '저격탑 해금 및 무전력 요원 초소 2·3단계 개량', accent: '#FACC15' },
@@ -690,7 +690,7 @@ ZS.DATA = (function () {
       name: '무인 발칸 오토터렛',
       costRp: 5,
       maxLv: 1,
-      reqHqLevel: 2,
+      reqHqLevel: 1,
       req: [],
       desc: 'CIWS 발칸 오토터렛 건설 해금'
     },
@@ -700,7 +700,7 @@ ZS.DATA = (function () {
       name: '자동 포탑 화력 강화 Lv.2',
       costRp: 9,
       maxLv: 1,
-      reqHqLevel: 3,
+      reqHqLevel: 2,
       req: ['tur_vulcan'],
       desc: '모든 자동 포탑(발칸·로켓·EMP) Lv.2 강화 해금'
     },

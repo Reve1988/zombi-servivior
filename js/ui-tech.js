@@ -215,7 +215,7 @@ window.ZS = window.ZS || {};
 
             let reqHtml = '';
             if (check.lockedByHq) {
-              const reqWave = check.reqWave || (ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(check.reqHqLevel) : (check.reqHqLevel > 1 ? (check.reqHqLevel - 1) * 20 : 1));
+              const reqWave = check.reqWave || (ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(check.reqHqLevel) : ([1, 10, 20, 35, 50][check.reqHqLevel - 1] || 50));
               reqHtml = `<div class="tech-req-line hq-lock">본부 Lv.${check.reqHqLevel} (W${reqWave}) 필요</div>`;
             } else if (Array.isArray(t.req) && t.req.length > 0 && check.missingReq) {
               const reqNames = t.req.map((rid) => (tree[rid] ? tree[rid].name : rid));

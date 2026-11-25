@@ -314,18 +314,19 @@ window.ZS = window.ZS || {};
 
   function enterUnderground() {
     if (!isB1Unlocked()) {
+      const lv2Wave = G.getHqUnlockWave ? G.getHqUnlockWave(2) : 10;
       if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
-      if ((state.wave || 1) >= 20) {
+      if ((state.wave || 1) >= lv2Wave) {
         G.banner(
           '지휘 본부 Lv.2 증축 필요',
-          'WAVE 20에 도달했습니다! 먼저 중앙 지휘 본부를 Lv.2(전술 작전 본부)로 증축해야 지하 B1이 개방됩니다.',
+          `WAVE ${lv2Wave}에 도달했습니다! 먼저 중앙 지휘 본부를 Lv.2(전술 작전 본부)로 증축해야 지하 B1이 개방됩니다.`,
           'warn'
         );
         if (ZS._UI && ZS._UI.inspectTileAt && state.phase === 'day') {
           ZS._UI.inspectTileAt(DATA.HQ_POS.x, DATA.HQ_POS.y);
         }
       } else {
-        G.banner('지하 쉘터 미개방', 'WAVE 20 도달 후 지휘 본부를 Lv.2로 증축하면 지하 B1 승강기가 개방됩니다.', 'warn');
+        G.banner('지하 쉘터 미개방', `WAVE ${lv2Wave} 도달 후 지휘 본부를 Lv.2로 증축하면 지하 B1 승강기가 개방됩니다.`, 'warn');
       }
       return false;
     }

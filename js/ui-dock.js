@@ -72,7 +72,7 @@ window.ZS = window.ZS || {};
     const techDef = reqTechId && ZS.DATA.TECH_TREE ? ZS.DATA.TECH_TREE[reqTechId] : null;
     const techGate = reqTechId && ZS.Game.getTechGateInfo ? ZS.Game.getTechGateInfo(reqTechId) : null;
     const reqTechHqLevel = (techGate && techGate.reqHqLevel) || Math.max(1, Number((techDef && techDef.reqHqLevel) || (techDef && techDef.branch === 'bunker_eng' ? 2 : 1)) || 1);
-    const reqTechWave = (techGate && techGate.reqWave) || (ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(reqTechHqLevel) : (reqTechHqLevel > 1 ? (reqTechHqLevel - 1) * 20 : 1));
+    const reqTechWave = (techGate && techGate.reqWave) || (ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(reqTechHqLevel) : ([1, 10, 20, 35, 50][reqTechHqLevel - 1] || 50));
     const techLv = reqTechId && ZS.Game.getTechLevel ? ZS.Game.getTechLevel(reqTechId) : 1;
     const reqTechCost = reqTechId && ZS.Game.getTechCost
       ? ZS.Game.getTechCost(reqTechId)

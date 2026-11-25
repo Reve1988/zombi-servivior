@@ -23,10 +23,10 @@ window.ZS = window.ZS || {};
     const levels = DATA.HQ_LEVELS || [];
     for (let i = 0; i < levels.length; i++) {
       if (levels[i] && levels[i].level === lv) {
-        return levels[i].reqWave || (lv > 1 ? (lv - 1) * 20 : 1);
+        return levels[i].reqWave || ([1, 10, 20, 35, 50][lv - 1] || 50);
       }
     }
-    return lv > 1 ? (lv - 1) * 20 : 1;
+    return [1, 10, 20, 35, 50][lv - 1] || 50;
   }
 
   function getTechGateInfo(reqTechId) {
