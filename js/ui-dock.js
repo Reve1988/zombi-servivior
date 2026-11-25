@@ -156,14 +156,14 @@ window.ZS = window.ZS || {};
           `[${def.name}] 시설은 본부 Lv.${lock.reqTechHqLevel} (Wave ${lock.reqTechWave}+) 증축 후 [${lock.reqTechName}] 연구 완료 시 건설할 수 있습니다.`,
           'warn'
         );
-        if (U.openTechPopModal) U.openTechPopModal('tech');
+        if (U.openTechModal) U.openTechModal(def.reqTech);
       } else {
         U.showWaveBanner(
           `연구 필요: ${lock.reqTechName || '전술 기술'}`,
-          `[${def.name}] 시설은 [인구·연구 (T)] 창에서 [${lock.reqTechName}] 연구 완료 시 건설할 수 있습니다.`,
+          `[${def.name}] 시설은 [연구 트리 (T)] 창에서 [${lock.reqTechName}] 연구 완료 시 건설할 수 있습니다.`,
           'warn'
         );
-        if (U.openTechPopModal) U.openTechPopModal('tech');
+        if (U.openTechModal) U.openTechModal(def.reqTech);
       }
       return;
     }

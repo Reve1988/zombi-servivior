@@ -4,55 +4,368 @@ window.ZS = window.ZS || {};
   const U = ZS._UI;
   const { ozIcon, escapeHtml } = U;
 
-  let activeFocusArea = 'all'; // 'all' | 'pop' | 'tech'
+  let selectedTechId = null;
 
-  function isTechPopModalOpen() {
-    const modal = document.getElementById('tech-pop-modal');
+  // Virtual SVG graph coordinates (viewBox 0 0 1000 444; left track rail 0..116, 5 tier lanes 116..1000)
+  const TECH_GRAPH_META = {
+    def_t1: {
+      icon: 'tech-shield',
+      shortLabel: '방어선 Lv.2',
+      x: 204,
+      y: 44,
+      chips: [
+        { icon: 'stat-unlock', tone: 'heal', text: '헤스코 성벽 Lv.2 해금' },
+        { icon: 'gate', tone: 'heal', text: '방호 게이트 · 트랩 Lv.2' },
+        { icon: 'wall-upgrade', tone: 'gold', text: '성벽 상부 거치 개방' }
+      ]
+    },
+    def_t2: {
+      icon: 'tech-spike',
+      shortLabel: '방어선 Lv.3',
+      x: 381,
+      y: 44,
+      chips: [
+        { icon: 'stat-unlock', tone: 'heal', text: '합금 장갑 성벽 Lv.3' },
+        { icon: 'emp-stun', tone: 'heal', text: '쇼크 게이트 · 피에조 트랩' },
+        { icon: 'stat-dmg', tone: 'gold', text: '근접 반사·둔화 강화' }
+      ]
+    },
+    def_repeat: {
+      icon: 'tech-repeat',
+      shortLabel: '복합 장갑',
+      x: 911,
+      y: 44,
+      chips: [
+        { icon: 'tech-shield', tone: 'heal', text: '레벨당 방어선 HP +15%' },
+        { icon: 'tech-spike', tone: 'heal', text: '레벨당 반사·트랩 피해 +12%' },
+        { icon: 'stat-unlock', tone: 'muted', text: '최대 5단계 반복 연구' }
+      ]
+    },
+
+    inf_sniper: {
+      icon: 'tech-sniper',
+      shortLabel: '저격탑 해금',
+      x: 158,
+      y: 114,
+      chips: [
+        { icon: 'stat-unlock', tone: 'gold', text: '대물 저격 감시탑 해금' },
+        { icon: 'stat-range', tone: 'gold', text: '무전력 장거리 초소' },
+        { icon: 'res-agent', tone: 'muted', text: '전투요원 1명 배치' }
+      ]
+    },
+    inf_lv2: {
+      icon: 'tech-rifle',
+      shortLabel: '보병 화기 Lv.2',
+      x: 250,
+      y: 114,
+      chips: [
+        { icon: 'stat-unlock', tone: 'gold', text: '요원 초소 Lv.2 강화 해금' },
+        { icon: 'stat-dmg', tone: 'gold', text: '소총·샷건·저격탑 개량' },
+        { icon: 'res-power', tone: 'muted', text: '정전 면역 무전력 화기' }
+      ]
+    },
+    inf_lv3: {
+      icon: 'tech-specops',
+      shortLabel: '특수 화기 Lv.3',
+      x: 381,
+      y: 114,
+      chips: [
+        { icon: 'stat-unlock', tone: 'gold', text: '요원 초소 Lv.3 특수 개조' },
+        { icon: 'stat-dmg', tone: 'gold', text: '2점사 · 중산탄 · 관통탄' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.2 (W10) 인가' }
+      ]
+    },
+    inf_repeat: {
+      icon: 'tech-repeat',
+      shortLabel: '정밀 탄약',
+      x: 911,
+      y: 114,
+      chips: [
+        { icon: 'stat-dmg', tone: 'gold', text: '레벨당 초소 공격력 +12%' },
+        { icon: 'tech-sniper', tone: 'gold', text: '레벨당 치명타율 +3%p' },
+        { icon: 'stat-unlock', tone: 'muted', text: '최대 5단계 반복 연구' }
+      ]
+    },
+
+    tur_vulcan: {
+      icon: 'tech-vulcan',
+      shortLabel: '발칸 해금',
+      x: 204,
+      y: 221,
+      chips: [
+        { icon: 'stat-unlock', tone: 'orange', text: 'CIWS 발칸 오토터렛 해금' },
+        { icon: 'stat-dmg', tone: 'orange', text: '무인 고속 자동 사격' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.1 (W1) 즉시 연구' }
+      ]
+    },
+    tur_lv2: {
+      icon: 'tech-turret2',
+      shortLabel: '포탑 Lv.2',
+      x: 381,
+      y: 186,
+      chips: [
+        { icon: 'stat-unlock', tone: 'orange', text: '자동 포탑 Lv.2 강화 해금' },
+        { icon: 'stat-dmg', tone: 'orange', text: '발칸 · 로켓 · EMP 화력 강화' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.2 (W10) 인가' }
+      ]
+    },
+    tur_missile: {
+      icon: 'tech-missile',
+      shortLabel: '로켓 포대',
+      x: 558,
+      y: 256,
+      chips: [
+        { icon: 'stat-unlock', tone: 'orange', text: '다연장 로켓 포대 해금' },
+        { icon: 'stat-range', tone: 'orange', text: '산맥 너머 광역 곡사 포격' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.3 (W20) 인가' }
+      ]
+    },
+    tur_lv3: {
+      icon: 'tech-turret3',
+      shortLabel: '포탑 특전 Lv.3',
+      x: 735,
+      y: 186,
+      chips: [
+        { icon: 'stat-unlock', tone: 'orange', text: '자동 포탑 Lv.3 특수 개조' },
+        { icon: 'stat-dmg', tone: 'orange', text: '초전도 급탄 · 6연장 · 5연쇄' },
+        { icon: 'hud-hq', tone: 'muted', text: '포탑 Lv.2 + 로켓 포대 합류' }
+      ]
+    },
+    tur_emp: {
+      icon: 'tech-emp',
+      shortLabel: '테슬라 EMP',
+      x: 735,
+      y: 256,
+      chips: [
+        { icon: 'stat-unlock', tone: 'orange', text: '테슬라 EMP 파일런 해금' },
+        { icon: 'emp-stun', tone: 'orange', text: '다중 연쇄 전격 + 둔화' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.4 (W35) 인가' }
+      ]
+    },
+    tur_repeat: {
+      icon: 'tech-repeat',
+      shortLabel: '화력 관제',
+      x: 911,
+      y: 186,
+      chips: [
+        { icon: 'stat-dmg', tone: 'orange', text: '레벨당 자동 포탑 공격력 +12%' },
+        { icon: 'res-power', tone: 'orange', text: '레벨당 사격 전력 소모 -6%' },
+        { icon: 'stat-unlock', tone: 'muted', text: '최대 5단계 반복 연구' }
+      ]
+    },
+
+    inf_tier2: {
+      icon: 'tech-solar',
+      shortLabel: '인프라 Lv.2',
+      x: 204,
+      y: 330,
+      chips: [
+        { icon: 'stat-unlock', tone: 'rp', text: '발전 · 배터리 · 막사 Lv.2' },
+        { icon: 'act-repair', tone: 'rp', text: '정비 베이 Lv.2 강화 해금' },
+        { icon: 'res-agent', tone: 'muted', text: '야전 막사 인구 수용 +2' }
+      ]
+    },
+    inf_tier3: {
+      icon: 'tech-battery',
+      shortLabel: '인프라 Lv.3',
+      x: 381,
+      y: 330,
+      chips: [
+        { icon: 'stat-unlock', tone: 'rp', text: '발전 · ESS · 숙소 · 정비 Lv.3' },
+        { icon: 'res-power', tone: 'rp', text: '리튬 ESS 배터리 뱅크 해금' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.2 (W10) 인가' }
+      ]
+    },
+    inf_tier4: {
+      icon: 'tech-reactor',
+      shortLabel: '인프라 Lv.4',
+      x: 558,
+      y: 330,
+      chips: [
+        { icon: 'stat-unlock', tone: 'rp', text: '발전 · 코어 · 생활관 Lv.4' },
+        { icon: 'res-power', tone: 'rp', text: '초전도 에너지 코어 해금' },
+        { icon: 'res-agent', tone: 'muted', text: '작전 생활관 수용 +6' }
+      ]
+    },
+    infra_repeat: {
+      icon: 'tech-repeat',
+      shortLabel: 'ESS 전력망',
+      x: 911,
+      y: 330,
+      chips: [
+        { icon: 'res-power', tone: 'rp', text: '레벨당 충전량 · 용량 +10%' },
+        { icon: 'hud-hq', tone: 'rp', text: '본부 · 태양광 · 풍력 · 배터리' },
+        { icon: 'stat-unlock', tone: 'muted', text: '최대 5단계 반복 연구' }
+      ]
+    },
+
+    b1_drill_1: {
+      icon: 'tech-drill1',
+      shortLabel: '심부 굴착',
+      x: 381,
+      y: 402,
+      chips: [
+        { icon: 'b1-dig', tone: 'amber', text: '생산요원 굴착력 3→4 AP/명' },
+        { icon: 'b1-ops', tone: 'amber', text: 'AP 이월 상한 +8 증가' },
+        { icon: 'res-scrap', tone: 'gold', text: '매몰 전리품 획득 +25%' }
+      ]
+    },
+    b1_gadgets_adv: {
+      icon: 'tech-b1gear',
+      shortLabel: '고급 쉘터',
+      x: 558,
+      y: 402,
+      chips: [
+        { icon: 'stat-unlock', tone: 'amber', text: '지하 쉘터 고급 가젯 인가' },
+        { icon: 'b1-lab', tone: 'rp', text: '심층 지원 설비 건설 개방' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.3 (W20) 인가' }
+      ]
+    },
+    b1_drill_2: {
+      icon: 'tech-drill2',
+      shortLabel: '레이저 파쇄',
+      x: 735,
+      y: 402,
+      chips: [
+        { icon: 'b1-dig', tone: 'amber', text: '심부 현무암 소모 3→2 AP' },
+        { icon: 'res-rp', tone: 'rp', text: '기지 전역 RP 획득량 +15%' },
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.4 (W35) 인가' }
+      ]
+    }
+  };
+
+  const TRACK_Y_POS = {
+    defense_eng: 44,
+    infantry_weap: 114,
+    auto_turret: 221,
+    power_infra: 330,
+    bunker_eng: 402
+  };
+
+  function isPopModalOpen() {
+    const modal = document.getElementById('pop-modal');
     return !!(modal && !modal.classList.contains('hidden'));
   }
 
-  function openTechPopModal(focusArea) {
-    const modal = document.getElementById('tech-pop-modal');
-    if (!modal) return;
-    activeFocusArea = focusArea === 'pop' || focusArea === 'tech' ? focusArea : 'all';
-    renderTechPopModal();
-    modal.classList.remove('hidden');
+  function isTechModalOpen() {
+    const modal = document.getElementById('tech-modal');
+    return !!(modal && !modal.classList.contains('hidden'));
   }
 
-  function closeTechPopModal() {
-    const modal = document.getElementById('tech-pop-modal');
-    if (modal) modal.classList.add('hidden');
-    activeFocusArea = 'all';
+  function isAnyPopTechModalOpen() {
+    return isPopModalOpen() || isTechModalOpen();
   }
 
-  function toggleTechPopModal(focusArea) {
-    if (isTechPopModalOpen()) {
-      closeTechPopModal();
+  function openPopModal() {
+    const popModal = document.getElementById('pop-modal');
+    const techModal = document.getElementById('tech-modal');
+    if (techModal) techModal.classList.add('hidden');
+    if (!popModal) return;
+    renderPopModal();
+    popModal.classList.remove('hidden');
+  }
+
+  function closePopModal() {
+    const popModal = document.getElementById('pop-modal');
+    if (popModal) popModal.classList.add('hidden');
+  }
+
+  function togglePopModal() {
+    if (isPopModalOpen()) {
+      closePopModal();
       return false;
     }
-    openTechPopModal(focusArea);
+    openPopModal();
     return true;
   }
 
-  function canAdjustRoleUp(st, role) {
-    const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
-    const used = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
-    if (st.agents > used) return true;
-    if (role !== 'combat' && (jobs.combat || 0) > (st.popUsed || 0)) return true;
-    if (role !== 'research' && (jobs.research || 0) > 0) return true;
-    if (role !== 'prod' && (jobs.prod || 0) > 0) return true;
-    return false;
+  function getDefaultSelectedTechId(st) {
+    const tree = (ZS.DATA && ZS.DATA.TECH_TREE) || {};
+    const order = (ZS.DATA && ZS.DATA.TECH_ORDER) || Object.keys(tree);
+    if (selectedTechId && tree[selectedTechId]) {
+      return selectedTechId;
+    }
+    for (let i = 0; i < order.length; i++) {
+      const id = order[i];
+      if (ZS.Game.canResearchTech && ZS.Game.canResearchTech(id).ok) {
+        return id;
+      }
+    }
+    if (tree.tur_lv2 && (!st || (st.hqLevel || 1) <= 2)) return 'tur_lv2';
+    return order[0] || null;
   }
 
-  function renderJobBar(st) {
-    const wrap = document.getElementById('tech-job-bar');
-    if (!wrap) return;
+  function openTechModal(focusTechId) {
+    const popModal = document.getElementById('pop-modal');
+    const techModal = document.getElementById('tech-modal');
+    if (popModal) popModal.classList.add('hidden');
+    if (!techModal) return;
+    if (focusTechId && ZS.DATA && ZS.DATA.TECH_TREE && ZS.DATA.TECH_TREE[focusTechId]) {
+      selectedTechId = focusTechId;
+    } else if (!selectedTechId || !(ZS.DATA && ZS.DATA.TECH_TREE && ZS.DATA.TECH_TREE[selectedTechId])) {
+      selectedTechId = getDefaultSelectedTechId(ZS.Game.state);
+    }
+    renderTechModal();
+    techModal.classList.remove('hidden');
+  }
+
+  function closeTechModal() {
+    const techModal = document.getElementById('tech-modal');
+    if (techModal) techModal.classList.add('hidden');
+  }
+
+  function toggleTechModal(focusTechId) {
+    if (isTechModalOpen()) {
+      closeTechModal();
+      return false;
+    }
+    openTechModal(focusTechId);
+    return true;
+  }
+
+  function closeAllPopTechModals() {
+    closePopModal();
+    closeTechModal();
+  }
+
+  function renderOpenPopTechModals() {
+    if (isPopModalOpen()) renderPopModal();
+    if (isTechModalOpen()) renderTechModal();
+  }
+
+  // Strict unassigned-pool check: NEVER steal from another assigned role
+  function canAdjustRoleUp(st) {
+    const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
+    const used = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
+    return (st.agents || 0) > used;
+  }
+
+  function getDailyRpPreview(st) {
+    const jobs = st.jobs || { combat: st.agents || 0, research: 0, prod: 0 };
+    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 2 };
+    const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
+    const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
+    const rpMult = 1 + (st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0);
+    return Math.round(rawRp * rpMult);
+  }
+
+  function renderPopModal() {
+    const body = document.getElementById('pop-modal-body');
+    const st = ZS.Game.state;
+    if (!body || !st) return;
 
     const jobs = st.jobs || { combat: st.agents || 0, research: 0, prod: 0 };
     const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 2 };
-    const popUsed = st.popUsed || 0;
+    const totalAgents = Math.max(0, st.agents || 0);
+    const popUsed = Math.max(0, st.popUsed || 0);
     const assigned = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
-    const unassigned = Math.max(0, (st.agents || 0) - assigned);
+    const unassigned = Math.max(0, totalAgents - assigned);
+    const canAddAny = canAdjustRoleUp(st);
+
+    const totalBadge = document.getElementById('pop-modal-total-badge');
+    if (totalBadge) {
+      totalBadge.innerHTML = `${ozIcon('res-agent', 15, 'icon-coin')}<span>총 인원 ${totalAgents} / ${st.popCap || 4}명</span>`;
+    }
 
     const spareCombat = Math.max(0, (jobs.combat || 0) - popUsed);
     const hqRatePct = Math.min(25, spareCombat * 5);
@@ -61,9 +374,8 @@ window.ZS = window.ZS || {};
 
     const drill1Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_1') : 0;
     const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
-    const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
-    const rpMult = 1 + (st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0);
-    const rpGainPreview = Math.round(rawScientistRp * rpMult);
+    const rpGainPreview = getDailyRpPreview(st);
+    const bossRpBonus = Math.round(6 * (1 + (st.b1BossRpMult || 0)));
 
     const prodCount = jobs.prod || 0;
     const prodWoodPreview = Math.round(prodCount * 5 + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0));
@@ -73,10 +385,23 @@ window.ZS = window.ZS || {};
     const digGainPreview = Math.round((2 + prodCount * digPerProd) * (1 + (st.b1DigApBonusMult || st.b1DigMult || 0)));
     const digCapPreview = Math.max(16, (2 + prodCount * digPerProd) * 2 + (drill1Lv > 0 ? 8 : 0));
 
+    const b1Open = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
     const combatAtFloor = (jobs.combat || 0) <= popUsed;
     const isGameOver = st.phase === 'gameover';
 
-    const b1Open = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
+    // Agent pips bar (shows assigned vs unassigned visually)
+    const maxPips = Math.min(12, totalAgents);
+    let pipsHtml = '';
+    for (let i = 0; i < maxPips; i++) {
+      const isFree = i >= assigned;
+      pipsHtml += `<span class="pop-agent-pip${isFree ? ' is-free' : ' is-assigned'}" title="${isFree ? '미배정 대기 요원' : '직무 배치 완료'}">${ozIcon('res-agent', 15)}</span>`;
+    }
+    if (totalAgents > maxPips) {
+      pipsHtml += `<span class="pop-pip-overflow">+${totalAgents - maxPips}</span>`;
+    }
+
+    const plusLockHint = !canAddAny ? '미배정 인원이 0명입니다. 먼저 다른 직무에서 (-)로 감원하세요.' : '';
+
     const roleCards = [
       {
         role: 'combat',
@@ -86,11 +411,20 @@ window.ZS = window.ZS || {};
         iconCls: 'icon-coin',
         count: jobs.combat || 0,
         canMinus: !isGameOver && !combatAtFloor && (jobs.combat || 0) > 0,
-        canPlus: !isGameOver && canAdjustRoleUp(st, 'combat'),
-        floorCue: popUsed > 0
-          ? `<span class="job-floor-cue${combatAtFloor ? ' locked' : ''}">${combatAtFloor ? ozIcon('state-lock', 12, 'icon-danger') : ozIcon('cat-defense', 12, 'icon-muted')}<span>초소 배치 ${popUsed}명 고정</span></span>`
-          : `<span class="job-floor-cue"><span>초소 미배치 (자유 전환)</span></span>`,
-        previewHtml: `여유 <b>${spareCombat}명</b> · 본부 화기 연사 <b>+${hqRatePct}%</b>${(st.hqLevel || 1) === 1 ? ` · 새벽 채집 <b>+${scavWood}목재/+${scavScrap}고철</b>` : ''}`
+        canPlus: !isGameOver && canAddAny,
+        minusTitle: combatAtFloor
+          ? `초소 고정 인원(${popUsed}명) 미만으로 감원 불가`
+          : '전투요원 1명을 미배정 대기 풀로 감원',
+        plusTitle: plusLockHint || '미배정 요원 1명을 전투요원으로 배정',
+        statLeftIcon: 'cat-defense',
+        statLeftCls: popUsed > 0 ? 'icon-coin' : 'icon-muted',
+        statLeftTop: `초소 고정 ${popUsed}명`,
+        statLeftSub: popUsed > 0 ? (combatAtFloor ? '감원 하한선' : '전선 초소 배치') : '고정 인원 없음',
+        statRightIcon: 'stat-dmg',
+        statRightCls: spareCombat > 0 ? 'icon-heal' : 'icon-muted',
+        statRightTop: `예비 ${spareCombat}명 · 연사 +${hqRatePct}%`,
+        statRightSub: (st.hqLevel || 1) === 1 ? `채집 +${scavWood}목/+${scavScrap}고` : '본부 화기 지원',
+        floorNote: combatAtFloor && popUsed > 0 ? '초소 배치 인원은 감원 불가' : '미배정 풀로 1명 이동 가능'
       },
       {
         role: 'research',
@@ -100,9 +434,20 @@ window.ZS = window.ZS || {};
         iconCls: 'icon-rp',
         count: jobs.research || 0,
         canMinus: !isGameOver && (jobs.research || 0) > 0,
-        canPlus: !isGameOver && canAdjustRoleUp(st, 'research'),
-        floorCue: `<span class="job-floor-cue"><span>과학자 기본 +${hqInfo.baseRpPerScientist || 2} RP/일${(st.b1LabFlatRp || 0) > 0 ? ` · 데스크 +${Math.round(st.b1LabFlatRp)}` : ''}${(st.b1LabFlatPerWaveRp || 0) > 0 ? ` · 고정 +${st.b1LabFlatPerWaveRp}` : ''}${drill2Lv > 0 || (st.b1LabMult || 0) > 0 ? ` · 증폭 +${Math.round(((st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0)) * 100)}%` : ''}</span></span>`,
-        previewHtml: `새벽 정산 <b class="txt-rp">+${rpGainPreview} RP/일</b> · 보스 처치 시 <b>+${Math.round(6 * (1 + (st.b1BossRpMult || 0)))} RP</b> 추가`
+        canPlus: !isGameOver && canAddAny,
+        minusTitle: (jobs.research || 0) <= 0 ? '감원할 연구요원 없음' : '연구요원 1명을 미배정 대기 풀로 감원',
+        plusTitle: plusLockHint || '미배정 요원 1명을 연구요원으로 배정',
+        statLeftIcon: 'res-rp',
+        statLeftCls: 'icon-rp',
+        statLeftTop: `+${rpGainPreview} RP / 일`,
+        statLeftSub: `기본 +${hqInfo.baseRpPerScientist || 2} RP/인${drill2Lv > 0 || (st.b1LabMult || 0) > 0 ? ` · 증폭` : ''}`,
+        statRightIcon: 'hud-enemy',
+        statRightCls: 'icon-rp',
+        statRightTop: `보스 +${bossRpBonus} RP`,
+        statRightSub: (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0) > 0
+          ? `연구실 고정 +${Math.round((st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0))}`
+          : '새벽 자동 정산',
+        floorNote: '연구트리(T) 해금 포인트 생산'
       },
       {
         role: 'prod',
@@ -112,46 +457,103 @@ window.ZS = window.ZS || {};
         iconCls: 'icon-ap',
         count: jobs.prod || 0,
         canMinus: !isGameOver && (jobs.prod || 0) > 0,
-        canPlus: !isGameOver && canAdjustRoleUp(st, 'prod'),
-        floorCue: b1Open
-          ? `<span class="job-floor-cue ap-cue"><span>보유 굴착력 ${st.digAp || 0}/${st.digApCap || digCapPreview} AP</span></span>`
-          : `<span class="job-floor-cue"><span>본부 Lv.2 증축 시 지하 굴착력(AP) 개방</span></span>`,
-        previewHtml: `새벽 생산 <b class="txt-wood">+${prodWoodPreview} 목재</b> · <b class="txt-scrap">+${prodScrapPreview} 고철</b>${prodCoinPreview > 0 ? ` · <b class="txt-coin">+${prodCoinPreview} 코인</b>` : ''}${b1Open ? ` · <b class="txt-ap">+${digGainPreview} AP</b> (상한 ${digCapPreview})` : ''}`
+        canPlus: !isGameOver && canAddAny,
+        minusTitle: (jobs.prod || 0) <= 0 ? '감원할 생산요원 없음' : '생산요원 1명을 미배정 대기 풀로 감원',
+        plusTitle: plusLockHint || '미배정 요원 1명을 생산요원으로 배정',
+        statLeftIcon: 'res-wood',
+        statLeftCls: 'icon-wood',
+        statLeftTop: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
+        statLeftSub: prodCoinPreview > 0 ? `코인 +${prodCoinPreview}/일 포함` : '새벽 자원 채굴',
+        statRightIcon: 'b1-dig',
+        statRightCls: b1Open ? 'icon-ap' : 'icon-muted',
+        statRightTop: b1Open ? `+${digGainPreview} AP / 일` : '본부 Lv.2 개방',
+        statRightSub: b1Open ? `보유 ${st.digAp || 0}/${st.digApCap || digCapPreview} AP` : '지하 굴착(AP) 준비',
+        floorNote: b1Open ? '지하 암반 굴착력(AP) 생산' : '목재·고철 보급 생산'
       }
     ];
 
     const cardsHtml = roleCards
-      .map((rc) => `
-        <div class="job-role-card ${rc.badgeCls}" data-role="${rc.role}">
-          <div class="job-role-top">
-            <span class="job-role-name inline-icon-text">${ozIcon(rc.iconId, 16, rc.iconCls)}<span>${escapeHtml(rc.title)}</span></span>
-            <div class="job-stepper">
-              <button type="button" class="job-step-btn" data-job-role="${rc.role}" data-job-delta="-1" ${rc.canMinus ? '' : 'disabled'} aria-label="${escapeHtml(rc.title)} 1명 감원">-</button>
-              <strong class="job-count-val">${rc.count}</strong>
-              <button type="button" class="job-step-btn" data-job-role="${rc.role}" data-job-delta="1" ${rc.canPlus ? '' : 'disabled'} aria-label="${escapeHtml(rc.title)} 1명 증원">+</button>
+      .map(
+        (rc) => `
+        <section class="pop-role-card ${rc.badgeCls}" data-role="${rc.role}">
+          <div class="pop-role-bar"></div>
+          <header class="pop-role-head">
+            <span class="pop-role-title">${escapeHtml(rc.title)}</span>
+            <span class="pop-role-sub">${escapeHtml(rc.floorNote)}</span>
+          </header>
+          <div class="pop-role-hero">
+            <span class="pop-role-emblem">${ozIcon(rc.iconId, 44, rc.iconCls)}</span>
+            <strong class="pop-role-count">${rc.count}</strong>
+          </div>
+          <div class="pop-role-stats">
+            <div class="pop-stat-box">
+              <span class="pop-stat-icon">${ozIcon(rc.statLeftIcon, 16, rc.statLeftCls)}</span>
+              <span class="pop-stat-main">${escapeHtml(rc.statLeftTop)}</span>
+              <span class="pop-stat-sub">${escapeHtml(rc.statLeftSub)}</span>
+            </div>
+            <div class="pop-stat-box">
+              <span class="pop-stat-icon">${ozIcon(rc.statRightIcon, 16, rc.statRightCls)}</span>
+              <span class="pop-stat-main">${escapeHtml(rc.statRightTop)}</span>
+              <span class="pop-stat-sub">${escapeHtml(rc.statRightSub)}</span>
             </div>
           </div>
-          <div class="job-role-floor">${rc.floorCue}</div>
-          <div class="job-role-preview">${rc.previewHtml}</div>
-        </div>
-      `)
+          <div class="pop-stepper">
+            <button
+              type="button"
+              class="pop-step-btn minus"
+              data-job-role="${rc.role}"
+              data-job-delta="-1"
+              ${rc.canMinus ? '' : 'disabled'}
+              title="${escapeHtml(rc.minusTitle)}"
+              aria-label="${escapeHtml(rc.title)} 1명 감원"
+            >
+              <span>−</span>
+            </button>
+            <button
+              type="button"
+              class="pop-step-btn plus${canAddAny ? '' : ' pool-empty'}"
+              data-job-role="${rc.role}"
+              data-job-delta="1"
+              ${rc.canPlus ? '' : 'disabled'}
+              title="${escapeHtml(rc.plusTitle)}"
+              aria-label="${escapeHtml(rc.title)} 1명 배정"
+            >
+              <span>+</span>
+              ${!canAddAny ? `<span class="pop-plus-lock">${ozIcon('state-lock', 13)}</span>` : ''}
+            </button>
+          </div>
+        </section>
+      `
+      )
       .join('');
 
-    wrap.classList.toggle('focus-highlight', activeFocusArea === 'pop');
-    wrap.innerHTML = `
-      <div class="tech-section-bar">
-        <div class="inline-icon-text">
-          ${ozIcon('res-agent', 16)}
-          <span class="tech-section-title">인구 직무 분배</span>
-          <span class="job-summary-pill">총 인원 ${st.agents} / 수용 ${st.popCap}명</span>
-          ${unassigned > 0 ? `<span class="job-unassigned-pill">미배정 ${unassigned}명</span>` : ''}
+    body.innerHTML = `
+      <div class="pop-pool-banner${unassigned > 0 ? ' has-free' : ' all-assigned'}">
+        <div class="pop-pool-top">
+          <div class="pop-pool-count-wrap">
+            <span class="pop-pool-label">미배정 대기 인원</span>
+            <strong class="pop-pool-num">${unassigned}명</strong>
+            <span class="pop-pool-ratio">(${assigned}/${totalAgents} 배치 중)</span>
+          </div>
+          <div class="pop-agent-pips" aria-hidden="true">${pipsHtml}</div>
         </div>
-        <div class="job-spare-banner">여유 전투요원 ${spareCombat}명 → 본부 연사 +${hqRatePct}% (최대 +25%)</div>
+        <div class="pop-pool-notice">
+          ${
+            unassigned === 0
+              ? `${ozIcon('state-alert', 15, 'icon-coin')}<span>전원 배치 완료 — 타 직무로 전환하려면 먼저 다른 직무에서 <b>(−) 감원</b>한 뒤 <b>(+)</b>를 누르세요.</span>`
+              : `${ozIcon('stat-check', 15, 'icon-heal')}<span>대기 인원 <b>${unassigned}명</b> 배정 가능 — 원하는 직무 카드의 <b>(+)</b> 버튼을 눌러 배치하세요.</span>`
+          }
+        </div>
       </div>
-      <div class="job-roles-grid">${cardsHtml}</div>
+
+      <div class="pop-roles-grid">${cardsHtml}</div>
+
+      <footer class="pop-footer-strip">
+        <span class="pop-step-guide">1. <b>(−)</b> 대기 풀로 감원 → 2. <b>(+)</b> 목표 직무 배정</span>
+      </footer>
     `;
 
-    wrap.querySelectorAll('.job-step-btn').forEach((btn) => {
+    body.querySelectorAll('.pop-step-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const role = btn.getAttribute('data-job-role');
         const delta = Number(btn.getAttribute('data-job-delta'));
@@ -160,138 +562,413 @@ window.ZS = window.ZS || {};
     });
   }
 
-  function renderTechGrid(st) {
-    const grid = document.getElementById('tech-branches-grid');
-    if (!grid) return;
+  function evaluateNodeStatus(st, t) {
+    const tree = (ZS.DATA && ZS.DATA.TECH_TREE) || {};
+    const curLv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel(t.id) : 0;
+    const maxLv = t.maxLv || 1;
+    const isMax = curLv >= maxLv;
+    const check = ZS.Game.canResearchTech ? ZS.Game.canResearchTech(t.id) : { ok: false };
+    const costRp = ZS.Game.getTechCost ? ZS.Game.getTechCost(t.id) : t.costRp;
+    const reqHq = t.reqHqLevel || 1;
+    const reqWave = ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(reqHq) : ([1, 10, 20, 35, 50][reqHq - 1] || 1);
 
-    const branches = ZS.DATA.TECH_BRANCHES || [];
-    const tree = ZS.DATA.TECH_TREE || {};
-    const order = ZS.DATA.TECH_ORDER || Object.keys(tree);
-
-    const byBranch = {};
-    for (let i = 0; i < branches.length; i++) {
-      byBranch[branches[i].id] = [];
+    let stateCls = 'state-locked';
+    let stateLabel = '선행 잠금';
+    if (isMax) {
+      stateCls = 'state-done';
+      stateLabel = maxLv > 1 ? `Lv.${curLv}/${maxLv} 완료` : '연구 완료';
+    } else if (check.ok) {
+      stateCls = 'state-ready';
+      stateLabel = '연구 가능';
+    } else if (check.lockedByHq) {
+      stateCls = 'state-locked';
+      stateLabel = `본부 Lv.${reqHq} 잠금`;
+    } else if (check.missingReq) {
+      stateCls = 'state-locked';
+      const missingNames = (t.req || [])
+        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
+        .map((rid) => (tree[rid] ? tree[rid].name : rid));
+      stateLabel = missingNames.length > 0 ? `선행 필요` : '잠금';
+    } else if (check.shortRp) {
+      stateCls = 'state-short';
+      stateLabel = 'RP 부족';
     }
-    for (let i = 0; i < order.length; i++) {
-      const node = tree[order[i]];
-      if (node && byBranch[node.branch]) {
-        byBranch[node.branch].push(node);
+
+    return { curLv, maxLv, isMax, check, costRp, reqHq, reqWave, stateCls, stateLabel };
+  }
+
+  function buildEdgePath(fromNode, toNode, edgeIdx, totalIncoming) {
+    const halfW = 30;
+    const x1 = fromNode.x + halfW;
+    const y1 = fromNode.y;
+    const x2 = toNode.x - halfW - 3;
+
+    // Spread multiple converging inputs slightly on Y so both arrowheads read cleanly
+    let y2 = toNode.y;
+    if (totalIncoming === 2) {
+      y2 = toNode.y + (edgeIdx === 0 ? -7 : 7);
+    }
+
+    if (Math.abs(y1 - y2) <= 2) {
+      return {
+        d: `M ${x1} ${y1} L ${x2} ${y2}`,
+        tipX: x2 + 2,
+        tipY: y2
+      };
+    }
+
+    // Keep multi-lane branches cleanly routed in gap corridors
+    const corridorX = Math.round((fromNode.x + toNode.x) * 0.5);
+    const midX = toNode.id === 'tur_lv3' && fromNode.id === 'tur_missile'
+      ? 648
+      : toNode.id === 'tur_missile' && fromNode.id === 'tur_vulcan'
+      ? 294
+      : corridorX;
+
+    return {
+      d: `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`,
+      tipX: x2 + 2,
+      tipY: y2
+    };
+  }
+
+  function renderTechInspector(st) {
+    const bar = document.getElementById('tech-inspector-bar');
+    if (!bar) return;
+
+    const tree = (ZS.DATA && ZS.DATA.TECH_TREE) || {};
+    const branches = (ZS.DATA && ZS.DATA.TECH_BRANCHES) || [];
+    selectedTechId = getDefaultSelectedTechId(st);
+    const t = selectedTechId ? tree[selectedTechId] : null;
+    if (!t) {
+      bar.innerHTML = '';
+      return;
+    }
+
+    const meta = TECH_GRAPH_META[t.id] || {};
+    const branch = branches.find((b) => b.id === t.branch) || { name: '', accent: '#C084FC' };
+    const stInfo = evaluateNodeStatus(st, t);
+
+    const chips = Array.isArray(meta.chips) ? meta.chips.slice(0, 3) : [];
+    if (stInfo.check.lockedByHq) {
+      chips[2] = { icon: 'state-lock', tone: 'gold', text: `본부 Lv.${stInfo.reqHq} (W${stInfo.reqWave}) 필요` };
+    } else if (stInfo.check.missingReq && Array.isArray(t.req) && t.req.length > 0) {
+      const reqNames = t.req
+        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
+        .map((rid) => (TECH_GRAPH_META[rid] ? TECH_GRAPH_META[rid].shortLabel : rid));
+      if (reqNames.length > 0) {
+        chips[2] = { icon: 'state-lock', tone: 'muted', text: `선행: ${reqNames.join(' + ')}` };
       }
     }
 
-    const branchesHtml = branches
+    const chipsHtml = chips
+      .map(
+        (c) => `
+        <span class="tech-stat-chip tone-${escapeHtml(c.tone || 'muted')}">
+          ${ozIcon(c.icon || 'stat-dmg', 15)}
+          <span>${escapeHtml(c.text)}</span>
+        </span>
+      `
+      )
+      .join('');
+
+    let btnLabel = '연구 불가';
+    if (stInfo.isMax) {
+      btnLabel = '연구 완료';
+    } else if (stInfo.check.ok) {
+      btnLabel = `연구 진행 · ${stInfo.costRp} RP`;
+    } else if (stInfo.check.lockedByHq) {
+      btnLabel = `본부 Lv.${stInfo.reqHq} 필요`;
+    } else if (stInfo.check.missingReq) {
+      btnLabel = '선행 연구 필요';
+    } else if (stInfo.check.shortRp) {
+      btnLabel = `RP 부족 (${stInfo.costRp} RP)`;
+    }
+
+    bar.style.setProperty('--branch-accent', branch.accent || '#C084FC');
+    bar.innerHTML = `
+      <div class="tech-insp-left">
+        <div class="tech-insp-icon-tile ${stInfo.stateCls}">
+          ${ozIcon(meta.icon || 'res-rp', 28)}
+        </div>
+        <div class="tech-insp-copy">
+          <div class="tech-insp-title-row">
+            <strong class="tech-insp-title">${escapeHtml(t.name)}</strong>
+            <span class="tech-insp-badge ${stInfo.stateCls}">${escapeHtml(stInfo.stateLabel)}</span>
+          </div>
+          <div class="tech-insp-sub">${escapeHtml(branch.name)} · ${escapeHtml(t.desc)}</div>
+        </div>
+      </div>
+
+      <div class="tech-insp-chips">${chipsHtml}</div>
+
+      <div class="tech-insp-act">
+        <button
+          id="btn-tech-research-exec"
+          type="button"
+          class="tech-exec-btn${stInfo.check.ok ? ' is-ready' : ''}${stInfo.isMax ? ' is-done' : ''}"
+          ${stInfo.check.ok ? '' : 'disabled'}
+        >
+          ${stInfo.isMax ? ozIcon('stat-check', 16) : ozIcon('res-rp', 16, stInfo.check.ok ? 'icon-rp' : '')}
+          <span>${escapeHtml(btnLabel)}</span>
+        </button>
+      </div>
+    `;
+
+    const execBtn = document.getElementById('btn-tech-research-exec');
+    if (execBtn) {
+      execBtn.addEventListener('click', () => {
+        if (selectedTechId && ZS.Game.researchTech) {
+          ZS.Game.researchTech(selectedTechId);
+        }
+      });
+    }
+  }
+
+  function renderTechModal() {
+    const wrap = document.getElementById('tech-graph-wrap');
+    const st = ZS.Game.state;
+    if (!wrap || !st) return;
+
+    const rpGainPreview = getDailyRpPreview(st);
+    const rpBadge = document.getElementById('tech-modal-rp-badge');
+    if (rpBadge) {
+      rpBadge.innerHTML = `${ozIcon('res-rp', 15, 'icon-rp')}<span>${Math.floor(st.rp || 0)} RP (+${rpGainPreview}/일)</span>`;
+    }
+    const hqBadge = document.getElementById('tech-modal-hq-badge');
+    if (hqBadge) {
+      hqBadge.innerHTML = `${ozIcon('hud-hq', 14, 'icon-coin')}<span>지휘소 Lv.${st.hqLevel || 1}</span>`;
+    }
+
+    const branches = (ZS.DATA && ZS.DATA.TECH_BRANCHES) || [];
+    const tree = (ZS.DATA && ZS.DATA.TECH_TREE) || {};
+    const order = (ZS.DATA && ZS.DATA.TECH_ORDER) || Object.keys(tree);
+    selectedTechId = getDefaultSelectedTechId(st);
+
+    const hqLv = st.hqLevel || 1;
+    const hqTiers = [1, 2, 3, 4, 5].map((lv) => {
+      const wave = ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(lv) : ([1, 10, 20, 35, 50][lv - 1] || 50);
+      return { lv, wave, locked: hqLv < lv };
+    });
+
+    const tierHeadsHtml = hqTiers
+      .map(
+        (col) => `
+        <div class="tech-tier-head${col.locked ? ' locked' : ''}">
+          <span>지휘소 Lv.${col.lv} · W${col.wave}</span>
+          ${col.locked ? ozIcon('state-lock', 13, 'icon-muted') : ''}
+        </div>
+      `
+      )
+      .join('');
+
+    const colBgsHtml = hqTiers
+      .map((col, idx) => `<div class="tech-col-bg${col.locked ? ' locked' : ''}" data-tier="${idx + 1}"></div>`)
+      .join('');
+
+    // Count branch progress
+    const branchStats = {};
+    for (let i = 0; i < branches.length; i++) {
+      branchStats[branches[i].id] = { done: 0, total: 0 };
+    }
+    for (let i = 0; i < order.length; i++) {
+      const t = tree[order[i]];
+      if (!t || !branchStats[t.branch]) continue;
+      branchStats[t.branch].total += 1;
+      const curLv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel(t.id) : 0;
+      const maxLv = t.maxLv || 1;
+      if (curLv > 0 && (maxLv === 1 || curLv >= maxLv)) {
+        branchStats[t.branch].done += 1;
+      }
+    }
+
+    const tracksHtml = branches
       .map((br) => {
-        const nodes = byBranch[br.id] || [];
-        let doneCount = 0;
-        const nodesHtml = nodes
-          .map((t) => {
-            const curLv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel(t.id) : 0;
-            const maxLv = t.maxLv || 1;
-            const isMax = curLv >= maxLv;
-            if (curLv > 0 && (maxLv === 1 || isMax)) doneCount += 1;
-            const check = ZS.Game.canResearchTech ? ZS.Game.canResearchTech(t.id) : { ok: false };
-            const costRp = ZS.Game.getTechCost ? ZS.Game.getTechCost(t.id) : t.costRp;
-
-            let stateCls = 'tech-locked';
-            let badgeHtml = `<span class="tech-state-pill locked">${ozIcon('state-lock', 12, 'icon-muted')}<span>잠금</span></span>`;
-            if (isMax) {
-              stateCls = 'tech-done';
-              badgeHtml = `<span class="tech-state-pill done">${ozIcon('state-rank', 12, 'icon-heal')}<span>${maxLv > 1 ? `Lv.${curLv}/${maxLv} 완료` : '완료'}</span></span>`;
-            } else if (check.ok) {
-              stateCls = 'tech-ready';
-              badgeHtml = `<span class="tech-state-pill ready"><span>연구 가능</span></span>`;
-            } else if (check.lockedByHq) {
-              badgeHtml = `<span class="tech-state-pill locked">${ozIcon('state-lock', 12, 'icon-muted')}<span>본부 Lv.${check.reqHqLevel}</span></span>`;
-            } else if (!check.missingReq) {
-              stateCls = 'tech-short';
-              badgeHtml = `<span class="tech-state-pill short"><span>RP 부족</span></span>`;
-            }
-
-            const costHtml = !isMax && costRp != null
-              ? `<span class="tech-cost-pill${check.shortRp ? ' short' : ''}">${ozIcon('res-rp', 13, 'icon-rp')}<span>${costRp} RP</span></span>`
-              : `<span class="tech-cost-pill done"><span>MAX</span></span>`;
-
-            const lvTag = maxLv > 1 && !isMax ? `<span class="tech-lv-chip">Lv.${curLv}/${maxLv}</span>` : '';
-
-            let reqHtml = '';
-            if (check.lockedByHq) {
-              const reqWave = check.reqWave || (ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(check.reqHqLevel) : ([1, 10, 20, 35, 50][check.reqHqLevel - 1] || 50));
-              reqHtml = `<div class="tech-req-line hq-lock">본부 Lv.${check.reqHqLevel} (W${reqWave}) 필요</div>`;
-            } else if (Array.isArray(t.req) && t.req.length > 0 && check.missingReq) {
-              const reqNames = t.req.map((rid) => (tree[rid] ? tree[rid].name : rid));
-              reqHtml = `<div class="tech-req-line">선행: ${escapeHtml(reqNames.join(' + '))}</div>`;
-            }
-
-            const disabledAttr = check.ok ? '' : 'disabled';
-            return `
-              <button
-                type="button"
-                class="tech-node-card ${stateCls}"
-                data-tech-id="${escapeHtml(t.id)}"
-                ${disabledAttr}
-                title="${escapeHtml(check.ok ? `${t.name} 연구 진행 (${costRp} RP)` : (check.reason || t.desc))}"
-              >
-                <div class="tech-node-top">
-                  <span class="tech-node-title">${escapeHtml(t.name)} ${lvTag}</span>
-                  ${costHtml}
-                </div>
-                <div class="tech-node-desc">${escapeHtml(t.desc)}</div>
-                <div class="tech-node-foot">
-                  ${badgeHtml}
-                  ${reqHtml}
-                </div>
-              </button>
-            `;
-          })
-          .join('');
-
+        const yPct = (((TRACK_Y_POS[br.id] || 44) / 444) * 100).toFixed(2);
+        const stat = branchStats[br.id] || { done: 0, total: 0 };
+        const shortName = br.name.replace(/\s*공학$/, '').replace(/\s*개량$/, '');
         return `
-          <section class="tech-branch-col" data-branch="${escapeHtml(br.id)}" style="--branch-accent:${escapeHtml(br.accent || '#C084FC')};">
-            <header class="tech-branch-head">
-              <div class="tech-branch-title-row">
-                <span class="tech-branch-dot" aria-hidden="true"></span>
-                <h3>${escapeHtml(br.name)}</h3>
-                <span class="tech-branch-prog">${doneCount}/${nodes.length}</span>
-              </div>
-              <p class="tech-branch-desc">${escapeHtml(br.desc)}</p>
-            </header>
-            <div class="tech-nodes-list">${nodesHtml}</div>
-          </section>
+          <div class="tech-track-label" style="top:${yPct}%;--branch-accent:${escapeHtml(br.accent || '#C084FC')};">
+            <div class="tech-track-top">
+              <span class="tech-branch-dot" aria-hidden="true"></span>
+              <span class="tech-track-name">${escapeHtml(shortName)}</span>
+            </div>
+            <span class="tech-branch-prog">${stat.done}/${stat.total}</span>
+          </div>
         `;
       })
       .join('');
 
-    grid.classList.toggle('focus-highlight', activeFocusArea === 'tech');
-    grid.innerHTML = branchesHtml;
+    // SVG edges
+    let edgesSvg = '';
+    for (let i = 0; i < order.length; i++) {
+      const tid = order[i];
+      const t = tree[tid];
+      const toMeta = TECH_GRAPH_META[tid];
+      if (!t || !toMeta || !Array.isArray(t.req) || t.req.length === 0) continue;
+      const br = branches.find((b) => b.id === t.branch) || { accent: '#C084FC' };
+      const toStatus = evaluateNodeStatus(st, t);
 
-    grid.querySelectorAll('.tech-node-card').forEach((btn) => {
+      for (let j = 0; j < t.req.length; j++) {
+        const rid = t.req[j];
+        const fromMeta = TECH_GRAPH_META[rid];
+        const fromTech = tree[rid];
+        if (!fromMeta || !fromTech) continue;
+        const fromLv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel(rid) : 0;
+        const fromDone = fromLv > 0;
+        const geom = buildEdgePath(
+          { id: rid, x: fromMeta.x, y: fromMeta.y },
+          { id: tid, x: toMeta.x, y: toMeta.y },
+          j,
+          t.req.length
+        );
+
+        let edgeState = 'locked';
+        if (toStatus.isMax || (fromDone && toStatus.curLv > 0)) {
+          edgeState = 'done';
+        } else if (fromDone && (toStatus.check.ok || toStatus.check.shortRp)) {
+          edgeState = 'ready';
+        }
+        const isConnSelected = selectedTechId === tid || selectedTechId === rid;
+
+        const strokeCol = edgeState === 'locked' && !isConnSelected ? '#475569' : br.accent || '#C084FC';
+        const strokeOp = edgeState === 'done' ? '0.92' : edgeState === 'ready' ? '0.88' : isConnSelected ? '0.72' : '0.45';
+        const strokeWidth = isConnSelected || edgeState === 'done' ? '2.8' : '2.2';
+        const dashAttr = edgeState === 'locked' ? ' stroke-dasharray="5 4"' : '';
+
+        edgesSvg += `<path class="tech-edge ${edgeState}${isConnSelected ? ' selected' : ''}" data-from="${escapeHtml(rid)}" data-to="${escapeHtml(tid)}" data-accent="${escapeHtml(br.accent || '#C084FC')}" data-state="${edgeState}" d="${geom.d}" fill="none" stroke="${strokeCol}" stroke-opacity="${strokeOp}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${dashAttr}/>`;
+
+        // Directional arrowhead triangle
+        const tx = geom.tipX;
+        const ty = geom.tipY;
+        edgesSvg += `<polygon class="tech-edge-arrow" data-from="${escapeHtml(rid)}" data-to="${escapeHtml(tid)}" data-accent="${escapeHtml(br.accent || '#C084FC')}" data-state="${edgeState}" points="${tx},${ty} ${tx - 7},${ty - 4.2} ${tx - 7},${ty + 4.2}" fill="${strokeCol}" fill-opacity="${strokeOp}"/>`;
+      }
+    }
+
+    // Node tiles
+    const nodesHtml = order
+      .map((tid) => {
+        const t = tree[tid];
+        const meta = TECH_GRAPH_META[tid];
+        if (!t || !meta) return '';
+        const br = branches.find((b) => b.id === t.branch) || { accent: '#C084FC' };
+        const info = evaluateNodeStatus(st, t);
+        const leftPct = (meta.x / 10).toFixed(2);
+        const topPct = ((meta.y / 444) * 100).toFixed(2);
+        const isSel = selectedTechId === tid;
+
+        let topBadge = '';
+        if (info.isMax) {
+          topBadge = `<span class="node-corner-badge done">${ozIcon('stat-check', 13)}</span>`;
+        } else if (info.check.lockedByHq || info.check.missingReq) {
+          topBadge = `<span class="node-corner-badge lock">${ozIcon('state-lock', 12)}</span>`;
+        } else if (info.maxLv > 1) {
+          topBadge = `<span class="node-corner-lv">Lv.${info.curLv}/${info.maxLv}</span>`;
+        }
+
+        const chipLabel = info.isMax ? (info.maxLv > 1 ? 'MAX' : '완료') : `${info.costRp} RP`;
+        const chipCls = info.isMax ? 'done' : info.check.shortRp && !info.check.lockedByHq && !info.check.missingReq ? 'short' : '';
+
+        return `
+          <button
+            type="button"
+            class="tech-graph-node ${info.stateCls}${isSel ? ' is-selected' : ''}"
+            data-tech-id="${escapeHtml(t.id)}"
+            style="left:${leftPct}%;top:${topPct}%;--branch-accent:${escapeHtml(br.accent || '#C084FC')};"
+            title="${escapeHtml(`${t.name} (${info.stateLabel} · ${chipLabel})`)} — 클릭: 상세 확인 / 더블클릭: 즉시 연구"
+          >
+            ${topBadge}
+            <span class="tech-node-icon">${ozIcon(meta.icon || 'res-rp', 24)}</span>
+            <span class="tech-node-cost ${chipCls}">${escapeHtml(chipLabel)}</span>
+          </button>
+        `;
+      })
+      .join('');
+
+    wrap.innerHTML = `
+      <div class="tech-tier-header-row">
+        <div class="tech-rail-head">공학 트랙</div>
+        <div class="tech-tier-cols-head">${tierHeadsHtml}</div>
+      </div>
+      <div class="tech-graph-stage">
+        <div class="tech-stage-cols">${colBgsHtml}</div>
+        <div class="tech-tracks-rail">${tracksHtml}</div>
+        <svg class="tech-graph-edges" viewBox="0 0 1000 444" preserveAspectRatio="none" aria-hidden="true">${edgesSvg}</svg>
+        <div class="tech-nodes-layer">${nodesHtml}</div>
+      </div>
+    `;
+
+    wrap.querySelectorAll('.tech-graph-node').forEach((btn) => {
       btn.addEventListener('click', () => {
+        const tid = btn.getAttribute('data-tech-id');
+        if (!tid) return;
+        selectedTechId = tid;
+        wrap.querySelectorAll('.tech-graph-node').forEach((n) => {
+          n.classList.toggle('is-selected', n.getAttribute('data-tech-id') === tid);
+        });
+        wrap.querySelectorAll('.tech-edge').forEach((edgeEl) => {
+          const fromId = edgeEl.getAttribute('data-from');
+          const toId = edgeEl.getAttribute('data-to');
+          const state = edgeEl.getAttribute('data-state') || 'locked';
+          const accent = edgeEl.getAttribute('data-accent') || '#C084FC';
+          const isConn = tid === fromId || tid === toId;
+          const col = state === 'locked' && !isConn ? '#475569' : accent;
+          const op = state === 'done' ? '0.92' : state === 'ready' ? '0.88' : isConn ? '0.72' : '0.45';
+          const w = isConn || state === 'done' ? '2.8' : '2.2';
+          edgeEl.classList.toggle('selected', isConn);
+          edgeEl.setAttribute('stroke', col);
+          edgeEl.setAttribute('stroke-opacity', op);
+          edgeEl.setAttribute('stroke-width', w);
+        });
+        wrap.querySelectorAll('.tech-edge-arrow').forEach((arrEl) => {
+          const fromId = arrEl.getAttribute('data-from');
+          const toId = arrEl.getAttribute('data-to');
+          const state = arrEl.getAttribute('data-state') || 'locked';
+          const accent = arrEl.getAttribute('data-accent') || '#C084FC';
+          const isConn = tid === fromId || tid === toId;
+          const col = state === 'locked' && !isConn ? '#475569' : accent;
+          const op = state === 'done' ? '0.92' : state === 'ready' ? '0.88' : isConn ? '0.72' : '0.45';
+          arrEl.setAttribute('fill', col);
+          arrEl.setAttribute('fill-opacity', op);
+        });
+        renderTechInspector(ZS.Game.state);
+      });
+      btn.addEventListener('dblclick', () => {
         const tid = btn.getAttribute('data-tech-id');
         if (tid && ZS.Game.researchTech) {
           ZS.Game.researchTech(tid);
         }
       });
     });
-  }
 
-  function renderTechPopModal() {
-    const st = ZS.Game.state;
-    if (!st) return;
-
-    const rpBadge = document.getElementById('tech-modal-rp-badge');
-    if (rpBadge) {
-      rpBadge.innerHTML = `${ozIcon('res-rp', 16, 'icon-rp')}<span>본부 Lv.${st.hqLevel || 1} 인가 · 보유 ${Math.floor(st.rp || 0)} RP</span>`;
-    }
-
-    renderJobBar(st);
-    renderTechGrid(st);
+    renderTechInspector(st);
   }
 
   Object.assign(U, {
-    isTechPopModalOpen,
-    openTechPopModal,
-    closeTechPopModal,
-    toggleTechPopModal,
-    renderTechPopModal
+    isPopModalOpen,
+    isTechModalOpen,
+    isAnyPopTechModalOpen,
+    openPopModal,
+    closePopModal,
+    togglePopModal,
+    openTechModal,
+    closeTechModal,
+    toggleTechModal,
+    closeAllPopTechModals,
+    renderPopModal,
+    renderTechModal,
+    renderOpenPopTechModals,
+    // Backward compatibility aliases
+    isTechPopModalOpen: isAnyPopTechModalOpen,
+    openTechPopModal: function (focusArea) {
+      if (focusArea === 'pop') openPopModal();
+      else openTechModal();
+    },
+    closeTechPopModal: closeAllPopTechModals,
+    toggleTechPopModal: function (focusArea) {
+      if (focusArea === 'pop') return togglePopModal();
+      return toggleTechModal();
+    },
+    renderTechPopModal: renderOpenPopTechModals
   });
 })();
