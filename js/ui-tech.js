@@ -527,13 +527,6 @@ window.ZS = window.ZS || {};
       )
       .join('');
 
-    const recruitFooter =
-      totalAgents < (st.popCap || 4) && totalAgents < 8
-        ? '새벽 충원 예정 (+1명)'
-        : totalAgents >= (st.popCap || 4)
-        ? '수용 한도 도달 · 막사 증설 필요'
-        : '새벽 자동 충원 상한 (8명)';
-
     body.innerHTML = `
       <div class="pop-pool-banner${unassigned > 0 ? ' has-free' : ' all-assigned'}">
         <div class="pop-pool-top">
@@ -557,7 +550,6 @@ window.ZS = window.ZS || {};
 
       <footer class="pop-footer-strip">
         <span class="pop-step-guide">1. <b>(−)</b> 대기 풀로 감원 → 2. <b>(+)</b> 목표 직무 배정</span>
-        <span class="pop-recruit-pill">${ozIcon('phase-day', 14, 'icon-coin')}<span>${escapeHtml(recruitFooter)}</span></span>
       </footer>
     `;
 

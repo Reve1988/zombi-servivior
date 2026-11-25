@@ -27,6 +27,7 @@ window.ZS = window.ZS || {};
   };
 
   let bannerTimer = null;
+  let arrivalTimer = null;
   let lastCozyPulseSeq = 0;
   let lastWaveNumStr = '';
   let lastPhaseIconKey = '';
@@ -700,6 +701,23 @@ window.ZS = window.ZS || {};
     }, 4200);
   }
 
+  function showArrivalToast(count, totalAgents, popCap) {
+    const n = Math.max(0, Math.floor(Number(count) || 0));
+    if (uiState.mainMenuOpen || n <= 0) return;
+    const el = document.getElementById('arrival-toast');
+    const titleEl = document.getElementById('arrival-toast-title');
+    const subEl = document.getElementById('arrival-toast-sub');
+    if (!el || !titleEl || !subEl) return;
+    titleEl.textContent = `생존자 ${n}명이 쉘터에 합류하였습니다.`;
+    subEl.textContent = `현재 총원 ${totalAgents || 0}/${popCap || 4}명 · 클릭하거나 [P] 키로 직무를 배치하세요`;
+    el.classList.remove('hidden');
+
+    if (arrivalTimer) clearTimeout(arrivalTimer);
+    arrivalTimer = setTimeout(() => {
+      el.classList.add('hidden');
+    }, 5200);
+  }
+
   let lastStrikeTargeting = null;
   let lastPopSig = '';
 
@@ -868,6 +886,7 @@ window.ZS = window.ZS || {};
     updateCombatHud,
     renderReconCard,
     showWaveBanner,
+    showArrivalToast,
     updateLiveNightNumbers,
     initDebugToolbar
   });

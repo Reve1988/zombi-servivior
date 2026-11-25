@@ -904,12 +904,15 @@ window.ZS = window.ZS || {};
     const supplyCoinMsg = supplyCoin > 0 ? ` · 물류 +${supplyCoin}C` : '';
     const scavMsg = scavengeWood > 0 ? ` · 수색 +${scavengeWood}W/+${scavengeScrap}S` : '';
     const digMsg = digGain > 0 ? ` · 굴착력 +${digGain} AP` : '';
-    const agentMsg = arrivedAgent > 0 ? ' · 신규 요원 +1명 합류!' : recruitNote;
+    const agentMsg = arrivedAgent > 0 ? ` · 생존자 +${arrivedAgent}명` : recruitNote;
     G.banner(
       `WAVE ${clearedWave} 방어 성공! 아침이 밝았습니다`,
       `보상 목재 +${woodReward} · 고철 +${scrapReward} · 코인 +${totalCoin} · 전력 +${gainedPower}${rpMsg}${prodMsg}${supplyCoinMsg}${scavMsg}${digMsg}${agentMsg}`,
       'good'
     );
+    if (arrivedAgent > 0 && ZS._UI && ZS._UI.showArrivalToast) {
+      ZS._UI.showArrivalToast(arrivedAgent, state.agents, state.popCap);
+    }
     if (newlyUnlocked.length > 0) {
       G.banner(
         `사령관 분과 영구 해금: ${newlyUnlocked.join(', ')}`,

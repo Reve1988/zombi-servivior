@@ -186,6 +186,7 @@ window.ZS = window.ZS || {};
     document.getElementById('guide-modal')?.classList.add('hidden');
     document.getElementById('settings-popover')?.classList.add('hidden');
     document.getElementById('wave-banner')?.classList.add('hidden');
+    document.getElementById('arrival-toast')?.classList.add('hidden');
     closeConfirmModal();
     if (U.closeTechPopModal) U.closeTechPopModal();
     if (U.setToolMode) U.setToolMode('inspect');
@@ -455,6 +456,7 @@ window.ZS = window.ZS || {};
       closeGameOverModal();
       document.getElementById('btn-skill-airstrike')?.classList.remove('targeting');
       document.getElementById('trader-modal')?.classList.add('hidden');
+      document.getElementById('arrival-toast')?.classList.add('hidden');
       if (U.closeTechPopModal) U.closeTechPopModal();
       U.updateCursorTooltip();
       refreshMainMenuState();
@@ -1141,6 +1143,20 @@ window.ZS = window.ZS || {};
       setSettingsOpen(false);
       if (U.togglePopModal) U.togglePopModal();
     });
+    const arrivalToastEl = document.getElementById('arrival-toast');
+    if (arrivalToastEl) {
+      arrivalToastEl.addEventListener('click', () => {
+        arrivalToastEl.classList.add('hidden');
+        openPop();
+      });
+      arrivalToastEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          arrivalToastEl.classList.add('hidden');
+          openPop();
+        }
+      });
+    }
     document.getElementById('btn-open-tech')?.addEventListener('click', () => {
       setSettingsOpen(false);
       if (U.toggleTechModal) U.toggleTechModal();
