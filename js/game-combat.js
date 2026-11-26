@@ -216,6 +216,9 @@ window.ZS = window.ZS || {};
 
     ZS.Audio.playWaveStart();
     const isBossWave = state.wave % 5 === 0;
+    if (ZS._UI && ZS._UI.showInvasionAlert) {
+      ZS._UI.showInvasionAlert(state.nextWaveIntel, isBossWave);
+    }
     G.banner(
       isBossWave ? `WAVE ${state.wave} — 알파 변이체 경보!` : `WAVE ${state.wave} 야간 방어 개시`,
       `충전 전력 ${Math.round(state.power)} · 적 개체 ${state.waveTotalZombies}기 접근 중`,

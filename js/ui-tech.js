@@ -451,24 +451,22 @@ window.ZS = window.ZS || {};
         stats: b1Open
           ? [
               {
-                icon: 'res-wood',
-                cls: 'icon-wood',
-                main: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
-                sub: '일일 자원'
+                hideTopIcon: true,
+                mainHtml: `${ozIcon('res-wood', 14, 'icon-wood')}<span>+${prodWoodPreview}</span><span class="pop-stat-sep">·</span>${ozIcon('res-scrap', 14, 'icon-scrap')}<span>+${prodScrapPreview}</span>`,
+                sub: '1인당 목재 +5 · 고철 +4 / 일'
               },
               {
                 icon: 'b1-dig',
                 cls: 'icon-ap',
                 main: `+${digGainPreview} AP / 일`,
-                sub: '지하 굴착력'
+                sub: `지하 굴착 · 1인당 +${digPerProd} AP`
               }
             ]
           : [
               {
-                icon: 'res-wood',
-                cls: 'icon-wood',
-                main: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
-                sub: '일일 자원 생산'
+                hideTopIcon: true,
+                mainHtml: `${ozIcon('res-wood', 14, 'icon-wood')}<span>+${prodWoodPreview}</span><span class="pop-stat-sep">·</span>${ozIcon('res-scrap', 14, 'icon-scrap')}<span>+${prodScrapPreview}</span>`,
+                sub: '1인당 목재 +5 · 고철 +4 / 일'
               }
             ]
       }
@@ -491,8 +489,8 @@ window.ZS = window.ZS || {};
               .map(
                 (sb) => `
               <div class="pop-stat-box">
-                <span class="pop-stat-icon">${ozIcon(sb.icon, 16, sb.cls)}</span>
-                <span class="pop-stat-main">${escapeHtml(sb.main)}</span>
+                ${sb.hideTopIcon ? '' : `<span class="pop-stat-icon">${ozIcon(sb.icon, 16, sb.cls)}</span>`}
+                <span class="pop-stat-main">${sb.mainHtml || escapeHtml(sb.main)}</span>
                 <span class="pop-stat-sub">${escapeHtml(sb.sub)}</span>
               </div>
             `
@@ -521,7 +519,6 @@ window.ZS = window.ZS || {};
               aria-label="${escapeHtml(rc.title)} 1명 배정"
             >
               <span>+</span>
-              ${!canAddAny ? `<span class="pop-plus-lock">${ozIcon('state-lock', 13)}</span>` : ''}
             </button>
           </div>
         </section>
@@ -542,17 +539,13 @@ window.ZS = window.ZS || {};
         <div class="pop-pool-notice">
           ${
             unassigned === 0
-              ? `${ozIcon('state-alert', 15, 'icon-coin')}<span>전원 배치 완료 — 타 직무로 전환하려면 먼저 다른 직무에서 <b>(−) 감원</b>한 뒤 <b>(+)</b>를 누르세요.</span>`
-              : `${ozIcon('stat-check', 15, 'icon-heal')}<span>대기 인원 <b>${unassigned}명</b> 배정 가능 — 원하는 직무 카드의 <b>(+)</b> 버튼을 눌러 배치하세요.</span>`
+              ? `${ozIcon('state-alert', 15, 'icon-coin')}<span>전원 배치 완료 — 타 직무로 전환하려면 먼저 다른 직무에서 <b>(−) 감원</b> 후 <b>(+) 배정</b>하세요.</span>`
+              : `${ozIcon('stat-check', 15, 'icon-heal')}<span>대기 인원 <b>${unassigned}명</b> 배정 가능 — 원하는 직무의 <b>(+)</b>를 눌러 배치하세요.</span>`
           }
         </div>
       </div>
 
       <div class="pop-roles-grid">${cardsHtml}</div>
-
-      <footer class="pop-footer-strip">
-        <span class="pop-step-guide">1. <b>(−)</b> 대기 풀로 감원 → 2. <b>(+)</b> 목표 직무 배정</span>
-      </footer>
     `;
 
     body.querySelectorAll('.pop-step-btn').forEach((btn) => {
@@ -575,22 +568,16 @@ window.ZS = window.ZS || {};
     const reqWave = ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(reqHq) : ([1, 10, 20, 35, 50][reqHq - 1] || 1);
 
     let stateCls = 'state-locked';
-    let stateLabel = '선행 잠금';
+    let stateLabel = '미해금';
     if (isMax) {
       stateCls = 'state-done';
       stateLabel = maxLv > 1 ? `Lv.${curLv}/${maxLv} 완료` : '연구 완료';
     } else if (check.ok) {
       stateCls = 'state-ready';
       stateLabel = '연구 가능';
-    } else if (check.lockedByHq) {
+    } else if (check.lockedByHq || check.missingReq) {
       stateCls = 'state-locked';
-      stateLabel = `본부 Lv.${reqHq} 잠금`;
-    } else if (check.missingReq) {
-      stateCls = 'state-locked';
-      const missingNames = (t.req || [])
-        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
-        .map((rid) => (tree[rid] ? tree[rid].name : rid));
-      stateLabel = missingNames.length > 0 ? `선행 필요` : '잠금';
+      stateLabel = '미해금';
     } else if (check.shortRp) {
       stateCls = 'state-short';
       stateLabel = 'RP 부족';
@@ -652,17 +639,6 @@ window.ZS = window.ZS || {};
     const stInfo = evaluateNodeStatus(st, t);
 
     const chips = Array.isArray(meta.chips) ? meta.chips.slice(0, 3) : [];
-    if (stInfo.check.lockedByHq) {
-      chips[2] = { icon: 'state-lock', tone: 'gold', text: `본부 Lv.${stInfo.reqHq} (W${stInfo.reqWave}) 필요` };
-    } else if (stInfo.check.missingReq && Array.isArray(t.req) && t.req.length > 0) {
-      const reqNames = t.req
-        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
-        .map((rid) => (TECH_GRAPH_META[rid] ? TECH_GRAPH_META[rid].shortLabel : rid));
-      if (reqNames.length > 0) {
-        chips[2] = { icon: 'state-lock', tone: 'muted', text: `선행: ${reqNames.join(' + ')}` };
-      }
-    }
-
     const chipsHtml = chips
       .map(
         (c) => `
@@ -674,17 +650,24 @@ window.ZS = window.ZS || {};
       )
       .join('');
 
+    let btnIcon = ozIcon('res-rp', 16, stInfo.check.ok ? 'icon-rp' : '');
     let btnLabel = '연구 불가';
     if (stInfo.isMax) {
+      btnIcon = ozIcon('stat-check', 16);
       btnLabel = '연구 완료';
     } else if (stInfo.check.ok) {
       btnLabel = `연구 진행 · ${stInfo.costRp} RP`;
     } else if (stInfo.check.lockedByHq) {
-      btnLabel = `본부 Lv.${stInfo.reqHq} 필요`;
+      btnIcon = ozIcon('state-lock', 15, 'icon-muted');
+      btnLabel = `본부 Lv.${stInfo.reqHq} (W${stInfo.reqWave}) 필요 · ${stInfo.costRp} RP`;
     } else if (stInfo.check.missingReq) {
-      btnLabel = '선행 연구 필요';
+      const reqNames = (t.req || [])
+        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
+        .map((rid) => (TECH_GRAPH_META[rid] ? TECH_GRAPH_META[rid].shortLabel : rid));
+      btnIcon = ozIcon('state-lock', 15, 'icon-muted');
+      btnLabel = reqNames.length > 0 ? `선행 [${reqNames.join(' + ')}] 필요 · ${stInfo.costRp} RP` : `선행 연구 필요 · ${stInfo.costRp} RP`;
     } else if (stInfo.check.shortRp) {
-      btnLabel = `RP 부족 (${stInfo.costRp} RP)`;
+      btnLabel = `RP 부족 (필요 ${stInfo.costRp} RP)`;
     }
 
     bar.style.setProperty('--branch-accent', branch.accent || '#C084FC');
@@ -710,7 +693,7 @@ window.ZS = window.ZS || {};
           class="tech-exec-btn${stInfo.check.ok ? ' is-ready' : ''}${stInfo.isMax ? ' is-done' : ''}"
           ${stInfo.check.ok ? '' : 'disabled'}
         >
-          ${stInfo.isMax ? ozIcon('stat-check', 16) : ozIcon('res-rp', 16, stInfo.check.ok ? 'icon-rp' : '')}
+          ${btnIcon}
           <span>${escapeHtml(btnLabel)}</span>
         </button>
       </div>
@@ -738,7 +721,7 @@ window.ZS = window.ZS || {};
     }
     const hqBadge = document.getElementById('tech-modal-hq-badge');
     if (hqBadge) {
-      hqBadge.innerHTML = `${ozIcon('hud-hq', 14, 'icon-coin')}<span>지휘소 Lv.${st.hqLevel || 1}</span>`;
+      hqBadge.innerHTML = `${ozIcon('hud-hq', 14, 'icon-coin')}<span>본부 Lv.${st.hqLevel || 1}</span>`;
     }
 
     const branches = (ZS.DATA && ZS.DATA.TECH_BRANCHES) || [];
@@ -756,7 +739,7 @@ window.ZS = window.ZS || {};
       .map(
         (col) => `
         <div class="tech-tier-head${col.locked ? ' locked' : ''}">
-          <span>지휘소 Lv.${col.lv} · W${col.wave}</span>
+          <span>본부 Lv.${col.lv} · W${col.wave}</span>
           ${col.locked ? ozIcon('state-lock', 13, 'icon-muted') : ''}
         </div>
       `

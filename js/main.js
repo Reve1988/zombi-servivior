@@ -874,7 +874,19 @@ window.ZS = window.ZS || {};
         },
         { passive: false }
       );
+      itemCardsEl.addEventListener('scroll', () => {
+        if (U.syncDockScrollButtons) U.syncDockScrollButtons();
+      });
     }
+    document.getElementById('btn-dock-scroll-left')?.addEventListener('click', () => {
+      if (itemCardsEl) itemCardsEl.scrollBy({ left: -216, behavior: 'smooth' });
+    });
+    document.getElementById('btn-dock-scroll-right')?.addEventListener('click', () => {
+      if (itemCardsEl) itemCardsEl.scrollBy({ left: 216, behavior: 'smooth' });
+    });
+    window.addEventListener('resize', () => {
+      if (U.syncDockScrollButtons) U.syncDockScrollButtons();
+    });
 
     const settingsWrap = document.getElementById('settings-wrap');
     const settingsBtn = document.getElementById('btn-settings');

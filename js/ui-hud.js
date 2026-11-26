@@ -27,6 +27,7 @@ window.ZS = window.ZS || {};
   };
 
   let bannerTimer = null;
+  let invasionAlertTimer = null;
   let lastCozyPulseSeq = 0;
   let lastWaveNumStr = '';
   let lastPhaseIconKey = '';
@@ -227,7 +228,7 @@ window.ZS = window.ZS || {};
 
     const lblEl = document.getElementById('btn-b1-label');
     if (lblEl) {
-      lblEl.textContent = isUg ? '지상 복귀 [B]' : '지하 B1 [B]';
+      lblEl.textContent = isUg ? '지상 복귀' : '지하 B1';
     }
     const apChip = document.getElementById('hud-dig-ap-chip');
     if (apChip) {
@@ -243,6 +244,95 @@ window.ZS = window.ZS || {};
       : isUg
       ? '지상 본부 레이어로 복귀 (단축키 B)'
       : `지하 B1 쉘터로 이동 (보유 ${Math.floor(st.digAp || 0)}/${st.digApCap || 24} AP · 단축키 B)`;
+  }
+
+  function getDailyResourceDeltaPreview(st) {
+    if (!st) return { wood: 0, scrap: 0, coin: 0, rp: 0 };
+    const wave = Math.max(1, st.wave || 1);
+    const jobs = st.jobs || { combat: st.agents || 0, research: 0, prod: 0 };
+    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 2 };
+    const spareCombat = Math.max(0, (jobs.combat || 0) - (st.popUsed || 0));
+    const scavengeWood = (st.hqLevel || 1) === 1 && spareCombat > 0 ? spareCombat * 2 : 0;
+    const scavengeScrap = (st.hqLevel || 1) === 1 && spareCombat > 0 ? spareCombat * 1 : 0;
+    const prodCount = jobs.prod || 0;
+    const prodWood = Math.round(prodCount * 5 + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0));
+    const prodScrap = Math.round(prodCount * 4 + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0));
+    const supplyCoin = Math.round(st.b1SupplyCoin || 0);
+    const wood = 26 + wave * 9 + prodWood + scavengeWood;
+    const scrap = 16 + wave * 5 + prodScrap + scavengeScrap;
+    const baseCoin = 16 + wave * 4;
+    const coinBonus = st.cozyTier ? (st.cozyTier.coinBonus || 0) : 0;
+    const coin = baseCoin + Math.round(baseCoin * coinBonus) + supplyCoin;
+    const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
+    const drill2 = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
+    const rpMult = 1 + (st.b1LabMult || 0) + (drill2 > 0 ? 0.15 : 0);
+    const rp = Math.round(rawRp * rpMult);
+    return { wood, scrap, coin, rp };
+  }
+
+  function updateDailyResourceDeltas(st) {
+    const d = getDailyResourceDeltaPreview(st);
+    const items = [
+      ['res-wood-delta', d.wood],
+      ['res-scrap-delta', d.scrap],
+      ['res-coin-delta', d.coin],
+      ['res-rp-delta', d.rp]
+    ];
+    items.forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = `+${val}`;
+      el.classList.toggle('is-zero', val <= 0);
+      el.title = `웨이브 ${st.wave || 1} 완료 시 예상 획득량 (+${val})`;
+    });
+  }
+
+  function formatReconPatternTitle(intel) {
+    if (!intel) return '침공 경보';
+    const SIDE_NAMES = ['북동', '남동', '남서', '북서'];
+    const kinds = intel.sideKinds || ['none', 'none', 'none', 'none'];
+    const mainSides = [];
+    const subSides = [];
+    for (let sd = 0; sd < 4; sd++) {
+      if (kinds[sd] === 'main' || kinds[sd] === 'boss') mainSides.push(SIDE_NAMES[sd]);
+      else if (kinds[sd] === 'sub') subSides.push(SIDE_NAMES[sd]);
+    }
+    if (intel.pattern === 'single') return `${mainSides[0] || '북동'} 정면 침공`;
+    if (intel.pattern === 'flank') return `${mainSides[0] || ''}·${subSides[0] || ''} 측면`;
+    if (intel.pattern === 'dual') return `${mainSides.join('·')} 협공`;
+    return '전방위 포위';
+  }
+
+  function showInvasionAlert(intel, isBossWave) {
+    if (uiState.mainMenuOpen || !intel) return;
+    const el = document.getElementById('invasion-alert');
+    const iconEl = document.getElementById('invasion-alert-icon');
+    const titleEl = document.getElementById('invasion-alert-title');
+    const subEl = document.getElementById('invasion-alert-sub');
+    if (!el || !titleEl || !subEl) return;
+
+    const waveBadge = String(intel.wave || 1).padStart(2, '0');
+    const patTitle = formatReconPatternTitle(intel);
+    if (iconEl) {
+      iconEl.innerHTML = ozIcon(isBossWave ? 'en-boss' : 'state-alert', 22, isBossWave ? 'icon-boss' : 'icon-danger');
+    }
+    titleEl.textContent = `WAVE ${waveBadge} · ${patTitle}`;
+    subEl.textContent = isBossWave
+      ? `알파 변이체 포함 ${intel.totalCount || 0}기 침공 개시`
+      : `적 감염체 ${intel.totalCount || 0}기 방어선 접근 중`;
+
+    el.classList.toggle('boss', !!isBossWave);
+    el.classList.remove('hidden', 'converging');
+    if (el.offsetWidth !== undefined) {
+      // Trigger CSS animation restart cleanly
+    }
+    el.classList.add('converging');
+
+    if (invasionAlertTimer) clearTimeout(invasionAlertTimer);
+    invasionAlertTimer = setTimeout(() => {
+      el.classList.remove('converging');
+      el.classList.add('hidden');
+    }, 2550);
   }
 
   function updateHud() {
@@ -298,6 +388,7 @@ window.ZS = window.ZS || {};
     document.getElementById('res-wood').textContent = Math.floor(st.wood);
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
+    updateDailyResourceDeltas(st);
 
     if (st.phase !== 'night') {
       syncNightPhaseAndPowerHud(st);
@@ -475,7 +566,10 @@ window.ZS = window.ZS || {};
   function renderReconCard(st) {
     const el = document.getElementById('recon-card');
     if (!el) return;
-    const intel = st && st.nextWaveIntel;
+    let intel = st && st.nextWaveIntel;
+    if (st && st.phase === 'day' && (!intel || intel.wave !== st.wave) && ZS.Game && ZS.Game.generateWaveIntel) {
+      intel = ZS.Game.generateWaveIntel(st.wave);
+    }
     if (!intel || st.phase !== 'day') {
       if (lastReconSig !== 'hidden') {
         lastReconSig = 'hidden';
@@ -568,23 +662,7 @@ window.ZS = window.ZS || {};
         ? `<circle cx="${SIDE_EDGES[intel.bossSide][4]}" cy="${SIDE_EDGES[intel.bossSide][5]}" r="6.2" fill="rgba(224, 64, 251, 0.28)"/><circle cx="${SIDE_EDGES[intel.bossSide][4]}" cy="${SIDE_EDGES[intel.bossSide][5]}" r="3.4" fill="#E040FB" stroke="#FFFFFF" stroke-width="0.9"/>`
         : '';
 
-    const mainSides = [];
-    const subSides = [];
-    for (let sd = 0; sd < 4; sd++) {
-      if (kinds[sd] === 'main' || kinds[sd] === 'boss') mainSides.push(SIDE_NAMES[sd]);
-      else if (kinds[sd] === 'sub') subSides.push(SIDE_NAMES[sd]);
-    }
-
-    let patTitle = intel.patternLabel || '침공 경보';
-    if (intel.pattern === 'single') {
-      patTitle = `${mainSides[0] || '북동'} 정면 침공`;
-    } else if (intel.pattern === 'flank') {
-      patTitle = `${mainSides[0] || ''}·${subSides[0] || ''} 측면`;
-    } else if (intel.pattern === 'dual') {
-      patTitle = `${mainSides.join('·')} 협공`;
-    } else {
-      patTitle = '전방위 포위';
-    }
+    const patTitle = formatReconPatternTitle(intel);
 
     const ENEMY_ORDER = [
       ['walker', '보행자'],
@@ -612,7 +690,7 @@ window.ZS = window.ZS || {};
         ? `<div class="recon-boss-row">${ozIcon('en-boss', 15)}<span>알파 타이탄${counts.boss > 1 ? ` ×${counts.boss}` : ''} · ${SIDE_NAMES[intel.bossSide]}</span></div>`
         : '';
 
-    const waveBadge = String(intel.wave).padStart(2, '0');
+    const waveBadge = String(st.wave || intel.wave || 1).padStart(2, '0');
     el.innerHTML = `
       <div class="recon-head">
         <span class="recon-title">${ozIcon('recon-compass', 15)}<span>정찰 레이더 · W${waveBadge}</span></span>
@@ -629,7 +707,7 @@ window.ZS = window.ZS || {};
           ${bossDot}
         </svg>
       </div>
-      <div class="recon-pat">${escapeHtml(patTitle)}</div>
+      <div class="recon-pat">${ozIcon('state-alert', 14, isBossWave ? 'icon-boss' : 'icon-danger')}<span>${escapeHtml(patTitle)}</span></div>
       <div class="recon-chips">${chipsHtml}</div>
       ${bossRowHtml}
       <div class="recon-foot">
@@ -832,6 +910,7 @@ window.ZS = window.ZS || {};
     document.getElementById('res-wood').textContent = Math.floor(st.wood);
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
+    updateDailyResourceDeltas(st);
     const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
     const nextPopSig = `${st.popUsed}/${st.agents}/${st.popCap}/${jobs.combat}/${jobs.research}/${jobs.prod}/${Math.floor(st.rp || 0)}`;
     if (nextPopSig !== lastPopSig) {
@@ -981,6 +1060,7 @@ window.ZS = window.ZS || {};
     updateHud,
     updateCombatHud,
     renderReconCard,
+    showInvasionAlert,
     showWaveBanner,
     isWaveReportModalOpen,
     openWaveReportModal,

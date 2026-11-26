@@ -170,6 +170,14 @@ window.ZS = window.ZS || {};
     setToolMode('build', def.id);
   }
 
+  function getEstimatedNightPowerUse(def, eff) {
+    if (!def || !def.requiresPower) return 0;
+    const idle = eff && eff.powerIdle != null ? eff.powerIdle : (def.powerIdle || 0);
+    const shot = eff && eff.powerShot != null ? eff.powerShot : (def.powerShot || 0);
+    const rate = eff && eff.fireRate != null ? eff.fireRate : (def.fireRate || 0);
+    return Math.max(1, Math.round(idle * 22 + shot * rate * 5));
+  }
+
   function getCardTagInfo(def) {
     if (def.domain === 'underground') {
       const roleDef = def.requiredRole && ZS.DATA.B1_ROOMS ? ZS.DATA.B1_ROOMS[def.requiredRole] : null;
@@ -200,7 +208,8 @@ window.ZS = window.ZS || {};
       return { html: `${ozIcon('res-agent', 13)}<span>요원 ${def.popUse} · 무전력</span>`, cls: 'tag-manned' };
     }
     if (def.subType === 'turret') {
-      return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>야간전력 소모</span>`, cls: 'tag-power' };
+      const estPwr = getEstimatedNightPowerUse(def);
+      return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>야간 ~${estPwr} 전력</span>`, cls: 'tag-power' };
     }
     if (def.subType === 'power') {
       const prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, 1) : def;
@@ -304,6 +313,7 @@ window.ZS = window.ZS || {};
     });
 
     if (layerChanged) container.scrollLeft = 0;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(syncDockScrollButtons);
   }
 
   const B1_ROLE_SHORT_LABELS = {
@@ -426,6 +436,7 @@ window.ZS = window.ZS || {};
     });
 
     if (categoryChanged) container.scrollLeft = 0;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(syncDockScrollButtons);
   }
 
   function renderItemCards() {
@@ -546,6 +557,7 @@ window.ZS = window.ZS || {};
       container.appendChild(card);
     });
     if (categoryChanged) container.scrollLeft = 0;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(syncDockScrollButtons);
   }
 
   const B1_ROT_LABELS = ['남서(기본)', '남동(90°)', '북동(180°)', '북서(270°)'];
@@ -818,8 +830,51 @@ window.ZS = window.ZS || {};
       removeBtn.disabled = disableEdit;
     }
     syncDetailBarVisibility();
+    syncDockToolLabels();
     renderItemCards();
     updateCursorTooltip();
+  }
+
+  function syncDockToolLabels() {
+    const st = ZS.Game && ZS.Game.state;
+    const moveBtn = document.getElementById('tool-move');
+    const removeBtn = document.getElementById('tool-remove');
+    if (!moveBtn && !removeBtn) return;
+
+    let isMountedInspect = false;
+    if (st && st.activeLayer !== 'underground' && st.phase === 'day' && uiState.mode === 'inspect' && uiState.inspectedTile) {
+      const { tx, ty } = uiState.inspectedTile;
+      const cell = st.structGrid[ty] && st.structGrid[ty][tx];
+      isMountedInspect = !!(cell && cell.id === 'barricade_wall' && cell.mounted);
+    }
+
+    if (moveBtn) {
+      const span = moveBtn.querySelector('span');
+      if (span) span.textContent = isMountedInspect ? '상부 이동 [M]' : '이동 [M]';
+      moveBtn.classList.toggle('is-mounted-scope', isMountedInspect);
+    }
+    if (removeBtn) {
+      const span = removeBtn.querySelector('span');
+      if (span) span.textContent = isMountedInspect ? '상부 철거 [X]' : '철거 [X]';
+      removeBtn.classList.toggle('is-mounted-scope', isMountedInspect);
+    }
+  }
+
+  function syncDockScrollButtons() {
+    const container = document.getElementById('item-cards');
+    const leftBtn = document.getElementById('btn-dock-scroll-left');
+    const rightBtn = document.getElementById('btn-dock-scroll-right');
+    if (!container) return;
+    const wrap = container.parentElement;
+    const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+    const hasLeft = maxScroll > 6 && container.scrollLeft > 4;
+    const hasRight = maxScroll > 6 && container.scrollLeft < maxScroll - 4;
+    if (leftBtn) leftBtn.classList.toggle('hidden', !hasLeft);
+    if (rightBtn) rightBtn.classList.toggle('hidden', !hasRight);
+    if (wrap) {
+      wrap.classList.toggle('has-scroll-left', hasLeft);
+      wrap.classList.toggle('has-scroll-right', hasRight);
+    }
   }
 
   function syncDetailBarVisibility() {
@@ -828,6 +883,7 @@ window.ZS = window.ZS || {};
     const hasConfirm = !!document.getElementById('btn-confirm-demolish');
     const isIdle = uiState.mode === 'inspect' && !uiState.inspectedTile && !hasConfirm;
     bar.classList.toggle('idle-hidden', isIdle);
+    syncDockToolLabels();
   }
 
   function syncDockAndHudState() {
@@ -849,6 +905,7 @@ window.ZS = window.ZS || {};
       hudResBtn.title = uiState.hudResCompact ? '보조 자원 라벨 펼치기' : '보조 자원 간소화';
     }
     syncDetailBarVisibility();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(syncDockScrollButtons);
   }
 
   function setDockCollapsed(flag) {
@@ -1877,13 +1934,13 @@ window.ZS = window.ZS || {};
       const pct = nextR
         ? Math.max(0, Math.min(100, ((xp - curMin) / Math.max(1, nextR.minXp - curMin)) * 100))
         : 100;
-      const remLabel = nextR ? '' : 'MAX';
+      const remLabel = nextR ? `${Math.floor(xp)}/${nextR.minXp}` : `MAX · ${targetObj.kills || 0}킬`;
       return `
         <span class="detail-rank-box" title="처치 ${targetObj.kills || 0}기 · 숙련 ${Math.floor(xp)} XP">
           <span class="detail-rank-icon state-rank" style="color:${rInfo.color};">${ozIcon('state-rank', 14)}</span>
           <span class="detail-rank-name" style="color:${rInfo.color};">${escapeHtml(rInfo.name)}</span>
           <span class="detail-xp-track"><span class="detail-xp-fill" style="width:${pct.toFixed(1)}%;background:${rInfo.color};"></span></span>
-          ${remLabel ? `<span class="detail-xp-rem">${remLabel}</span>` : ''}
+          <span class="detail-xp-rem">${escapeHtml(remLabel)}</span>
         </span>
       `;
     };
@@ -1903,7 +1960,9 @@ window.ZS = window.ZS || {};
       let mRankHtml = '';
       if (mDef && (mDef.subType === 'manned' || mDef.subType === 'turret')) {
         mRankHtml = buildRankWidgetHtml(m, mEff);
-        const mPopTxt = mDef.subType === 'manned' ? ` · 요원 ${(mEff.prof && mEff.prof.popUse) || mDef.popUse}명` : '';
+        const mPopTxt = mDef.subType === 'manned'
+          ? ` · 요원 ${(mEff.prof && mEff.prof.popUse) || mDef.popUse}명`
+          : ` · 전력 ~${getEstimatedNightPowerUse(mDef, mEff)}`;
         const mAuraTxt = formatAuraStacksText(mEff.auraStacks);
         const platTxt = mEff.onPlateau ? ' · 고지대 보너스' : '';
         const rangeTxt = mEff.range.toFixed(1).replace(/\.0$/, '');
@@ -2002,6 +2061,7 @@ window.ZS = window.ZS || {};
         </div>
       `;
       setCompositeDetailHtml(compHtml, '복합 방어 진지');
+      syncDockToolLabels();
       document.getElementById('btn-comp-up-top')?.addEventListener('click', () => {
         ZS.Game.upgradeStructure(tx, ty);
       });
@@ -2069,8 +2129,8 @@ window.ZS = window.ZS || {};
 
       const curPopUse = (eff.prof && eff.prof.popUse) || def.popUse;
       const pwrInfo = def.requiresPower
-        ? `${ozIcon('res-power', 13, 'icon-power')}전력 필요`
-        : `${ozIcon('res-agent', 13)}요원 ${curPopUse}명`;
+        ? `${ozIcon('res-power', 13, 'icon-power')}<span title="야간 1웨이브 예상 전력 소모량">야간 ~${getEstimatedNightPowerUse(def, eff)} 전력</span>`
+        : `${ozIcon('res-agent', 13)}<span>요원 ${curPopUse}명 · 무전력</span>`;
       const auraInfo = formatAuraStacksText(eff.auraStacks);
       const tBonusHint = eff.onPlateau ? ' · 고지대 보너스' : '';
       const rangeStr = (v) => v.toFixed(1).replace(/\.0$/, '');
@@ -2184,6 +2244,7 @@ window.ZS = window.ZS || {};
         ZS.Game.upgradeStructure(tx, ty);
       });
     }
+    syncDockToolLabels();
   }
 
   Object.assign(U, {
@@ -2194,6 +2255,8 @@ window.ZS = window.ZS || {};
     renderItemCards,
     setToolMode,
     syncDetailBarVisibility,
+    syncDockToolLabels,
+    syncDockScrollButtons,
     syncDockAndHudState,
     setDockCollapsed,
     updateCursorTooltip,
