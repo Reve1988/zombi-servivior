@@ -574,6 +574,27 @@ window.ZS = window.ZS || {};
     ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
   }
 
+  /** Renders an amber 0명 badge above unmanned outposts or uncrewed HQ turrets. */
+  function drawDormantCrewPillBadge(ctx, gx, gy, warnZ, zScale, P, label) {
+    const warnPos = ZS.Iso.gridToScreen(gx, gy, warnZ);
+    const badgeScale = Math.max(1.0, Math.min(1.65, zScale));
+    const fontPx = Math.max(12, Math.round(12 * badgeScale));
+    const text = label || '0명';
+    const pillW = 34 * badgeScale;
+    const pillH = 16 * badgeScale;
+    const pillY = warnPos.y - pillH + 2 * badgeScale;
+    ctx.fillStyle = P.outlineDark || '#1B2430';
+    ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+    ctx.strokeStyle = P.caution || '#FFC94A';
+    ctx.lineWidth = 1.3;
+    ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+    ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'center';
+    const textY = pillY + pillH * 0.5 + fontPx * 0.35;
+    ctx.fillStyle = P.caution || '#FFC94A';
+    ctx.fillText(text, warnPos.x, textY);
+  }
+
   function drawWindOverlay(ctx, state, uiState, timeSec, zScale) {
     const tGrid = state && state.terrainGrid;
     if (!tGrid || !state.showWindOverlay || uiState.mainMenuOpen) return;
@@ -984,12 +1005,16 @@ window.ZS = window.ZS || {};
             const badgeScaleCap = Math.max(1.0, Math.min(1.65, zScale));
             const isMountUnpowered = state.isNight && mDef && mDef.requiresPower && !powered;
             const isMountEmpStunned = !isMountUnpowered && mDef && mDef.requiresPower && (m.empStunTimer || 0) > 0;
+            const isMountUncrewed = !isMountUnpowered && !isMountEmpStunned && mDef && mDef.subType === 'manned' && (m.crew || 0) <= 0;
             if (isMountUnpowered) {
               const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
               drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
             } else if (isMountEmpStunned) {
               const empZ = showDualHp ? dualHpZ + 8 : topZ + (hasPips || hasRank ? 14 : 6);
               drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, m.empStunTimer || 0, timeSec, badgeScaleCap, zScale, P);
+            } else if (isMountUncrewed) {
+              const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
+              drawDormantCrewPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P, '0명');
             }
           } else {
             const isDamaged = st.hp < st.maxHp && st.hp > 0;
@@ -1032,12 +1057,19 @@ window.ZS = window.ZS || {};
             }
 
             const isEmpStunned = !isUnpowered && def && def.requiresPower && (st.empStunTimer || 0) > 0;
+            const isUncrewed = !isUnpowered && !isEmpStunned && (
+              (def && def.subType === 'manned' && (st.crew || 0) <= 0) ||
+              (id === 'command_hq' && lv >= 2 && (st.crew || 0) <= 0)
+            );
             if (isUnpowered) {
               const warnZ = isDamaged ? 35 : 29;
               drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
             } else if (isEmpStunned) {
               const empZ = Math.max(topZ + (hasPips || hasRank ? 12 : 4), isDamaged ? 32 : 24);
               drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, Math.min(1.65, zScale)), zScale, P);
+            } else if (isUncrewed) {
+              const warnZ = Math.max(topZ + (hasPips || hasRank ? 15 : 8), isDamaged ? 35 : 26);
+              drawDormantCrewPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P, '0명');
             }
           }
           if (structOccAlpha < 0.995) ctx.restore();
@@ -1478,6 +1510,7 @@ window.ZS = window.ZS || {};
     drawReconOverlay,
     drawEmpStunIndicator,
     drawPowerOffPillBadge,
+    drawDormantCrewPillBadge,
     drawInfoLayer,
     drawCanvasHeartIcon,
     drawCanvasPowerOffIcon,

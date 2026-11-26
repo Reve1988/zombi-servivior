@@ -3449,6 +3449,8 @@ window.ZS = window.ZS || {};
       case 'wind_turbine': return [34, 46, 60, 74][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'battery_bank': return [14, 22, 33, 40][Math.min(4, Math.max(1, level || 1)) - 1];
       case 'field_tent': return [16, 19, 22, 32][Math.min(4, Math.max(1, level || 1)) - 1];
+      case 'supply_workshop': return [17, 21, 25][Math.min(3, Math.max(1, level || 1)) - 1];
+      case 'research_lab': return [17, 21, 25][Math.min(3, Math.max(1, level || 1)) - 1];
       case 'shelter_pod': return 22;
       case 'gas_heater': return 26;
       case 'led_floodlight': return 24;

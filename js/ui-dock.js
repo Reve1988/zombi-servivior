@@ -205,7 +205,14 @@ window.ZS = window.ZS || {};
       return { html: `<span>바닥재 ·</span>${ozIcon('res-cozy', 13, 'icon-coin')}<span>+${def.cozy || 0}</span>`, cls: 'tag-cozy' };
     }
     if (def.subType === 'manned') {
-      return { html: `${ozIcon('res-agent', 13)}<span>요원 ${def.popUse} · 무전력</span>`, cls: 'tag-manned' };
+      const maxC = def.maxCrew || 1;
+      return { html: `${ozIcon('res-agent', 13)}<span>슬롯 ${maxC}명 · 무전력</span>`, cls: 'tag-manned' };
+    }
+    if (def.id === 'supply_workshop') {
+      return { html: `${ozIcon('act-repair', 13, 'icon-ap')}<span>생산 +${def.prodSlots || 2}자리 · 무전력</span>`, cls: 'tag-manned' };
+    }
+    if (def.id === 'research_lab') {
+      return { html: `${ozIcon('res-rp', 13, 'icon-rp')}<span>연구 +${def.researchSlots || 2}자리 · 무전력</span>`, cls: 'tag-manned' };
     }
     if (def.subType === 'turret') {
       const estPwr = getEstimatedNightPowerUse(def);
@@ -1863,22 +1870,32 @@ window.ZS = window.ZS || {};
       const maxHqLv = (ZS.DATA.HQ_LEVELS && ZS.DATA.HQ_LEVELS.length) || 5;
       const divDef = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
       const basePopCap = hqInfo.basePopCap + ((divDef && divDef.basePopCapBonus) || 0);
-      const wpnText = hqInfo.weapon ? `무장: ${hqInfo.weapon.name}` : '무장 없음 (Lv.2 개방)';
+      const hqMaxCrew = ZS.Game.getStructMaxCrew ? ZS.Game.getStructMaxCrew(obj) : 0;
+      const hqCrew = Math.max(0, Math.min(hqMaxCrew, Math.floor(Number(obj.crew) || 0)));
+      const hqRateMult = ZS.Game.getStructCrewRateMult ? ZS.Game.getStructCrewRateMult(obj) : 1.0;
+      const wpnText = hqInfo.weapon
+        ? (hqCrew > 0
+          ? `무장: ${hqInfo.weapon.name} (배치 ${hqCrew}/${hqMaxCrew} · 공속 ${Math.round(hqRateMult * 100)}%)`
+          : `무장: ${hqInfo.weapon.name} (미배치 비활성)`)
+        : '무장 없음 (Lv.2 개방)';
       const upCheck = ZS.Game.canUpgradeHq();
       let actionHtml = '';
+      if (hqMaxCrew > 0) {
+        actionHtml += buildCrewStepperHtml(st, obj, tx, ty, false);
+      }
       if (st.hqLevel < maxHqLv) {
         const nextInfo = ZS.Game.getHqLevelInfo(st.hqLevel + 1);
         const hqCost = upCheck.cost || (ZS.Game.getEffectiveHqUpgradeCost ? ZS.Game.getEffectiveHqUpgradeCost(st.hqLevel + 1) : nextInfo.cost) || {};
         const costHtml = formatInlineCostHtml(hqCost, 14);
         const disabledAttr = upCheck.ok ? '' : 'disabled';
         if (upCheck.lockedByWave) {
-          actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" disabled title="${escapeHtml(upCheck.reason)}">${ozIcon('state-lock', 14, 'icon-muted')}<span>WAVE ${upCheck.reqWave}+ 필요</span>(${costHtml})</button>`;
+          actionHtml += `<button id="btn-upgrade-hq" class="detail-upgrade-btn" disabled title="${escapeHtml(upCheck.reason)}">${ozIcon('state-lock', 14, 'icon-muted')}<span>WAVE ${upCheck.reqWave}+ 필요</span>(${costHtml})</button>`;
         } else {
           const nextTip = `${nextInfo.name} 증축 (HP ${nextInfo.maxHp} · 수용 ${nextInfo.basePopCap}명 · 충전 +${nextInfo.baseDayCharge})`;
-          actionHtml = `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? nextTip : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
+          actionHtml += `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? nextTip : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
         }
       } else {
-        actionHtml = `<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`;
+        actionHtml += `<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`;
       }
 
       if ((st.hqLevel || 1) >= 2 && st.undergroundUnlocked) {
@@ -1890,6 +1907,11 @@ window.ZS = window.ZS || {};
       if (st.nightConsumables && st.nightConsumables.overpressureAmmo) nightBuffs.push('고압 탄약');
       if (st.nightConsumables && st.nightConsumables.reactiveArmor) nightBuffs.push('반응 장갑');
       const buffTxt = nightBuffs.length > 0 ? ` · ${nightBuffs.join(' · ')}` : '';
+      const hqCrewTag = hqMaxCrew > 0
+        ? (hqCrew <= 0
+          ? `<span class="cost-chip short">${ozIcon('res-agent', 13, 'icon-danger')}<span>옥상 포대 0/${hqMaxCrew}명 · 비활성</span></span>`
+          : `<span class="cost-chip free">${ozIcon('res-agent', 13, 'icon-heal')}<span>옥상 포대 ${hqCrew}/${hqMaxCrew}명 · 공속 ${Math.round(hqRateMult * 100)}%</span></span>`)
+        : '';
 
       setDetailHtml(
         buildDetailCardHtml({
@@ -1897,15 +1919,17 @@ window.ZS = window.ZS || {};
           iconCls: 'icon-coin',
           title: hqInfo.name,
           lvLabel: `Lv.${st.hqLevel}`,
+          tagHtml: hqCrewTag,
           hp: obj.hp,
           maxHp: obj.maxHp,
-          statsHtml: `충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 수용 ${basePopCap}명 · ${escapeHtml(wpnText)}${escapeHtml(buffTxt)}`,
+          statsHtml: `충전 +${hqInfo.baseDayCharge} · 용량 ${hqInfo.basePowerCap} · 수용 ${basePopCap}명 · 연구 ${hqInfo.researchSlots || 2} · 생산 ${hqInfo.prodSlots || 2} · ${escapeHtml(wpnText)}${escapeHtml(buffTxt)}`,
           descHtml: '중앙 지휘 거점입니다. 파괴되면 방어 작전이 종료됩니다.'
         }),
         actionHtml,
         '지휘 본부'
       );
 
+      bindCrewStepperEvents(document.getElementById('detail-actions'));
       const upBtn = document.getElementById('btn-upgrade-hq');
       if (upBtn) {
         upBtn.addEventListener('click', () => {
@@ -1923,6 +1947,40 @@ window.ZS = window.ZS || {};
 
     const def = ZS.DATA.ITEMS[obj.id];
     if (!def) return;
+
+    function buildCrewStepperHtml(curState, targetSt, gx, gy, isMounted) {
+      const maxC = ZS.Game.getStructMaxCrew ? ZS.Game.getStructMaxCrew(targetSt) : 0;
+      if (maxC <= 0) return '';
+      const crew = Math.max(0, Math.min(maxC, Math.floor(Number(targetSt.crew) || 0)));
+      const jobs = (curState && curState.jobs) || { combat: 0, research: 0, prod: 0 };
+      const assigned = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
+      const unassigned = Math.max(0, ((curState && curState.agents) || 0) - assigned);
+      const isOver = curState && curState.phase === 'gameover';
+      const minusDis = isOver || crew <= 0 ? 'disabled' : '';
+      const plusDis = isOver || crew >= maxC || unassigned <= 0 ? 'disabled' : '';
+      const plusTip = crew >= maxC ? `최대 ${maxC}명 배치 완료` : unassigned <= 0 ? '미배정 대기 요원 없음' : '전투요원 1명 배치';
+      return `
+        <span class="detail-crew-control" title="이 시설의 주둔 전투요원 인원 조정 (미배정 ${unassigned}명)">
+          <span class="crew-ctl-label">${ozIcon('res-agent', 13)}<span>배치</span></span>
+          <button type="button" class="crew-step-btn" data-crew-tx="${gx}" data-crew-ty="${gy}" data-crew-mounted="${isMounted ? 1 : 0}" data-crew-delta="-1" ${minusDis} title="주둔 요원 1명 해제">−</button>
+          <span class="crew-step-val">${crew}/${maxC}</span>
+          <button type="button" class="crew-step-btn" data-crew-tx="${gx}" data-crew-ty="${gy}" data-crew-mounted="${isMounted ? 1 : 0}" data-crew-delta="1" ${plusDis} title="${escapeHtml(plusTip)}">+</button>
+        </span>
+      `;
+    }
+
+    function bindCrewStepperEvents(containerEl) {
+      if (!containerEl) return;
+      containerEl.querySelectorAll('.crew-step-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const cx = Number(btn.getAttribute('data-crew-tx'));
+          const cy = Number(btn.getAttribute('data-crew-ty'));
+          const isM = btn.getAttribute('data-crew-mounted') === '1';
+          const d = Number(btn.getAttribute('data-crew-delta'));
+          if (ZS.Game.adjustStructCrew) ZS.Game.adjustStructCrew(cx, cy, d, isM);
+        });
+      });
+    }
 
     const buildRankWidgetHtml = (targetObj, eff) => {
       const rank = eff.rank || 0;
@@ -1958,10 +2016,16 @@ window.ZS = window.ZS || {};
 
       let mSubStats = '';
       let mRankHtml = '';
+      let mCrewCtlHtml = '';
       if (mDef && (mDef.subType === 'manned' || mDef.subType === 'turret')) {
         mRankHtml = buildRankWidgetHtml(m, mEff);
+        if (mDef.subType === 'manned') {
+          mCrewCtlHtml = buildCrewStepperHtml(st, m, tx, ty, true);
+        }
         const mPopTxt = mDef.subType === 'manned'
-          ? ` · 요원 ${(mEff.prof && mEff.prof.popUse) || mDef.popUse}명`
+          ? (mEff.isInactive
+            ? ` · 배치 0/${mEff.maxCrew || 1}명 (비활성)`
+            : ` · 배치 ${mEff.crew || 0}/${mEff.maxCrew || 1}명 (공속 ${Math.round((mEff.crewRateMult || 1) * 100)}%)`)
           : ` · 전력 ~${getEstimatedNightPowerUse(mDef, mEff)}`;
         const mAuraTxt = formatAuraStacksText(mEff.auraStacks);
         const platTxt = mEff.onPlateau ? ' · 고지대 보너스' : '';
@@ -2034,6 +2098,7 @@ window.ZS = window.ZS || {};
               <div class="comp-sub">${mSubStats}</div>
             </div>
             <div class="comp-actions">
+              ${mCrewCtlHtml}
               ${topUpHtml}
               <button id="btn-comp-move-top" class="detail-upgrade-btn" ${st.phase !== 'day' ? 'disabled' : ''} title="상부 유닛만 분리해 이동 (M)">${ozIcon('unmount', 13)}<span>분리 이동 M</span></button>
               <button id="btn-comp-demolish-top" class="detail-upgrade-btn danger" ${st.phase !== 'day' ? 'disabled' : ''} title="상부 유닛만 먼저 철거 (X)">${ozIcon('tool-remove', 13, 'icon-danger')}<span>상부 철거 X</span></button>
@@ -2062,6 +2127,7 @@ window.ZS = window.ZS || {};
       `;
       setCompositeDetailHtml(compHtml, '복합 방어 진지');
       syncDockToolLabels();
+      bindCrewStepperEvents(document.getElementById('detail-text'));
       document.getElementById('btn-comp-up-top')?.addEventListener('click', () => {
         ZS.Game.upgradeStructure(tx, ty);
       });
@@ -2125,12 +2191,14 @@ window.ZS = window.ZS || {};
     if (def.subType === 'manned' || def.subType === 'turret') {
       const eff = ZS.Game.getStructureEffectiveStats(obj, tx, ty);
       const rankWidgetHtml = buildRankWidgetHtml(obj, eff);
-      actionHtml = rankWidgetHtml + actionHtml;
+      const crewStepperHtml = def.subType === 'manned' ? buildCrewStepperHtml(st, obj, tx, ty, false) : '';
+      actionHtml = crewStepperHtml + rankWidgetHtml + actionHtml;
 
-      const curPopUse = (eff.prof && eff.prof.popUse) || def.popUse;
       const pwrInfo = def.requiresPower
         ? `${ozIcon('res-power', 13, 'icon-power')}<span title="야간 1웨이브 예상 전력 소모량">야간 ~${getEstimatedNightPowerUse(def, eff)} 전력</span>`
-        : `${ozIcon('res-agent', 13)}<span>요원 ${curPopUse}명 · 무전력</span>`;
+        : eff.isInactive
+        ? `<span class="cost-chip short">${ozIcon('res-agent', 13, 'icon-danger')}<span>미배치 비활성 (0/${eff.maxCrew || 1}명)</span></span>`
+        : `${ozIcon('res-agent', 13, 'icon-heal')}<span>배치 ${eff.crew || 0}/${eff.maxCrew || 1}명 · 공속 ${Math.round((eff.crewRateMult || 1) * 100)}% · 무전력</span>`;
       const auraInfo = formatAuraStacksText(eff.auraStacks);
       const tBonusHint = eff.onPlateau ? ' · 고지대 보너스' : '';
       const rangeStr = (v) => v.toFixed(1).replace(/\.0$/, '');
@@ -2196,6 +2264,10 @@ window.ZS = window.ZS || {};
         statSummary = `${ozIcon('res-power', 13, 'icon-power')}충전 +${Math.round(pwrEff.dayCharge)}${nightTxt} · 용량 +${pwrEff.powerCap}${windTxt}`;
       } else if (def.subType === 'housing') {
         statSummary = `${ozIcon('res-agent', 13)}수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
+      } else if (def.id === 'supply_workshop') {
+        statSummary = `${ozIcon('act-repair', 13, 'icon-ap')}생산 직무 +${prof.prodSlots}자리 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
+      } else if (def.id === 'research_lab') {
+        statSummary = `${ozIcon('res-rp', 13, 'icon-rp')}연구 직무 +${prof.researchSlots}자리 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }
       setDetailHtml(
         buildDetailCardHtml({
@@ -2238,6 +2310,7 @@ window.ZS = window.ZS || {};
       );
     }
 
+    bindCrewStepperEvents(document.getElementById('detail-actions'));
     const upStructBtn = document.getElementById('btn-upgrade-struct');
     if (upStructBtn) {
       upStructBtn.addEventListener('click', () => {

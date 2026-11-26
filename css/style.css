@@ -4921,12 +4921,24 @@ body.main-menu-active #game-canvas {
   justify-content: center;
 }
 
+.pop-role-count-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
 .pop-role-count {
   font-family: var(--font-display);
   font-size: 40px;
   font-weight: 900;
   line-height: 1;
   color: #FFFFFF;
+}
+
+.pop-role-cap {
+  font-size: 13px;
+  font-weight: 800;
+  color: #9FB3C7;
 }
 
 .pop-role-stats {
@@ -5142,6 +5154,72 @@ body.main-menu-active #game-canvas {
 .wr-highlight.is-unlock {
   border-color: rgba(192, 132, 252, 0.56);
   background: rgba(168, 85, 247, 0.12);
+}
+
+.wr-highlight.is-danger {
+  border-color: rgba(255, 77, 109, 0.58);
+  background: rgba(255, 77, 109, 0.13);
+}
+
+.wr-highlight.is-danger .wr-hl-title {
+  color: #FDA4AF;
+}
+
+.detail-crew-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(15, 23, 36, 0.90);
+  border: 1px solid rgba(255, 201, 74, 0.34);
+  font-size: 12px;
+  font-weight: 700;
+  color: #F8FAFC;
+}
+
+.crew-ctl-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #CBD5E1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.crew-step-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 201, 74, 0.56);
+  background: linear-gradient(180deg, #27364C 0%, #172231 100%);
+  color: #FFE49E;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crew-step-btn:hover:not(:disabled) {
+  filter: brightness(1.16);
+}
+
+.crew-step-btn:disabled {
+  opacity: 0.42;
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #64748B;
+  cursor: not-allowed;
+}
+
+.crew-step-val {
+  min-width: 28px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #FFC94A;
 }
 
 .wr-hl-icon {

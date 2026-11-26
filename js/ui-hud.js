@@ -249,25 +249,28 @@ window.ZS = window.ZS || {};
   function getDailyResourceDeltaPreview(st) {
     if (!st) return { wood: 0, scrap: 0, coin: 0, rp: 0 };
     const wave = Math.max(1, st.wave || 1);
-    const jobs = st.jobs || { combat: st.agents || 0, research: 0, prod: 0 };
-    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 2 };
-    const spareCombat = Math.max(0, (jobs.combat || 0) - (st.popUsed || 0));
-    const scavengeWood = (st.hqLevel || 1) === 1 && spareCombat > 0 ? spareCombat * 2 : 0;
-    const scavengeScrap = (st.hqLevel || 1) === 1 && spareCombat > 0 ? spareCombat * 1 : 0;
+    const jobs = st.jobs || { combat: st.popUsed || 0, research: 0, prod: 0 };
+    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 0.8 };
+    const prodRates = (ZS.DATA && ZS.DATA.PROD_RATES) || { woodPerWorker: 2.0, scrapPerWorker: 1.5 };
     const prodCount = jobs.prod || 0;
-    const prodWood = Math.round(prodCount * 5 + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0));
-    const prodScrap = Math.round(prodCount * 4 + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0));
+    const prodWood = prodCount * prodRates.woodPerWorker + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0);
+    const prodScrap = prodCount * prodRates.scrapPerWorker + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0);
     const supplyCoin = Math.round(st.b1SupplyCoin || 0);
-    const wood = 26 + wave * 9 + prodWood + scavengeWood;
-    const scrap = 16 + wave * 5 + prodScrap + scavengeScrap;
+    const wood = +(26 + wave * 9 + prodWood).toFixed(1);
+    const scrap = +(16 + wave * 5 + prodScrap).toFixed(1);
     const baseCoin = 16 + wave * 4;
     const coinBonus = st.cozyTier ? (st.cozyTier.coinBonus || 0) : 0;
     const coin = baseCoin + Math.round(baseCoin * coinBonus) + supplyCoin;
-    const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
+    const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 0.8) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
     const drill2 = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
     const rpMult = 1 + (st.b1LabMult || 0) + (drill2 > 0 ? 0.15 : 0);
-    const rp = Math.round(rawRp * rpMult);
+    const rp = +(rawRp * rpMult).toFixed(1);
     return { wood, scrap, coin, rp };
+  }
+
+  function formatDeltaVal(v) {
+    const n = +Number(v || 0).toFixed(1);
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
   }
 
   function updateDailyResourceDeltas(st) {
@@ -281,9 +284,10 @@ window.ZS = window.ZS || {};
     items.forEach(([id, val]) => {
       const el = document.getElementById(id);
       if (!el) return;
-      el.textContent = `+${val}`;
+      const txt = formatDeltaVal(val);
+      el.textContent = `+${txt}`;
       el.classList.toggle('is-zero', val <= 0);
-      el.title = `웨이브 ${st.wave || 1} 완료 시 예상 획득량 (+${val})`;
+      el.title = `웨이브 ${st.wave || 1} 완료 시 예상 획득량 (+${txt})`;
     });
   }
 
@@ -761,23 +765,28 @@ window.ZS = window.ZS || {};
         icon: 'res-agent',
         iconCls: 'icon-coin',
         title: `생존자 ${report.arrivedAgent}명이 쉘터에 합류하였습니다.`,
-        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 · 인구 배치 [P]에서 새 요원의 직무를 배정하세요.`
+        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 (미배정 대기 풀 합류) · 인구 배치 [P]에서 직무를 배정하세요.`
       });
-    } else if (report.popFull) {
+    }
+    if ((report.turnedAway || 0) > 0) {
+      alerts.push({
+        cls: 'is-danger',
+        icon: 'state-alert',
+        iconCls: 'icon-danger',
+        title: `숙소 부족으로 생존자 ${report.turnedAway}명이 되돌아갔습니다.`,
+        sub: `새벽 방문 ${report.incomingAgents}명 중 ${report.arrivedAgent}명만 수용됨 (${report.totalAgents}/${report.popCap}명). [전력·숙소] 탭에서 막사/숙소를 증설하세요.`
+      });
+    } else if (report.arrivedAgent <= 0 && (report.incomingAgents || 0) === 0) {
       alerts.push({
         cls: 'is-info',
         icon: 'res-agent',
         iconCls: 'icon-muted',
-        title: `요원 수용 한도 도달 (${report.totalAgents}/${report.popCap}명)`,
-        sub: '전술 막사나 모듈러 숙소를 증설하면 다음 새벽부터 생존자 합류가 재개됩니다.'
-      });
-    } else if (report.recruitWaiting) {
-      alerts.push({
-        cls: 'is-info',
-        icon: 'res-agent',
-        iconCls: 'icon-coin',
-        title: '신규 생존자 합류 대기 중 (1/2)',
-        sub: '다음 웨이브 방어에 성공하면 쉘터에 생존자 +1명이 추가로 합류합니다.'
+        title: report.popFull
+          ? `요원 수용 한도 도달 (${report.totalAgents}/${report.popCap}명)`
+          : '오늘은 새벽 합류 생존자가 없었습니다.',
+        sub: report.popFull
+          ? '전술 막사나 모듈러 숙소를 증설하면 추가 생존자를 수용할 수 있습니다.'
+          : `현재 총원 ${report.totalAgents}/${report.popCap}명 · 안락함 등급이 높을수록 더 많은 생존자가 찾아옵니다.`
       });
     }
 

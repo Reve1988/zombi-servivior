@@ -590,18 +590,17 @@ window.ZS = window.ZS || {};
   }
 
   function updateDefenders(dt) {
-    // 1. HQ Roof Auto-Turret (Lv.2~5, unpowered emergency defense; boosted by spare combat agents)
+    // 1. HQ Roof Auto-Turret (Lv.2~5, unpowered emergency defense; requires assigned HQ crew)
     const hq = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
-    if (hq && hq.id === 'command_hq' && hqInfo.weapon) {
+    if (hq && hq.id === 'command_hq' && hqInfo.weapon && (hq.crew || 0) > 0) {
       if (hq.cooldown > 0) hq.cooldown -= dt;
       if (hq.cooldown <= 0 && state.zombies.length > 0) {
         const wpn = hqInfo.weapon;
         const hcx = DATA.HQ_POS.x + 0.5;
         const hcy = DATA.HQ_POS.y + 0.5;
-        const spareCombat = Math.max(0, ((state.jobs && state.jobs.combat) || 0) - (state.popUsed || 0));
-        const spareRateBonus = Math.min(0.25, spareCombat * 0.05);
-        const fireRate = wpn.fireRate * (1.0 + (state.cozyTier ? state.cozyTier.fireRate : 0) + spareRateBonus);
+        const hqCrewMult = G.getStructCrewRateMult ? G.getStructCrewRateMult(hq) : 1.0;
+        const fireRate = wpn.fireRate * (1.0 + (state.cozyTier ? state.cozyTier.fireRate : 0)) * hqCrewMult;
         let bestIdx = -1;
         let bestDist = 1e9;
         for (let i = 0; i < state.zombies.length; i++) {
@@ -659,6 +658,7 @@ window.ZS = window.ZS || {};
       if (!st || st.id === 'command_hq') return;
       const def = DATA.ITEMS[st.id];
       if (!def || (def.subType !== 'manned' && def.subType !== 'turret')) return;
+      if (def.subType === 'manned' && (st.crew || 0) <= 0) return;
 
       if (st.cooldown > 0) st.cooldown -= dt;
 

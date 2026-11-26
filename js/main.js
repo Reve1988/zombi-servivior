@@ -1089,6 +1089,19 @@ window.ZS = window.ZS || {};
       setSettingsOpen(false);
       uiState.inspectedTile = null;
       U.setToolMode('inspect');
+      const st = ZS.Game && ZS.Game.state;
+      const combatAssigned = (st && st.jobs && st.jobs.combat) || 0;
+      if (combatAssigned <= 0) {
+        openConfirmModal({
+          title: '전투요원 미배치 경고',
+          desc: '배치된 전투요원이 없습니다. 이대로 전투를 시작하시겠습니까?',
+          acceptText: '전투 시작',
+          onAccept: () => {
+            ZS.Game.startNightWave();
+          }
+        });
+        return;
+      }
       ZS.Game.startNightWave();
     });
 
