@@ -1050,6 +1050,10 @@ window.ZS = window.ZS || {};
 
     // Buttons
     document.getElementById('tool-inspect').addEventListener('click', () => U.setToolMode('inspect'));
+    document.getElementById('btn-close-detail')?.addEventListener('click', () => {
+      uiState.inspectedTile = null;
+      U.setToolMode('inspect');
+    });
     document.getElementById('tool-move').addEventListener('click', () => U.setToolMode('move'));
     document.getElementById('tool-remove').addEventListener('click', () => U.setToolMode('remove'));
 

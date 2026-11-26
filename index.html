@@ -319,15 +319,22 @@
   <!-- Collapsible Staging / Local Debug Toolbar (strictly double-gated by isDevEnvironment && ?debug=1) -->
   <div id="debug-toolbar" class="debug-toolbar hidden"></div>
 
+  <!-- Zone 3.5: Bottom-Left Dedicated Unit & Item Inspector Panel -->
+  <aside id="detail-bar" class="dock-detail detail-panel idle-hidden" aria-label="선택 유닛·항목 정보">
+    <div class="detail-panel-head">
+      <span id="detail-panel-eyebrow" class="detail-panel-eyebrow">전술 정보</span>
+      <button id="btn-close-detail" class="detail-close-btn" type="button" title="정보 창 닫기 (ESC)" aria-label="정보 창 닫기">
+        <svg class="oz-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="detail-text" class="detail-body"></div>
+    <div class="detail-right">
+      <div id="detail-actions" class="detail-actions"></div>
+    </div>
+  </aside>
+
   <!-- Zone 4: Bottom-Right Fixed-Width 3D Miniature Card Deck -->
   <section id="build-dock" aria-label="전술 건설 카드덱">
-    <div id="detail-bar" class="dock-detail idle-hidden">
-      <span id="detail-text">건설할 항목을 선택하거나 기지 시설을 클릭해 상세 능력치와 오라 시너지를 확인하세요. (우클릭 드래그 / WASD: 화면 이동, 휠: 확대·축소)</span>
-      <div class="detail-right">
-        <div id="detail-actions" class="detail-actions"></div>
-      </div>
-    </div>
-
     <div id="dock-main-row" class="dock-main-row">
       <div id="category-tabs" class="dock-tabs"></div>
       <div id="item-cards" class="dock-cards"></div>
