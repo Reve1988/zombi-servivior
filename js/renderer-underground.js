@@ -1500,8 +1500,14 @@ window.ZS = window.ZS || {};
         for (let x = x0; x <= x1; x++) {
           const c = ug.grid[y][x];
           const hasG = !!(ug.b1StructGrid && ug.b1StructGrid[y] && ug.b1StructGrid[y][x]);
+          const isCorrRole = uiState.selectedB1Role === 'corridor';
+          const cRoom = c && c.roomId != null && ug.rooms ? ug.rooms[c.roomId] : null;
+          const sameRoleGadgetAllowed =
+            hasG &&
+            ((!isCorrRole && cRoom && cRoom.role === uiState.selectedB1Role) ||
+              (isCorrRole && c && c.corridor && !c.permanentCorridor));
           const ok = mode === 'b1_zone'
-            ? !!(c && c.excavated && !c.permanentCorridor && !c.elevator && !c.bedrock && !hasG && !roomLocked)
+            ? !!(c && c.excavated && !c.permanentCorridor && !c.elevator && !c.bedrock && (!hasG || sameRoleGadgetAllowed) && !roomLocked)
             : !!(c && c.excavated && (c.roomId != null || (c.corridor && !c.permanentCorridor)) && !hasG && !roomLocked);
           const zOff = c && !c.excavated ? ((ZS.DATA.B1_ROCK_Z || 11) + 1.6) : 1.5;
           Iso.drawTilePoly(
