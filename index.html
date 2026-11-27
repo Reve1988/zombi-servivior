@@ -134,7 +134,7 @@
         </span>
         <span id="hud-div-name" class="div-badge-name">기동방위대</span>
       </span>
-      <span id="hud-div-status" class="div-badge-status">본부 -15%</span>
+      <span id="hud-div-status" class="div-status-dot on" aria-hidden="true"></span>
       <div id="hud-division-tooltip" class="division-popover"></div>
     </div>
 
@@ -160,58 +160,66 @@
         <div id="res-power-bar" class="bar-fill pwr-fill" style="width:100%"></div>
         <span id="res-power" class="gauge-val">70 / 70</span>
       </div>
-      <div id="res-power-sub" class="res-micro">낮 +32 · 밤 +0.0/s · 대기 -0.0/s</div>
+    </div>
+
+    <div class="tl-view-row" role="group" aria-label="전술 보기 전환">
+      <button id="btn-toggle-underground" class="wind-layer-btn tl-view-btn b1-toggle-btn b1-locked-unlock" type="button" aria-pressed="false" disabled aria-label="지하 B1 쉘터 전환 [B]" title="지하 B1 쉘터 전환 (본부 Lv.2 개방 · 단축키 B)">
+        <svg class="oz-icon icon-ap" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-b1-elevator"></use></svg>
+      </button>
+      <button id="btn-toggle-wind-layer" class="wind-layer-btn tl-view-btn" type="button" aria-pressed="false" aria-label="강풍 지대 오버레이 [V]" title="강풍 지대(주변 +40% / 중심 +70%) 오버레이 레이어 표시/숨기기 (단축키 V)">
+        <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-hud-wind"></use></svg>
+      </button>
     </div>
   </section>
 
   <!-- Zone 2: Top-Center Resource Strip -->
-  <section id="hud-secondary" class="hud-panel hud-resources" aria-label="보급 자원 스트립">
-    <div class="res-cell res-secondary" title="구조 목재: 방벽, 전술 막사, 전투원 초소, 모던 가구 제작">
+  <section id="hud-secondary" class="hud-panel hud-resources hud-res-compact" aria-label="보급 자원 스트립">
+    <div id="res-wood-cell" class="res-cell res-secondary" title="구조 목재: 방벽, 전술 막사, 전투원 초소, 모던 가구 제작">
       <span class="res-icon icon-wood" aria-hidden="true">
         <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#oz-res-wood"></use></svg>
       </span>
       <div class="res-meta">
-        <div class="res-label">목재</div>
+        <div class="res-label-row"><span class="res-label">목재</span><span id="res-wood-delta" class="res-delta">+0</span></div>
         <div id="res-wood" class="res-val">100</div>
       </div>
     </div>
 
-    <div class="res-cell res-secondary" title="합금 고철: 강화 장갑벽, 자동화 포탑, 발전·배터리 설비 제작">
+    <div id="res-scrap-cell" class="res-cell res-secondary" title="합금 고철: 강화 장갑벽, 자동화 포탑, 발전·배터리 설비 제작">
       <span class="res-icon icon-scrap" aria-hidden="true">
         <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#oz-res-scrap"></use></svg>
       </span>
       <div class="res-meta">
-        <div class="res-label">고철</div>
+        <div class="res-label-row"><span class="res-label">고철</span><span id="res-scrap-delta" class="res-delta">+0</span></div>
         <div id="res-scrap" class="res-val">95</div>
       </div>
     </div>
 
-    <div class="res-cell res-secondary coin-pill" id="btn-open-trader-pill" role="button" tabindex="0" title="크레딧 코인: 외부 기지 보급 상인과 자재·특수 가구·요원 거래 (클릭하여 상인 열기)">
+    <div class="res-cell res-secondary coin-pill" id="btn-open-trader-pill" title="크레딧 코인: 외부 기지 보급 상인과 자재·특수 가구·요원 거래">
       <span class="res-icon icon-coin" aria-hidden="true">
         <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#oz-res-coin"></use></svg>
       </span>
       <div class="res-meta">
-        <div class="res-label">코인</div>
+        <div class="res-label-row"><span class="res-label">코인</span><span id="res-coin-delta" class="res-delta">+0</span></div>
         <div id="res-coin" class="res-val">60</div>
       </div>
     </div>
 
-    <div id="pop-pill" class="res-cell res-secondary pop-pill" role="button" tabindex="0" title="작전 요원 직무 배치: 전투·연구·생산 요원을 배치합니다 (클릭하여 인구 배치 창 열기 [P])">
+    <div id="pop-pill" class="res-cell res-secondary pop-pill" title="작전 요원 직무 배치 현황: 전투·연구·생산 요원 수용량">
       <span class="res-icon" aria-hidden="true">
         <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#oz-res-agent"></use></svg>
       </span>
       <div class="res-meta">
         <div class="res-label">인구</div>
-        <div id="res-pop" class="res-val">3/4 <span class="pop-cap">(전2 연1 생0)</span></div>
+        <div id="res-pop" class="res-val">3/4</div>
       </div>
     </div>
 
-    <div id="rp-pill" class="res-cell res-secondary rp-pill" role="button" tabindex="0" title="연구포인트(RP): 연구요원이 매일 아침 생산하며 5계열 연구 트리를 해금합니다 (클릭하여 연구 트리 열기 [T])">
+    <div id="rp-pill" class="res-cell res-secondary rp-pill" title="연구포인트(RP): 연구요원이 매일 아침 생산하며 5계열 연구 트리를 해금합니다">
       <span class="res-icon icon-rp" aria-hidden="true">
         <svg class="oz-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#oz-res-rp"></use></svg>
       </span>
       <div class="res-meta">
-        <div class="res-label">연구</div>
+        <div class="res-label-row"><span class="res-label">연구</span><span id="res-rp-delta" class="res-delta">+0</span></div>
         <div id="res-rp" class="res-val">0 RP</div>
       </div>
     </div>
@@ -233,32 +241,23 @@
       </div>
       <div id="cozy-tooltip" class="cozy-popover"></div>
     </div>
-
-    <button id="btn-toggle-hud-res" type="button" class="sys-btn icon-only hud-compact-btn" title="보조 자원 표시 간소화/펼치기" aria-label="보조 자원 표시 전환">
-      <svg class="oz-icon" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-ui-chevron-up"></use></svg>
-    </button>
   </section>
 
   <!-- Zone 3: Top-Right Unified Settings Button & Tactical Recon Radar -->
   <section id="hud-top-right" class="hud-top-right" aria-label="환경 설정 및 정찰 브리핑">
     <div class="tr-controls-row">
-      <button id="btn-toggle-underground" class="wind-layer-btn b1-toggle-btn b1-locked-unlock" type="button" aria-pressed="false" disabled title="지하 B1 쉘터 전환 (본부 Lv.2 개방 · 단축키 B)">
-        <svg class="oz-icon icon-ap" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-b1-elevator"></use></svg>
-        <span id="btn-b1-label">지하 B1 [B]</span>
-        <span id="hud-dig-ap-chip" class="b1-ap-chip">0 AP</span>
+      <button id="btn-trader" class="wind-layer-btn trader-trigger-btn tr-icon-btn" type="button" aria-haspopup="dialog" aria-label="외부 기지 보급 상인 (교역소)" title="외부 기지 보급 상인 (교역소)">
+        <svg class="oz-icon icon-coin" width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-trader"></use></svg>
       </button>
-      <button id="btn-open-pop" class="wind-layer-btn pop-trigger-btn" type="button" aria-haspopup="dialog" title="작전 요원 3직업 배치 및 미배정 대기 인원 관리 (단축키 P)">
-        <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-agent"></use></svg>
-        <span>인구 [P]</span>
+      <button id="btn-open-pop" class="wind-layer-btn pop-trigger-btn tr-icon-btn" type="button" aria-haspopup="dialog" aria-label="인구 직무 배치 [P]" title="작전 요원 3직업 배치 및 미배정 대기 인원 관리 (단축키 P)">
+        <svg class="oz-icon" width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-agent"></use></svg>
         <span id="hud-unassigned-chip" class="pop-unassigned-chip hidden">+0</span>
       </button>
-      <button id="btn-open-tech" class="wind-layer-btn tech-trigger-btn" type="button" aria-haspopup="dialog" title="5계열 공학 연구 테크트리 열기 (단축키 T)">
-        <svg class="oz-icon icon-rp" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-rp"></use></svg>
-        <span>연구 [T]</span>
+      <button id="btn-open-tech" class="wind-layer-btn tech-trigger-btn tr-icon-btn" type="button" aria-haspopup="dialog" aria-label="공학 연구 트리 [T]" title="5계열 공학 연구 테크트리 열기 (단축키 T)">
+        <svg class="oz-icon icon-rp" width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-rp"></use></svg>
       </button>
-      <button id="btn-toggle-wind-layer" class="wind-layer-btn" type="button" aria-pressed="false" title="강풍 지대(주변 +40% / 중심 +70%) 오버레이 레이어 표시/숨기기 (단축키 V)">
-        <svg class="oz-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-hud-wind"></use></svg>
-        <span>강풍 [V]</span>
+      <button id="btn-toggle-recon" class="wind-layer-btn recon-trigger-btn tr-icon-btn" type="button" aria-expanded="false" aria-controls="recon-card" aria-label="정찰 레이더 표시/숨기기" title="정찰 레이더 펼치기">
+        <svg class="oz-icon" width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-recon-compass"></use></svg>
       </button>
       <div id="settings-wrap" class="settings-wrap">
       <button id="btn-settings" class="settings-trigger-btn" type="button" title="환경 설정 및 매뉴얼" aria-label="환경 설정 및 매뉴얼" aria-expanded="false" aria-controls="settings-popover">
@@ -317,21 +316,45 @@
     <div id="banner-sub" class="banner-sub"></div>
   </div>
 
+  <!-- Wave-Start Invasion Alert Convergence Overlay -->
+  <div id="invasion-alert" class="invasion-alert hidden" aria-live="assertive">
+    <span id="invasion-alert-icon" class="invasion-alert-icon" aria-hidden="true"></span>
+    <div class="invasion-alert-copy">
+      <div id="invasion-alert-title" class="invasion-alert-title"></div>
+      <div id="invasion-alert-sub" class="invasion-alert-sub"></div>
+    </div>
+  </div>
+
   <!-- Collapsible Staging / Local Debug Toolbar (strictly double-gated by isDevEnvironment && ?debug=1) -->
   <div id="debug-toolbar" class="debug-toolbar hidden"></div>
 
+  <!-- Zone 3.5: Bottom-Left Dedicated Unit & Item Inspector Panel -->
+  <aside id="detail-bar" class="dock-detail detail-panel idle-hidden" aria-label="선택 유닛·항목 정보">
+    <div class="detail-panel-head">
+      <span id="detail-panel-eyebrow" class="detail-panel-eyebrow">전술 정보</span>
+      <button id="btn-close-detail" class="detail-close-btn" type="button" title="정보 창 닫기 (ESC)" aria-label="정보 창 닫기">
+        <svg class="oz-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="detail-text" class="detail-body"></div>
+    <div class="detail-right">
+      <div id="detail-actions" class="detail-actions"></div>
+    </div>
+  </aside>
+
   <!-- Zone 4: Bottom-Right Fixed-Width 3D Miniature Card Deck -->
   <section id="build-dock" aria-label="전술 건설 카드덱">
-    <div id="detail-bar" class="dock-detail idle-hidden">
-      <span id="detail-text">건설할 항목을 선택하거나 기지 시설을 클릭해 상세 능력치와 오라 시너지를 확인하세요. (우클릭 드래그 / WASD: 화면 이동, 휠: 확대·축소)</span>
-      <div class="detail-right">
-        <div id="detail-actions" class="detail-actions"></div>
-      </div>
-    </div>
-
     <div id="dock-main-row" class="dock-main-row">
       <div id="category-tabs" class="dock-tabs"></div>
-      <div id="item-cards" class="dock-cards"></div>
+      <div class="dock-cards-wrap">
+        <button id="btn-dock-scroll-left" class="dock-scroll-btn left hidden" type="button" aria-label="이전 건설 항목 보기" title="이전 건설 항목">
+          <svg class="oz-icon" width="14" height="14" viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2L4 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="item-cards" class="dock-cards"></div>
+        <button id="btn-dock-scroll-right" class="dock-scroll-btn right hidden" type="button" aria-label="다음 건설 항목 보기" title="다음 건설 항목">
+          <svg class="oz-icon" width="14" height="14" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
       <div class="dock-tools">
         <button id="tool-move" class="tool-btn tool-main-btn" type="button" title="낮 동안 이미 설치한 시설을 무료로 다른 위치로 옮깁니다 (단축키 M)">
           <svg class="oz-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-tool-move"></use></svg>
@@ -365,21 +388,19 @@
   <!-- Zone 5: Bottom-Right Hero WAVE START Switch & Combat Controls -->
   <aside id="bottom-right-cta" class="bottom-right-cta" aria-label="작전 개시 및 전투 스킬">
     <div id="day-actions" class="action-stack day-cta-stack">
-      <div class="cta-util-row">
-        <button id="btn-trader" class="util-sq-btn trader-btn" type="button" title="외부 기지 보급 상인 (교역소)" aria-label="외부 기지 보급 상인 (교역소)">
-          <svg class="oz-icon icon-coin" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-trader"></use></svg>
-        </button>
-        <button id="btn-repair-all" class="util-sq-btn repair-btn" type="button" title="기지 일괄 정비 — 모든 시설 내구도 100%" aria-label="기지 일괄 정비">
-          <svg class="oz-icon icon-heal" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-repair"></use></svg>
-          <span id="repair-cost-label" class="repair-cost-badge hidden">모든 시설 내구도 100%</span>
-        </button>
-      </div>
+      <button id="btn-repair-all" class="cta-repair-bar" type="button" title="기지 일괄 정비 — 모든 시설 내구도 100%" aria-label="기지 일괄 정비">
+        <span class="repair-bar-left">
+          <svg class="oz-icon icon-heal" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-repair"></use></svg>
+          <span id="repair-bar-title" class="repair-bar-title">정비 완료</span>
+        </span>
+        <span id="repair-cost-label" class="repair-cost-badge hidden"></span>
+      </button>
       <button id="btn-start-wave" class="cta-wave-btn" type="button">
         <span class="cta-hazard cta-hazard-top" aria-hidden="true"></span>
         <span class="cta-content">
           <span class="cta-main inline-icon-text">
             <span class="cta-title">WAVE START</span>
-            <svg class="oz-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-phase-night"></use></svg>
+            <svg class="oz-icon" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-phase-night"></use></svg>
           </span>
           <span id="cta-wave-sub" class="cta-sub">WAVE 1 야간 방어 돌입</span>
         </span>
@@ -415,33 +436,50 @@
   <!-- Cursor-Adjacent Placement Feedback Tooltip (#10: >=12px outside world space) -->
   <div id="cursor-tooltip" class="cursor-tooltip hidden" role="status" aria-live="polite"></div>
 
+  <!-- Unified Tactical Hover Popover (modeled on .cozy-popover) -->
+  <div id="hud-popover" class="oz-popover hidden" role="tooltip" aria-hidden="true"></div>
+
   <!-- Armored Trader Modal -->
-  <div id="trader-modal" class="modal-backdrop hidden">
+  <div id="trader-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="trader-modal-title">
     <div class="modal-card trader-card">
-      <div class="modal-head">
-        <div>
-          <h2 class="inline-icon-text">
-            <svg class="oz-icon icon-coin" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-trader"></use></svg>
-            <span>외부 기지 장갑 보급대 (교역소)</span>
+      <div class="modal-head trader-modal-head">
+        <div class="modal-title-group">
+          <h2 id="trader-modal-title" class="inline-icon-text">
+            <svg class="oz-icon icon-coin" width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-trader"></use></svg>
+            <span>상점</span>
+            <span class="modal-key-tag">교역소</span>
           </h2>
-          <p>크레딧 코인으로 전략 자재, 급속 파워셀, 작전 요원, 특수 인테리어 보급품을 거래합니다.</p>
+          <p>크레딧 코인으로 자재·보급품·야간 소모품을 거래하고 대량 자원을 환전합니다.</p>
         </div>
-        <button id="btn-close-trader" class="close-btn" aria-label="교역소 닫기">✕</button>
-      </div>
-      <div class="trader-toolbar">
-        <div class="trader-balance inline-icon-text">
-          <span>보유 코인:</span>
-          <strong id="trader-coin-val" class="inline-icon-text">
-            <svg class="oz-icon icon-coin" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-coin"></use></svg>
+        <div class="modal-head-right">
+          <span id="trader-coin-val" class="trader-res-badge inline-icon-text">
+            <svg class="oz-icon icon-coin" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-coin"></use></svg>
             <span>60</span>
-          </strong>
+          </span>
+          <button id="btn-refresh-trader" class="modal-switch-btn trader-refresh-btn" type="button">
+            <svg class="oz-icon" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-sys-reset"></use></svg>
+            <span>목록 갱신 (15)</span>
+          </button>
+          <button id="btn-close-trader" class="close-btn" type="button" aria-label="상점 닫기">
+            <svg class="oz-icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.4 5L12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
+          </button>
         </div>
-        <button id="btn-refresh-trader" class="sys-btn">
-          <svg class="oz-icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-sys-reset"></use></svg>
-          <span>무전 보급 목록 갱신 (15 코인)</span>
-        </button>
       </div>
-      <div id="trader-grid" class="trader-grid"></div>
+      <div class="trader-modal-body">
+        <div id="trader-ops-panel" class="trader-ops-panel">
+          <div id="trader-exchange-bar" class="trader-exchange-bar"></div>
+          <div id="trader-consumables-bar" class="trader-consumables-bar"></div>
+        </div>
+        <div class="trader-offers-section">
+          <div class="trader-section-head">
+            <span class="inline-icon-text">
+              <svg class="oz-icon icon-coin" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-act-trader"></use></svg>
+              <b>무전 보급 오퍼</b>
+            </span>
+          </div>
+          <div id="trader-grid" class="trader-grid"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -621,7 +659,7 @@
             <span>인구 직무 배치</span>
             <span class="modal-key-tag">[P]</span>
           </h2>
-          <p>보유 요원을 전투·연구·생산 직무로 배정합니다. 전원 배치 시 먼저 감원(-) 후 타 직무에 배정(+)하세요.</p>
+          <p>보유 요원을 전투·연구·생산 직무에 배치합니다.</p>
         </div>
         <div class="modal-head-right">
           <span id="pop-modal-total-badge" class="pop-total-badge inline-icon-text">
@@ -658,7 +696,7 @@
             <svg class="oz-icon icon-rp" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-rp"></use></svg>
             <span>0 RP (+0/일)</span>
           </span>
-          <span id="tech-modal-hq-badge" class="tech-hq-badge">지휘소 Lv.1</span>
+          <span id="tech-modal-hq-badge" class="tech-hq-badge">본부 Lv.1</span>
           <button id="btn-tech-to-pop" class="modal-switch-btn" type="button" title="인구 직무 배치 화면으로 전환 (단축키 P)">
             <svg class="oz-icon icon-coin" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#oz-res-agent"></use></svg>
             <span>인구 배치 [P]</span>

@@ -1524,6 +1524,8 @@ window.ZS = window.ZS || {};
     let b1LabMult = 0;
     let b1BossRpMult = 0;
     let b1HoloCritAdd = 0;
+    let b1ResearchSlots = 0;
+    let b1ProdSlots = 0;
 
     let b1SupplyWood = 0;
     let b1SupplyScrap = 0;
@@ -1622,7 +1624,7 @@ window.ZS = window.ZS || {};
         }
 
         if (def.popCap) {
-          b1PopCap += Math.round(def.popCap * mult);
+          b1PopCap += def.popCap;
         }
 
         if (g.id === 'b1_ess_rack') {
@@ -1642,8 +1644,9 @@ window.ZS = window.ZS || {};
 
         if (!blackoutPaused) {
           if (g.id === 'b1_research_desk') {
-            deskBonusList.push(Math.round((def.scientistRpAdd || 2) * mult));
-            b1LabFlatPerWaveRp += (def.waveRpAdd || 1) * mult;
+            b1ResearchSlots += (def.researchSlots || 1);
+            deskBonusList.push(+((def.scientistRpAdd || 0.8) * mult).toFixed(3));
+            b1LabFlatPerWaveRp += (def.waveRpAdd || 0.5) * mult;
           } else if (g.id === 'b1_server_rack') {
             b1LabMult += (def.rpMultAdd || 0) * mult;
           } else if (g.id === 'b1_specimen_bench') {
@@ -1653,6 +1656,7 @@ window.ZS = window.ZS || {};
             b1LabMult += (def.rpMultAdd || 0) * mult;
             b1HoloCritAdd += (def.combatCritAdd || 0) * mult;
           } else if (g.id === 'b1_pallet_rack') {
+            b1ProdSlots += (def.prodSlots || 1);
             b1SupplyWood += (def.dawnWood || 0) * mult;
             b1SupplyScrap += (def.dawnScrap || 0) * mult;
             palletProdList.push({
@@ -1722,6 +1726,8 @@ window.ZS = window.ZS || {};
     const b1DigApBonusMult = +Math.min(0.30, rawDigApBonus).toFixed(4);
 
     state.b1PopCap = b1PopCap;
+    state.b1ResearchSlots = b1ResearchSlots;
+    state.b1ProdSlots = b1ProdSlots;
     state.b1LabFlatRp = +b1LabFlatRp.toFixed(2);
     state.b1LabFlatPerWaveRp = +b1LabFlatPerWaveRp.toFixed(2);
     state.b1LabMult = +b1LabMult.toFixed(4);
@@ -1746,6 +1752,8 @@ window.ZS = window.ZS || {};
 
     return {
       popCap: b1PopCap,
+      researchSlots: b1ResearchSlots,
+      prodSlots: b1ProdSlots,
       powerCap: b1PowerCap,
       dayCharge: +b1DayCharge.toFixed(2),
       nightGen: +b1NightGen.toFixed(3),

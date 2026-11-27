@@ -799,7 +799,9 @@ window.ZS = window.ZS || {};
           drawMountedBunkerBack(sctx, 0, 0, baseZ, lv, 1.0);
         });
         blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
-        drawOperatorFigure(ctx, cx, cy, baseZ + 0.4, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        if (unit.isPreview || (unit.crew || 0) > 0) {
+          drawOperatorFigure(ctx, cx, cy, baseZ + 0.4, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        }
         const fStamp = ensureStructureStamp(`m|bunker_f|${lv}|${baseZ}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
           drawMountedBunkerFront(sctx, 0, 0, baseZ, lv, steelCol, 1.0);
         });
@@ -807,7 +809,9 @@ window.ZS = window.ZS || {};
         return;
       }
       if (unit.id === 'shotgun_post') {
-        drawOperatorFigure(ctx, cx, cy - 0.04, baseZ + 0.3, '#3A4654', '#2F3945', aim, zScale, false, false);
+        if (unit.isPreview || (unit.crew || 0) > 0) {
+          drawOperatorFigure(ctx, cx, cy - 0.04, baseZ + 0.3, '#3A4654', '#2F3945', aim, zScale, false, false);
+        }
         const fStamp = ensureStructureStamp(`m|shotgun_f|${lv}|${baseZ}|${tintBucket}`, mountTopZ, tintBucket, isSil, (sctx) => {
           drawMountedShotgunFront(sctx, 0, 0, baseZ, lv, steelCol, maxAccent, 1.0);
         });
@@ -864,13 +868,17 @@ window.ZS = window.ZS || {};
     switch (unit.id) {
       case 'rifle_bunker': {
         drawMountedBunkerBack(ctx, tx, ty, baseZ, lv, zScale);
-        drawOperatorFigure(ctx, cx, cy, baseZ + 0.4, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        if (unit.isPreview || (unit.crew || 0) > 0) {
+          drawOperatorFigure(ctx, cx, cy, baseZ + 0.4, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        }
         drawMountedBunkerFront(ctx, tx, ty, baseZ, lv, steelCol, zScale);
         break;
       }
 
       case 'shotgun_post': {
-        drawOperatorFigure(ctx, cx, cy - 0.04, baseZ + 0.3, '#3A4654', '#2F3945', aim, zScale, false, false);
+        if (unit.isPreview || (unit.crew || 0) > 0) {
+          drawOperatorFigure(ctx, cx, cy - 0.04, baseZ + 0.3, '#3A4654', '#2F3945', aim, zScale, false, false);
+        }
         drawMountedShotgunFront(ctx, tx, ty, baseZ, lv, steelCol, maxAccent, zScale);
         break;
       }
@@ -2167,6 +2175,101 @@ window.ZS = window.ZS || {};
         break;
       }
 
+      case 'supply_workshop': {
+        // 0px cyan: Warm industrial amber/ochre-steel logistics workshop (Lv.1 작업장 / Lv.2 보급창고 / Lv.3 보급소)
+        const baseDeckCol = '#454C54';
+        const crateCol = '#9B7448';
+        const amberTrim = '#E89B2D';
+        const warmLamp = P.baseLight || '#FFD27A';
+        if (lv <= 1) {
+          R.drawDetailedIsoBox(ctx, tx + 0.12, ty + 0.14, 0.4, 0.76, 0.72, 1.3, baseDeckCol, { bevel: true, groundCrease: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.16, ty + 0.18, 1.7, 0.60, 0.58, 10.6, '#6D6250', { bevel: true }, zScale);
+          R.drawIsoFaceSeams(ctx, 'left', tx + 0.16, ty + 0.18, 2.2, 0.60, 0.58, 9.6, 4, 'rgba(18, 20, 24, 0.28)', zScale);
+          // Front roll-up shutter + worklight
+          R.drawIsoBox(ctx, tx + 0.24, ty + 0.762, 1.7, 0.38, 0.015, 7.6, '#3B4552', null, zScale);
+          R.drawIsoFaceSeams(ctx, 'right', tx + 0.24, ty + 0.762, 2.0, 0.38, 0.015, 7.0, 4, 'rgba(15, 20, 28, 0.45)', zScale);
+          R.drawIsoBox(ctx, tx + 0.34, ty + 0.765, 10.0, 0.18, 0.015, 1.2, warmLamp, { emissive: true }, zScale);
+          // Slanted sheet-metal roof + side stacked wooden crates
+          R.drawDetailedIsoBox(ctx, tx + 0.14, ty + 0.16, 12.3, 0.64, 0.62, 1.8, '#8B96A4', { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.14, ty + 0.16, 13.4, 0.64, 0.62, 0.7, amberTrim, { noTop: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.74, ty + 0.46, 1.7, 0.13, 0.14, 4.4, crateCol, { bevel: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.75, ty + 0.62, 1.7, 0.12, 0.13, 3.6, '#B08452', { bevel: true }, zScale);
+        } else if (lv === 2) {
+          R.drawDetailedIsoBox(ctx, tx + 0.10, ty + 0.12, 0.4, 0.80, 0.76, 1.4, '#3B4552', { bevel: true, groundCrease: true }, zScale);
+          R.drawIsoHazardBand(ctx, tx + 0.10, ty + 0.84, 0.5, 0.80, 0.04, 1.2, '#DFAC2E', '#232B35', 5, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.14, ty + 0.16, 1.8, 0.68, 0.62, 13.0, '#5A6470', { bevel: true }, zScale);
+          R.drawIsoFaceSeams(ctx, 'left', tx + 0.14, ty + 0.16, 2.2, 0.68, 0.62, 12.0, 5, 'rgba(14, 20, 28, 0.28)', zScale);
+          R.drawIsoBox(ctx, tx + 0.20, ty + 0.782, 1.8, 0.26, 0.015, 8.8, '#2C343E', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.50, ty + 0.782, 1.8, 0.26, 0.015, 8.8, '#2C343E', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.28, ty + 0.785, 11.4, 0.40, 0.015, 1.5, warmLamp, { emissive: true }, zScale);
+          // Roof deck, trim & ventilation cylinders
+          R.drawDetailedIsoBox(ctx, tx + 0.12, ty + 0.14, 14.8, 0.72, 0.66, 2.0, steelCol, { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.12, ty + 0.14, 15.8, 0.72, 0.66, 0.9, amberTrim, { noTop: true }, zScale);
+          R.drawCyl(ctx, tx + 0.34, ty + 0.36, 16.8, 0.085, 3.2, '#7D8A97', { n: 10 }, zScale);
+          R.drawCyl(ctx, tx + 0.60, ty + 0.36, 16.8, 0.085, 3.2, '#7D8A97', { n: 10 }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.80, ty + 0.26, 1.8, 0.11, 0.16, 5.2, '#B7793A', { bevel: true }, zScale);
+        } else {
+          // Lv.3 보급소: Heavy reinforced logistics hub + upper cargo module + gantry arm
+          R.drawDetailedIsoBox(ctx, tx + 0.09, ty + 0.11, 0.4, 0.82, 0.78, 1.5, '#2E3640', { bevel: true, groundCrease: true }, zScale);
+          R.drawIsoHazardBand(ctx, tx + 0.09, ty + 0.84, 0.5, 0.82, 0.05, 1.4, '#DFAC2E', '#232B35', 5, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.13, ty + 0.15, 1.9, 0.74, 0.66, 12.2, '#4C5663', { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.19, ty + 0.812, 1.9, 0.28, 0.015, 8.6, '#28303B', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.52, ty + 0.812, 1.9, 0.28, 0.015, 8.6, '#28303B', null, zScale);
+          R.drawIsoBox(ctx, tx + 0.24, ty + 0.815, 11.4, 0.50, 0.015, 1.6, warmLamp, { emissive: true }, zScale);
+          // 2nd tier upper cargo module + orange Lv.3 trim + mini crane boom
+          R.drawDetailedIsoBox(ctx, tx + 0.18, ty + 0.19, 14.1, 0.54, 0.50, 7.6, '#8B96A4', { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.175, ty + 0.185, 20.6, 0.55, 0.51, 1.0, maxAccent, { noTop: true }, zScale);
+          R.drawIsoCornerRivets(ctx, tx + 0.18, ty + 0.19, 21.7, 0.54, 0.50, 0.04, 0.75, '#DCE5EE', zScale);
+          R.drawCyl(ctx, tx + 0.74, ty + 0.28, 14.1, 0.06, 9.2, amberTrim, { n: 8 }, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.74, ty + 0.28, 22.8), Iso.gridToScreen(tx + 0.48, ty + 0.68, 24.4), amberTrim, 2.3, true, zScale);
+        }
+        break;
+      }
+
+      case 'research_lab': {
+        // 0px cyan: Muted slate-white & plum-violet (#8B5CF6 / #7C5CBF) field lab + warm amber interior lights (#FFE49E)
+        const labWall = '#C8D0DA';
+        const labFrame = '#444E5C';
+        const labAccent = lv >= 3 ? maxAccent : '#8B5CF6';
+        const warmGlow = P.baseLight || '#FFE49E';
+        if (lv <= 1) {
+          R.drawDetailedIsoBox(ctx, tx + 0.13, ty + 0.15, 0.4, 0.74, 0.70, 1.2, labFrame, { bevel: true, groundCrease: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.17, ty + 0.19, 1.6, 0.66, 0.60, 10.6, labWall, { bevel: true }, zScale);
+          R.drawIsoFaceSeams(ctx, 'left', tx + 0.17, ty + 0.19, 2.2, 0.66, 0.60, 9.4, 4, 'rgba(20, 28, 38, 0.22)', zScale);
+          R.drawIsoBox(ctx, tx + 0.24, ty + 0.792, 4.4, 0.34, 0.015, 4.2, warmGlow, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.64, ty + 0.792, 1.6, 0.13, 0.015, 7.8, '#3B4552', null, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.15, ty + 0.17, 12.2, 0.70, 0.64, 1.9, '#647282', { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.15, ty + 0.17, 13.1, 0.70, 0.64, 0.9, '#8B5CF6', { noTop: true }, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.70, ty + 0.28, 14.1), Iso.gridToScreen(tx + 0.70, ty + 0.28, 16.8), '#DCE5EE', 1.3, true, zScale);
+        } else if (lv === 2) {
+          R.drawDetailedIsoBox(ctx, tx + 0.10, ty + 0.13, 0.4, 0.80, 0.74, 1.4, '#363F4B', { bevel: true, groundCrease: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.14, ty + 0.17, 1.8, 0.72, 0.64, 12.8, '#B8C4D0', { bevel: true }, zScale);
+          R.drawIsoFaceSeams(ctx, 'left', tx + 0.14, ty + 0.17, 2.2, 0.72, 0.64, 11.8, 5, 'rgba(18, 24, 34, 0.24)', zScale);
+          R.drawIsoBox(ctx, tx + 0.20, ty + 0.812, 4.6, 0.42, 0.015, 4.6, warmGlow, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.68, ty + 0.812, 1.8, 0.14, 0.015, 8.6, '#3B4552', null, zScale);
+          // Rooftop research monitor + violet band + telemetry dish
+          R.drawDetailedIsoBox(ctx, tx + 0.12, ty + 0.15, 14.6, 0.76, 0.68, 1.4, labFrame, { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.12, ty + 0.15, 15.2, 0.76, 0.68, 0.8, '#8B5CF6', { noTop: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.24, ty + 0.26, 16.0, 0.34, 0.34, 3.6, '#CED7E0', { bevel: true }, zScale);
+          R.drawCyl(ctx, tx + 0.70, ty + 0.34, 16.0, 0.055, 3.4, '#7D8A97', { n: 8 }, zScale);
+          R.drawCone(ctx, tx + 0.70, ty + 0.34, 19.2, 0.12, 1.6, '#E2E8F0', { n: 10 }, zScale);
+        } else {
+          // Lv.3 연구소: Two-story reinforced research hub + skylight dome + amber observation bay (0px cyan!)
+          R.drawDetailedIsoBox(ctx, tx + 0.09, ty + 0.12, 0.4, 0.82, 0.76, 1.5, '#2E3640', { bevel: true, groundCrease: true }, zScale);
+          R.drawDetailedIsoBox(ctx, tx + 0.13, ty + 0.16, 1.9, 0.74, 0.66, 12.0, '#AEBAC7', { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.19, ty + 0.822, 4.2, 0.44, 0.015, 4.4, warmGlow, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.69, ty + 0.822, 1.9, 0.14, 0.015, 8.4, '#363F4B', null, zScale);
+          // 2nd floor lab bay + orange Lv.3 band + observatory cupola
+          R.drawDetailedIsoBox(ctx, tx + 0.17, ty + 0.20, 13.9, 0.62, 0.56, 7.2, '#CED7E0', { bevel: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.23, ty + 0.762, 15.6, 0.46, 0.015, 3.2, warmGlow, { emissive: true }, zScale);
+          R.drawIsoBox(ctx, tx + 0.165, ty + 0.195, 20.1, 0.63, 0.57, 1.0, labAccent, { noTop: true }, zScale);
+          R.drawCyl(ctx, tx + 0.44, ty + 0.44, 21.1, 0.19, 1.2, '#525E6B', { n: 12 }, zScale);
+          R.drawDome(ctx, tx + 0.44, ty + 0.44, 22.3, 0.17, 2.8, '#8B5CF6', { n: 14 }, zScale);
+          R.drawIsoLine(ctx, Iso.gridToScreen(tx + 0.70, ty + 0.26, 21.1), Iso.gridToScreen(tx + 0.70, ty + 0.26, 25.0), '#DCE5EE', 1.2, true, zScale);
+        }
+        break;
+      }
+
       case 'gas_heater': {
         // 0px cyan: Weighted gunmetal circular base + slim steel pole + caged #FFB347 flame core + brushed reflector cone
         R.drawCyl(ctx, tx + 0.5, ty + 0.5, 0.4, 0.17, 1.8, '#3B4552', { n: 12 }, zScale);
@@ -2430,9 +2533,10 @@ window.ZS = window.ZS || {};
         return;
       }
 
-      if (id === 'field_tent' || id === 'shelter_pod') {
+      if (id === 'field_tent' || id === 'shelter_pod' || id === 'supply_workshop' || id === 'research_lab') {
         const effTier = id === 'shelter_pod' ? 3 : lv;
-        const stamp = ensureStructureStamp(`housing|${effTier}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
+        const stampKey = id === 'shelter_pod' ? `housing|3|${tintBucket}` : `${id}|${effTier}|${tintBucket}`;
+        const stamp = ensureStructureStamp(stampKey, topZ, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawFullStaticStructBody(sctx, id, lv, 0, 0, false, false, P, steelCol, maxAccent, 1.0);
         });
@@ -2501,12 +2605,15 @@ window.ZS = window.ZS || {};
       }
 
       if (id === 'rifle_bunker') {
+        const hasCrew = st.isPreview || (st.crew || 0) > 0;
         const bStamp = ensureStructureStamp(`bunker_b|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawRifleBunkerBack(sctx, 0, 0, lv, 1.0);
         });
         blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 2.2, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        if (hasCrew) {
+          drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 2.2, '#55684F', '#3E4D3A', aim, zScale, false, lv >= 3);
+        }
         const fStamp = ensureStructureStamp(`bunker_f|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawRifleBunkerFront(sctx, 0, 0, lv, steelCol, 1.0);
         });
@@ -2515,12 +2622,15 @@ window.ZS = window.ZS || {};
       }
 
       if (id === 'shotgun_post') {
+        const hasCrew = st.isPreview || (st.crew || 0) > 0;
         const bStamp = ensureStructureStamp(`shotgun_b|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawShotgunPostBack(sctx, 0, 0, 1.0);
         });
         blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.44, 1.8, '#3A4654', '#2F3945', aim, zScale, false, false);
+        if (hasCrew) {
+          drawOperatorFigure(ctx, tx + 0.5, ty + 0.44, 1.8, '#3A4654', '#2F3945', aim, zScale, false, false);
+        }
         const fStamp = ensureStructureStamp(`shotgun_f|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawShotgunPostFront(sctx, 0, 0, lv, steelCol, maxAccent, 1.0);
         });
@@ -2529,12 +2639,15 @@ window.ZS = window.ZS || {};
       }
 
       if (id === 'sniper_tower') {
+        const hasCrew = st.isPreview || (st.crew || 0) > 0;
         const bStamp = ensureStructureStamp(`sniper_b|${lv}|${tintBucket}`, 54, tintBucket, isSil, (sctx) => {
           drawStructGroundShadow(sctx, 0, 0, def, isSil, 1.0);
           drawSniperTowerBack(sctx, 0, 0, lv, steelCol, 1.0);
         });
         blitStructureStamp(ctx, bStamp, tx, ty, zScale, isSil);
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25.0, '#3D4D42', '#2F3B33', aim, zScale, true, false);
+        if (hasCrew) {
+          drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25.0, '#3D4D42', '#2F3B33', aim, zScale, true, false);
+        }
         const fStamp = ensureStructureStamp(`sniper_f|${lv}|${tintBucket}`, topZ, tintBucket, isSil, (sctx) => {
           drawSniperTowerFront(sctx, 0, 0, lv, maxAccent, 1.0);
         });
@@ -2677,21 +2790,27 @@ window.ZS = window.ZS || {};
 
       case 'rifle_bunker': {
         drawRifleBunkerBack(ctx, tx, ty, lv, zScale);
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 2.2, '#55684F', '#3E4D3A', st.aimAngle != null ? st.aimAngle : 0.8, zScale, false, lv >= 3);
+        if (st.isPreview || (st.crew || 0) > 0) {
+          drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 2.2, '#55684F', '#3E4D3A', st.aimAngle != null ? st.aimAngle : 0.8, zScale, false, lv >= 3);
+        }
         drawRifleBunkerFront(ctx, tx, ty, lv, steelCol, zScale);
         break;
       }
 
       case 'shotgun_post': {
         drawShotgunPostBack(ctx, tx, ty, zScale);
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.44, 1.8, '#3A4654', '#2F3945', st.aimAngle != null ? st.aimAngle : 0.8, zScale, false, false);
+        if (st.isPreview || (st.crew || 0) > 0) {
+          drawOperatorFigure(ctx, tx + 0.5, ty + 0.44, 1.8, '#3A4654', '#2F3945', st.aimAngle != null ? st.aimAngle : 0.8, zScale, false, false);
+        }
         drawShotgunPostFront(ctx, tx, ty, lv, steelCol, maxAccent, zScale);
         break;
       }
 
       case 'sniper_tower': {
         drawSniperTowerBack(ctx, tx, ty, lv, steelCol, zScale);
-        drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25.0, '#3D4D42', '#2F3B33', st.aimAngle != null ? st.aimAngle : 0.8, zScale, true, false);
+        if (st.isPreview || (st.crew || 0) > 0) {
+          drawOperatorFigure(ctx, tx + 0.5, ty + 0.5, 25.0, '#3D4D42', '#2F3B33', st.aimAngle != null ? st.aimAngle : 0.8, zScale, true, false);
+        }
         drawSniperTowerFront(ctx, tx, ty, lv, maxAccent, zScale);
         break;
       }

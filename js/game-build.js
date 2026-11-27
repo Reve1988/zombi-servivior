@@ -161,6 +161,10 @@ window.ZS = window.ZS || {};
       if (targetLv === 3) return 'inf_tier3';
       if (targetLv >= 4) return 'inf_tier4';
     }
+    if (def.id === 'supply_workshop' || def.id === 'research_lab') {
+      if (targetLv === 2) return 'inf_tier3';
+      if (targetLv >= 3) return 'inf_tier4';
+    }
     return null;
   }
 
@@ -306,7 +310,9 @@ window.ZS = window.ZS || {};
     let dayCharge = def.dayCharge || 0;
     let nightGen = def.nightGen || 0;
     let popCap = def.popCap || 0;
-    let popUse = def.popUse || 0;
+    let popUse = 0;
+    let prodSlots = def.prodSlots || 0;
+    let researchSlots = def.researchSlots || 0;
     let cozy = def.cozy || 0;
     let cozyGroup = normalizeCozyGroup(def.cozyGroup || null);
     let lightRadius = def.lightRadius || 0;
@@ -342,6 +348,8 @@ window.ZS = window.ZS || {};
       if (tier.dayCharge !== undefined) dayCharge = tier.dayCharge;
       if (tier.nightGen !== undefined) nightGen = tier.nightGen;
       if (tier.popCap !== undefined) popCap = tier.popCap;
+      if (tier.prodSlots !== undefined) prodSlots = tier.prodSlots;
+      if (tier.researchSlots !== undefined) researchSlots = tier.researchSlots;
       if (tier.cozy !== undefined) cozy = tier.cozy;
       if (tier.cozyGroup !== undefined) cozyGroup = normalizeCozyGroup(tier.cozyGroup);
       if (tier.lightRadius !== undefined) lightRadius = tier.lightRadius;
@@ -395,7 +403,6 @@ window.ZS = window.ZS || {};
         rateScale = 1.10;
         hpScale = 1.25;
       } else if (lv === 3) {
-        popUse = 2;
         dmgScale = 1.92;
         rateScale = 1.32;
         hpScale = 1.70;
@@ -527,6 +534,8 @@ window.ZS = window.ZS || {};
       nightGen,
       popCap,
       popUse,
+      prodSlots,
+      researchSlots,
       cozy,
       cozyGroup,
       lightRadius,
@@ -606,6 +615,9 @@ window.ZS = window.ZS || {};
     let nightIdleDrain = 0;
     let popCap = hqInfo.basePopCap + ((div && div.basePopCapBonus) || 0) + (state.debugBonusPopCap || 0);
     let popUsed = 0;
+    let combatCap = hqInfo.combatSlots || 0;
+    let researchCap = hqInfo.researchSlots || 2;
+    let prodCap = hqInfo.prodSlots || 2;
     let floorRaw = 0;
     let synergyScore = 0;
     const structGroups = {};
@@ -615,6 +627,9 @@ window.ZS = window.ZS || {};
     const hqStruct = state.structGrid[DATA.HQ_POS.y] && state.structGrid[DATA.HQ_POS.y][DATA.HQ_POS.x];
     if (hqStruct && hqStruct.id === 'command_hq') {
       hqStruct.level = state.hqLevel || 1;
+      const hqMaxCrew = G.getStructMaxCrew ? G.getStructMaxCrew(hqStruct) : (hqInfo.combatSlots || 0);
+      hqStruct.crew = Math.max(0, Math.min(hqMaxCrew, Math.floor(Number(hqStruct.crew) || 0)));
+      popUsed += hqStruct.crew;
       if (hqStruct.maxHp !== hqInfo.maxHp) {
         const ratio = hqStruct.maxHp > 0 ? hqStruct.hp / hqStruct.maxHp : 1;
         hqStruct.maxHp = hqInfo.maxHp;
@@ -654,7 +669,14 @@ window.ZS = window.ZS || {};
           if (pStats.nightGen) nightGen += pStats.nightGen;
           if (def.requiresPower && prof.powerIdle) nightIdleDrain += prof.powerIdle;
           if (prof.popCap) popCap += prof.popCap;
-          if (prof.popUse) popUsed += prof.popUse;
+          if (prof.prodSlots) prodCap += prof.prodSlots;
+          if (prof.researchSlots) researchCap += prof.researchSlots;
+          if (def.subType === 'manned') {
+            const maxC = G.getStructMaxCrew ? G.getStructMaxCrew(targetSt) : 1;
+            targetSt.crew = Math.max(0, Math.min(maxC, Math.floor(Number(targetSt.crew) || 0)));
+            combatCap += maxC;
+            popUsed += targetSt.crew;
+          }
 
           if (prof.cozy) {
             const grp = normalizeCozyGroup(prof.cozyGroup || def.cozyGroup || def.id);
@@ -687,6 +709,8 @@ window.ZS = window.ZS || {};
       nightGen += ugEff.nightGen || 0;
       nightIdleDrain += ugEff.nightIdleDrain || 0;
       popCap += ugEff.popCap || 0;
+      researchCap += ugEff.researchSlots || 0;
+      prodCap += ugEff.prodSlots || 0;
       synergyScore += ugEff.cozySynergy || 0;
       const entries = ugEff.cozyEntries || [];
       for (let i = 0; i < entries.length; i++) {
@@ -728,6 +752,12 @@ window.ZS = window.ZS || {};
     state.nightIdleDrain = nightIdleDrain;
     state.popCap = popCap;
     state.popUsed = popUsed;
+    state.jobCaps = { combat: combatCap, research: researchCap, prod: prodCap };
+    if (!state.jobs || typeof state.jobs !== 'object') {
+      state.jobs = { combat: popUsed, research: 0, prod: 0 };
+    } else {
+      state.jobs.combat = popUsed;
+    }
     if (G.normalizeJobs) G.normalizeJobs();
     state.cozyFloorRaw = floorRaw;
     state.cozyFloorScore = floorScore;
@@ -838,9 +868,18 @@ window.ZS = window.ZS || {};
     let rangeMult = 1.0;
     let critChance = 0.04 + prof.critAdd + rankInfo.critAdd;
 
+    let crew = 0;
+    let maxCrew = 0;
+    let crewRateMult = 1.0;
+    let isInactive = false;
     if (def.subType === 'manned') {
+      maxCrew = G.getStructMaxCrew ? G.getStructMaxCrew(st) : 1;
+      crew = Math.max(0, Math.min(maxCrew, Math.floor(Number(st.crew) || 0)));
+      crewRateMult = G.getStructCrewRateMult ? G.getStructCrewRateMult(st) : 1.0;
+      isInactive = crew <= 0;
       dmgMult += state.cozyTier.agentDmg;
       rateMult += (state.b1MannedFireRateMult || 0);
+      if (crew > 0) rateMult *= crewRateMult;
     }
 
     if (state.phase === 'night' && state.nightConsumables && state.nightConsumables.overpressureAmmo) {
@@ -1020,6 +1059,10 @@ window.ZS = window.ZS || {};
       chainCount: prof.chainCount,
       slowDuration: prof.slowDuration,
       perkLabel: prof.perkLabel,
+      crew,
+      maxCrew,
+      crewRateMult,
+      isInactive,
       prof,
       auraStacks: auraCounts
     };
@@ -1040,6 +1083,7 @@ window.ZS = window.ZS || {};
       : !!(state.structGrid[ty] && state.structGrid[ty][tx] && state.structGrid[ty][tx].mounted === st);
     const lv = st.level || 1;
     const rank = G.isCombatVeterancyDef(def) ? (st.rank || G.computeRankFromXp(st.xp || 0)) : 0;
+    const curCrew = def.subType === 'manned' ? Math.max(0, Math.floor(Number(st.crew) || 0)) : 0;
     const curEpoch = state.statsEpoch || 0;
     const cacheKey = onWall ? '_effCacheMounted' : '_effCache';
     const cached = st[cacheKey];
@@ -1051,13 +1095,14 @@ window.ZS = window.ZS || {};
       cached.ty === ty &&
       cached.lv === lv &&
       cached.rank === rank &&
+      cached.crew === curCrew &&
       cached.id === st.id
     ) {
       return cached.val;
     }
 
     const val = computeStructureEffectiveStatsUncached(st, tx, ty, undefined, onWall);
-    const entry = { epoch: curEpoch, tx, ty, lv, rank, id: st.id, val };
+    const entry = { epoch: curEpoch, tx, ty, lv, rank, crew: curCrew, id: st.id, val };
     if (Object.prototype.hasOwnProperty.call(st, cacheKey)) {
       st[cacheKey] = entry;
     } else {
@@ -1151,17 +1196,12 @@ window.ZS = window.ZS || {};
     }
 
     const prevCap = state.powerCap;
-    const prevPopCap = state.popCap;
     recalculateBaseStats();
 
-    // Immediately grant the new HQ generator/battery delta & bunk recruit feel
+    // Immediately grant the new HQ generator/battery delta
     const capDelta = Math.max(0, state.powerCap - prevCap);
     if (capDelta > 0) {
       state.power = Math.min(state.powerCap, state.power + capDelta);
-    }
-    if (state.popCap > prevPopCap && state.agents < state.popCap) {
-      if (G.grantAgents) G.grantAgents(1);
-      else state.agents += 1;
     }
 
     const hx = DATA.HQ_POS.x + 0.5;
@@ -1188,7 +1228,8 @@ window.ZS = window.ZS || {};
     }
     const auraLabel = auraParts.length > 0 ? `전역 오라(${auraParts.join(' · ')})` : '';
     const b1Label = nextInfo.unlocksUnderground ? '지하 쉘터(B1) 개방 및 초기 굴착력 +16 AP 지급!' : '';
-    const subParts = [wpnLabel, auraLabel, b1Label].filter(Boolean).join(' · ');
+    const crewTipLabel = nextInfo.level === 2 ? '옥상 포대 가동을 위해 [인구 배치 P] 또는 본부 정보창에서 전투요원을 배치하세요!' : '';
+    const subParts = [wpnLabel, auraLabel, b1Label, crewTipLabel].filter(Boolean).join(' · ');
 
     G.banner(`지휘 본부 Lv.${nextInfo.level} — ${nextInfo.name}`, subParts || `최대 내구도 ${nextInfo.maxHp} 확장 완료`, 'good');
     G.saveGame();
@@ -1307,23 +1348,6 @@ window.ZS = window.ZS || {};
         return { ok: false, reason: '성벽 위에는 초소·발칸·투광기만 거치 가능합니다.' };
       } else {
         return { ok: false, reason: '이미 다른 시설이 설치된 타일입니다.' };
-      }
-    }
-
-    if (def.popUse) {
-      if (state.popUsed + def.popUse > state.popCap) {
-        return { ok: false, reason: '숙소 수용량이 부족합니다! [전력·숙소] 탭에서 막사/숙소를 건설하세요.' };
-      }
-      if (state.popUsed + def.popUse > state.agents) {
-        return { ok: false, reason: '대기 중인 작전 요원이 부족합니다! (상인 스카우트 또는 다음 날 합류)' };
-      }
-      const combatAssigned = (state.jobs && state.jobs.combat) || 0;
-      if (state.popUsed + def.popUse > combatAssigned) {
-        return {
-          ok: false,
-          jobShort: true,
-          reason: '전투요원 배정이 부족합니다! 상단 [인구·연구 (T)] 패널에서 연구/생산 요원을 전투요원으로 전환하세요.'
-        };
       }
     }
 
@@ -1527,6 +1551,12 @@ window.ZS = window.ZS || {};
       } else if (def.subType === 'housing') {
         const hProf = getStructLevelProfile(def, st.level);
         tierSub = `요원 수용 +${hProf.popCap}명 · 안락함 +${hProf.cozy}`;
+      } else if (def.id === 'supply_workshop') {
+        const jProf = getStructLevelProfile(def, st.level);
+        tierSub = `생산 직무 슬롯 +${jProf.prodSlots}자리 · 안락함 +${jProf.cozy}`;
+      } else if (def.id === 'research_lab') {
+        const jProf = getStructLevelProfile(def, st.level);
+        tierSub = `연구 직무 슬롯 +${jProf.researchSlots}자리 · 안락함 +${jProf.cozy}`;
       }
       G.banner(`${dispName}로 업그레이드 완료`, tierSub, 'good');
     } else if (st.level === 3 && DATA.LV3_PERK_LABELS && DATA.LV3_PERK_LABELS[def.id]) {
@@ -1688,6 +1718,7 @@ window.ZS = window.ZS || {};
         uid: G.nextStructUid++,
         id: itemId,
         level: 1,
+        crew: 0,
         xp: spawnXp,
         rank: spawnRank,
         kills: 0,
@@ -1716,6 +1747,7 @@ window.ZS = window.ZS || {};
         uid: G.nextStructUid++,
         id: itemId,
         level: spawnLevel,
+        crew: 0,
         xp: spawnXp,
         rank: spawnRank,
         kills: 0,
@@ -2203,17 +2235,19 @@ window.ZS = window.ZS || {};
     }
 
     if (offer.type === 'agent') {
-      if (state.agents >= state.popCap) {
+      const freeBeds = Math.max(0, state.popCap - state.agents);
+      if (freeBeds <= 0) {
         ZS.Audio.playError();
         G.banner('숙소 수용량 부족!', '먼저 [전력·숙소] 탭에서 막사나 컨테이너 숙소를 건설해 빈자리를 확보하세요.', 'warn');
         return false;
       }
+      const joined = Math.min(offer.amount || 3, freeBeds);
       state.coin -= effCost;
-      if (G.grantAgents) G.grantAgents(offer.amount);
-      else state.agents += offer.amount;
+      if (G.grantAgents) G.grantAgents(joined);
+      else state.agents += joined;
       offer.sold = true;
       ZS.Audio.playTrade();
-      G.banner('베테랑 요원 합류!', `작전 요원이 기지에 배치되었습니다. (현재 요원 ${state.agents}/${state.popCap})`, 'good');
+      G.banner('작전 요원 스카우트 완료!', `신규 요원 +${joined}명이 대기 인원에 합류했습니다. (현재 요원 ${state.agents}/${state.popCap})`, 'good');
       G.saveGame();
       G.notifyUi();
       return true;

@@ -819,28 +819,33 @@ window.ZS = window.ZS || {};
     state.power = Math.min(maxTarget, state.power + state.dayCharge);
     const gainedPower = Math.round(state.power - beforePower);
 
-    // 3.5. Dawn 3-Job Settlement (Research RP, Production Wood/Scrap/Dig AP, HQ Lv.1 Spare Combat Scavenge)
+    // 3.5. Dawn 3-Job Settlement (Research RP, Production Wood/Scrap/Dig AP with decimal carry-over)
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
-    const jobs = G.normalizeJobs ? G.normalizeJobs() : (state.jobs || { combat: state.agents, research: 0, prod: 0 });
-    const spareCombat = Math.max(0, (jobs.combat || 0) - (state.popUsed || 0));
-    let scavengeWood = 0;
-    let scavengeScrap = 0;
-    if ((state.hqLevel || 1) === 1 && spareCombat > 0) {
-      scavengeWood = spareCombat * 2;
-      scavengeScrap = spareCombat * 1;
-      state.wood += scavengeWood;
-      state.scrap += scavengeScrap;
+    const jobs = G.normalizeJobs ? G.normalizeJobs() : (state.jobs || { combat: state.popUsed || 0, research: 0, prod: 0 });
+    if (!state.prodCarry || typeof state.prodCarry !== 'object') {
+      state.prodCarry = { rp: 0, wood: 0, scrap: 0, digAp: 0 };
     }
+    const scavengeWood = 0;
+    const scavengeScrap = 0;
 
-    const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (state.b1LabFlatRp || 0) + (state.b1LabFlatPerWaveRp || 0);
+    const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 0.8) + (state.b1LabFlatRp || 0) + (state.b1LabFlatPerWaveRp || 0);
     const drill2Bonus = (G.getTechLevel && G.getTechLevel('b1_drill_2') > 0) ? 0.15 : 0;
     const rpMult = 1 + (state.b1LabMult || 0) + drill2Bonus;
-    const rpGain = Math.round(rawScientistRp * rpMult);
+    const rpTotal = rawScientistRp * rpMult + (state.prodCarry.rp || 0);
+    const rpGain = Math.floor(rpTotal + 1e-6);
+    state.prodCarry.rp = +(rpTotal - rpGain).toFixed(4);
     state.rp = (state.rp || 0) + rpGain;
 
     const prodCount = jobs.prod || 0;
-    const prodWood = Math.round(prodCount * 5 + (state.b1SupplyWood || 0) + (state.b1SupplyProdWood || 0));
-    const prodScrap = Math.round(prodCount * 4 + (state.b1SupplyScrap || 0) + (state.b1SupplyProdScrap || 0));
+    const prodRates = DATA.PROD_RATES || { woodPerWorker: 2.0, scrapPerWorker: 1.5, digBase: 1.2, digDrill1: 1.6 };
+    const woodTotal = prodCount * prodRates.woodPerWorker + (state.b1SupplyWood || 0) + (state.b1SupplyProdWood || 0) + (state.prodCarry.wood || 0);
+    const prodWood = Math.floor(woodTotal + 1e-6);
+    state.prodCarry.wood = +(woodTotal - prodWood).toFixed(4);
+
+    const scrapTotal = prodCount * prodRates.scrapPerWorker + (state.b1SupplyScrap || 0) + (state.b1SupplyProdScrap || 0) + (state.prodCarry.scrap || 0);
+    const prodScrap = Math.floor(scrapTotal + 1e-6);
+    state.prodCarry.scrap = +(scrapTotal - prodScrap).toFixed(4);
+
     const supplyCoin = Math.round(state.b1SupplyCoin || 0);
     state.wood += prodWood;
     state.scrap += prodScrap;
@@ -848,36 +853,34 @@ window.ZS = window.ZS || {};
 
     let digGain = 0;
     if ((state.hqLevel || 1) >= 2 && state.undergroundUnlocked) {
-      const digPerProd = (G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 4 : 3;
-      digGain = Math.round((2 + prodCount * digPerProd) * (1 + (state.b1DigApBonusMult || state.b1DigMult || 0)));
-      const digCap = Math.max(16, (2 + prodCount * digPerProd) * 2 + ((G.getTechLevel && G.getTechLevel('b1_drill_1') > 0) ? 8 : 0));
+      const hasDrill1 = !!(G.getTechLevel && G.getTechLevel('b1_drill_1') > 0);
+      const digPerProd = hasDrill1 ? prodRates.digDrill1 : prodRates.digBase;
+      const digTotal = (2 + prodCount * digPerProd) * (1 + (state.b1DigApBonusMult || state.b1DigMult || 0)) + (state.prodCarry.digAp || 0);
+      digGain = Math.floor(digTotal + 1e-6);
+      state.prodCarry.digAp = +(digTotal - digGain).toFixed(4);
+      const digCap = Math.round(Math.max(16, (2 + prodCount * digPerProd) * 2 + (hasDrill1 ? 8 : 0)));
       state.digApCap = digCap;
       state.digAp = Math.min(digCap, (state.digAp || 0) + digGain);
     }
 
-    // 4. Morning Survivor Arrival (every day below 8 agents, every 2 waves at 8+ agents)
-    let arrivedAgent = 0;
-    let recruitNote = '';
-    if (state.agents < state.popCap) {
-      if (state.agents < 8) {
-        if (G.grantAgents) G.grantAgents(1);
-        else state.agents += 1;
-        arrivedAgent = 1;
-        state.agentRecruitProgress = 0;
-      } else {
-        state.agentRecruitProgress = (state.agentRecruitProgress || 0) + 1;
-        if (state.agentRecruitProgress >= 2) {
-          if (G.grantAgents) G.grantAgents(1);
-          else state.agents += 1;
-          arrivedAgent = 1;
-          state.agentRecruitProgress = 0;
-        } else {
-          recruitNote = ' · 요원 합류 대기(1/2)';
-        }
-      }
-    } else {
-      state.agentRecruitProgress = 0;
+    // 4. Morning Survivor Influx (0~20 scaled by wave bracket & cozy tier; surplus beyond free beds turns away)
+    const bracket = clearedWave <= 3 ? [0, 3]
+      : clearedWave <= 8 ? [1, 6]
+        : clearedWave <= 15 ? [2, 10]
+          : [3, 14];
+    const baseIncoming = bracket[0] + Math.floor(Math.random() * (bracket[1] - bracket[0] + 1));
+    const cozyLv = (state.cozyTier && state.cozyTier.level) || 1;
+    const cozyInfluxMult = [1.0, 1.10, 1.22, 1.34, 1.45][Math.max(0, Math.min(4, cozyLv - 1))];
+    const incomingAgents = Math.min(20, Math.round(baseIncoming * cozyInfluxMult));
+    const freeBeds = Math.max(0, state.popCap - state.agents);
+    const arrivedAgent = Math.min(incomingAgents, freeBeds);
+    const turnedAway = Math.max(0, incomingAgents - arrivedAgent);
+    if (arrivedAgent > 0) {
+      if (G.grantAgents) G.grantAgents(arrivedAgent);
+      else state.agents += arrivedAgent;
     }
+    state.agentRecruitProgress = 0;
+    const recruitNote = turnedAway > 0 ? ` · 숙소 부족 ${turnedAway}명 되돌아감` : '';
 
     state.wave += 1;
     state.reconNightFadeTimer = 0;
@@ -935,8 +938,10 @@ window.ZS = window.ZS || {};
         digApCap: state.digApCap || 0,
         b1Open: (state.hqLevel || 1) >= 2 && !!state.undergroundUnlocked,
         arrivedAgent,
+        incomingAgents,
+        turnedAway,
         popFull: state.agents >= state.popCap,
-        recruitWaiting: arrivedAgent === 0 && state.agents < state.popCap && (state.agentRecruitProgress || 0) > 0,
+        recruitWaiting: false,
         totalAgents: state.agents,
         popCap: state.popCap,
         jobs: { ...(state.jobs || { combat: state.agents, research: 0, prod: 0 }) },
@@ -1297,6 +1302,10 @@ window.ZS = window.ZS || {};
     getEffectiveUpgradeCost: G.getEffectiveUpgradeCost,
     canUpgradeHq: G.canUpgradeHq,
     upgradeHq: G.upgradeHq,
+    getStructMaxCrew: G.getStructMaxCrew,
+    getStructCrewRateMult: G.getStructCrewRateMult,
+    reconcileCombatCrew: G.reconcileCombatCrew,
+    adjustStructCrew: G.adjustStructCrew,
     adjustJob: G.adjustJob,
     getTechLevel: G.getTechLevel,
     getTechCost: G.getTechCost,
