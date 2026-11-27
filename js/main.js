@@ -478,6 +478,7 @@ window.ZS = window.ZS || {};
     }
     closeGameOverModal();
     uiState.inspectedTile = null;
+    uiState.reconOpen = false;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
     setMainMenuOpen(false);
@@ -496,6 +497,7 @@ window.ZS = window.ZS || {};
     closeConfirmModal();
     closeGameOverModal();
     uiState.inspectedTile = null;
+    uiState.reconOpen = false;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
     setMainMenuOpen(false);
@@ -531,6 +533,7 @@ window.ZS = window.ZS || {};
     }
     closeDivisionModal();
     closeConfirmModal();
+    uiState.reconOpen = false;
     document.getElementById('settings-popover')?.classList.add('hidden');
     const settingsBtn = document.getElementById('btn-settings');
     if (settingsBtn) {
@@ -874,13 +877,32 @@ window.ZS = window.ZS || {};
         },
         { passive: false }
       );
+      itemCardsEl.addEventListener('scroll', () => {
+        if (U.syncDockScrollButtons) U.syncDockScrollButtons();
+      });
     }
+    document.getElementById('btn-dock-scroll-left')?.addEventListener('click', () => {
+      if (itemCardsEl) itemCardsEl.scrollBy({ left: -216, behavior: 'smooth' });
+    });
+    document.getElementById('btn-dock-scroll-right')?.addEventListener('click', () => {
+      if (itemCardsEl) itemCardsEl.scrollBy({ left: 216, behavior: 'smooth' });
+    });
+    window.addEventListener('resize', () => {
+      if (U.syncDockScrollButtons) U.syncDockScrollButtons();
+    });
 
     const settingsWrap = document.getElementById('settings-wrap');
     const settingsBtn = document.getElementById('btn-settings');
     const settingsPopover = document.getElementById('settings-popover');
     const setSettingsOpen = (open) => {
       if (!settingsPopover || !settingsBtn) return;
+      if (open && U.hideUnifiedTooltip) {
+        U.hideUnifiedTooltip();
+      }
+      if (open && typeof uiState.reconOpen !== 'undefined') {
+        uiState.reconOpen = false;
+        if (U.renderReconCard) U.renderReconCard(ZS.Game.state);
+      }
       settingsPopover.classList.toggle('hidden', !open);
       settingsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       settingsBtn.classList.toggle('active', !!open);
@@ -1050,6 +1072,10 @@ window.ZS = window.ZS || {};
 
     // Buttons
     document.getElementById('tool-inspect').addEventListener('click', () => U.setToolMode('inspect'));
+    document.getElementById('btn-close-detail')?.addEventListener('click', () => {
+      uiState.inspectedTile = null;
+      U.setToolMode('inspect');
+    });
     document.getElementById('tool-move').addEventListener('click', () => U.setToolMode('move'));
     document.getElementById('tool-remove').addEventListener('click', () => U.setToolMode('remove'));
 
@@ -1061,18 +1087,24 @@ window.ZS = window.ZS || {};
     if (dockExpandBtn) {
       dockExpandBtn.addEventListener('click', () => U.setDockCollapsed(false));
     }
-    const hudResToggleBtn = document.getElementById('btn-toggle-hud-res');
-    if (hudResToggleBtn) {
-      hudResToggleBtn.addEventListener('click', () => {
-        uiState.hudResCompact = !uiState.hudResCompact;
-        U.syncDockAndHudState();
-      });
-    }
 
     document.getElementById('btn-start-wave').addEventListener('click', () => {
       setSettingsOpen(false);
       uiState.inspectedTile = null;
       U.setToolMode('inspect');
+      const st = ZS.Game && ZS.Game.state;
+      const combatAssigned = (st && st.jobs && st.jobs.combat) || 0;
+      if (combatAssigned <= 0) {
+        openConfirmModal({
+          title: '전투요원 미배치 경고',
+          desc: '배치된 전투요원이 없습니다. 이대로 전투를 시작하시겠습니까?',
+          acceptText: '전투 시작',
+          onAccept: () => {
+            ZS.Game.startNightWave();
+          }
+        });
+        return;
+      }
       ZS.Game.startNightWave();
     });
 
@@ -1111,16 +1143,6 @@ window.ZS = window.ZS || {};
       document.getElementById('trader-modal').classList.remove('hidden');
     };
     document.getElementById('btn-trader').addEventListener('click', openTrader);
-    const traderPillEl = document.getElementById('btn-open-trader-pill');
-    if (traderPillEl) {
-      traderPillEl.addEventListener('click', openTrader);
-      traderPillEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          openTrader();
-        }
-      });
-    }
     document.getElementById('btn-close-trader').addEventListener('click', () => {
       document.getElementById('trader-modal').classList.add('hidden');
     });
@@ -1136,29 +1158,15 @@ window.ZS = window.ZS || {};
       setSettingsOpen(false);
       if (U.openTechModal) U.openTechModal(focusTechId);
     };
-    const popPillEl = document.getElementById('pop-pill');
-    if (popPillEl) {
-      popPillEl.addEventListener('click', openPop);
-      popPillEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          openPop();
-        }
-      });
-    }
-    const rpPillEl = document.getElementById('rp-pill');
-    if (rpPillEl) {
-      rpPillEl.addEventListener('click', () => openTech());
-      rpPillEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          openTech();
-        }
-      });
-    }
     document.getElementById('btn-open-pop')?.addEventListener('click', () => {
       setSettingsOpen(false);
       if (U.togglePopModal) U.togglePopModal();
+    });
+    document.getElementById('btn-toggle-recon')?.addEventListener('click', () => {
+      setSettingsOpen(false);
+      uiState.reconOpen = !uiState.reconOpen;
+      if (U.renderReconCard) U.renderReconCard(ZS.Game.state);
+      else U.updateHud();
     });
     document.getElementById('btn-close-wave-report')?.addEventListener('click', () => {
       if (U.closeWaveReportModal) U.closeWaveReportModal();
@@ -1514,6 +1522,7 @@ window.ZS = window.ZS || {};
     U.renderCategoryTabs();
     U.updateHud();
     bindEvents();
+    if (U.initUnifiedTooltips) U.initUnifiedTooltips();
     setMainMenuOpen(true);
     requestAnimationFrame(loop);
   }

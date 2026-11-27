@@ -41,9 +41,20 @@ window.ZS = window.ZS || {};
 
     agents: DATA.HQ_STATS.startingAgents,
     jobs: {
-      combat: Math.max(1, DATA.HQ_STATS.startingAgents - 1),
-      research: 1,
+      combat: 2,
+      research: 0,
       prod: 0
+    },
+    jobCaps: {
+      combat: 2,
+      research: 2,
+      prod: 2
+    },
+    prodCarry: {
+      rp: 0,
+      wood: 0,
+      scrap: 0,
+      digAp: 0
     },
     popCap: DATA.HQ_STATS.basePopCap,
     popUsed: 0,
@@ -417,21 +428,149 @@ window.ZS = window.ZS || {};
     );
   }
 
+  function getStructMaxCrew(st) {
+    if (!st) return 0;
+    const specs = DATA.CREW_SPECS || {};
+    const spec = specs[st.id];
+    if (!spec || !spec.maxByLv) return 0;
+    const lv = st.id === 'command_hq' ? (state.hqLevel || st.level || 1) : (st.level || 1);
+    return spec.maxByLv[lv] != null ? spec.maxByLv[lv] : 0;
+  }
+
+  function getStructCrewRateMult(st) {
+    if (!st) return 1.0;
+    const specs = DATA.CREW_SPECS || {};
+    const spec = specs[st.id];
+    if (!spec || !Array.isArray(spec.rateByCrew)) return 1.0;
+    const maxC = getStructMaxCrew(st);
+    if (maxC <= 0) return 0;
+    const crew = Math.max(0, Math.min(maxC, Math.floor(Number(st.crew) || 0)));
+    return spec.rateByCrew[crew] != null ? spec.rateByCrew[crew] : 0;
+  }
+
+  function collectCreweableEntries() {
+    const entries = [];
+    for (let y = 0; y < N; y++) {
+      const row = state.structGrid[y];
+      if (!row) continue;
+      for (let x = 0; x < N; x++) {
+        const st = row[x];
+        if (!st) continue;
+        if (st.id === 'command_hq') {
+          const maxC = getStructMaxCrew(st);
+          if (maxC > 0) {
+            entries.push({ st, maxC, isHq: true, lv: state.hqLevel || st.level || 1, x, y });
+          }
+        } else {
+          const def = DATA.ITEMS[st.id];
+          if (def && def.subType === 'manned') {
+            const maxC = getStructMaxCrew(st);
+            if (maxC > 0) {
+              entries.push({ st, maxC, isHq: false, lv: st.level || 1, x, y });
+            }
+          }
+          if (st.mounted) {
+            const mDef = DATA.ITEMS[st.mounted.id];
+            if (mDef && mDef.subType === 'manned') {
+              const maxC = getStructMaxCrew(st.mounted);
+              if (maxC > 0) {
+                entries.push({ st: st.mounted, maxC, isHq: false, lv: st.mounted.level || 1, x, y, mounted: true });
+              }
+            }
+          }
+        }
+      }
+    }
+    return entries;
+  }
+
+  function reconcileCombatCrew(targetCombatCount) {
+    const entries = collectCreweableEntries();
+    let totalMax = 0;
+    let curSum = 0;
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const clamped = Math.max(0, Math.min(e.maxC, Math.floor(Number(e.st.crew) || 0)));
+      e.st.crew = clamped;
+      totalMax += e.maxC;
+      curSum += clamped;
+    }
+
+    const goal = Math.max(0, Math.min(totalMax, Math.floor(Number(targetCombatCount) || 0)));
+
+    // Sort: outposts before HQ, higher level first, stable coordinates
+    entries.sort((a, b) => {
+      if (a.isHq !== b.isHq) return a.isHq ? 1 : -1;
+      if (b.lv !== a.lv) return b.lv - a.lv;
+      if (a.y !== b.y) return a.y - b.y;
+      return a.x - b.x;
+    });
+
+    if (curSum < goal) {
+      let need = goal - curSum;
+      // Pass 1: activate dormant 0-crew facilities first (0 -> 1 priority)
+      for (let i = 0; i < entries.length && need > 0; i++) {
+        const e = entries[i];
+        if ((e.st.crew || 0) === 0 && e.maxC > 0) {
+          e.st.crew = 1;
+          need -= 1;
+        }
+      }
+      // Pass 2: fill additional crew slots up to maxC
+      for (let i = 0; i < entries.length && need > 0; i++) {
+        const e = entries[i];
+        const room = e.maxC - (e.st.crew || 0);
+        if (room > 0) {
+          const add = Math.min(room, need);
+          e.st.crew += add;
+          need -= add;
+        }
+      }
+    } else if (curSum > goal) {
+      let excess = curSum - goal;
+      // Pass 1: shed extra crew (>1) from back of priority list so facilities stay online
+      for (let i = entries.length - 1; i >= 0 && excess > 0; i--) {
+        const e = entries[i];
+        const spare = Math.max(0, (e.st.crew || 0) - 1);
+        if (spare > 0) {
+          const drop = Math.min(spare, excess);
+          e.st.crew -= drop;
+          excess -= drop;
+        }
+      }
+      // Pass 2: drop remaining active crew down to 0
+      for (let i = entries.length - 1; i >= 0 && excess > 0; i--) {
+        const e = entries[i];
+        if ((e.st.crew || 0) > 0) {
+          const drop = Math.min(e.st.crew, excess);
+          e.st.crew -= drop;
+          excess -= drop;
+        }
+      }
+    }
+
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
+    return goal;
+  }
+
   function normalizeJobs() {
     const totalAgents = Math.max(0, Math.floor(Number(state.agents) || 0));
-    const minCombat = Math.min(totalAgents, Math.max(0, Math.floor(Number(state.popUsed) || 0)));
+    const caps = state.jobCaps || { combat: 2, research: 2, prod: 2 };
+    const combatCap = Math.max(0, Math.floor(Number(caps.combat) || 0));
+    const researchCap = Math.max(0, Math.floor(Number(caps.research) || 0));
+    const prodCap = Math.max(0, Math.floor(Number(caps.prod) || 0));
+
     if (!state.jobs || typeof state.jobs !== 'object') {
-      const rDefault = totalAgents > minCombat ? 1 : 0;
       state.jobs = {
-        combat: Math.max(minCombat, totalAgents - rDefault),
-        research: rDefault,
+        combat: Math.min(totalAgents, combatCap, Math.max(0, Math.floor(Number(state.popUsed) || 0))),
+        research: 0,
         prod: 0
       };
     }
 
-    let c = Math.max(0, Math.floor(Number(state.jobs.combat) || 0));
-    let r = Math.max(0, Math.floor(Number(state.jobs.research) || 0));
-    let p = Math.max(0, Math.floor(Number(state.jobs.prod) || 0));
+    let c = Math.max(0, Math.min(combatCap, Math.floor(Number(state.jobs.combat) || 0)));
+    let r = Math.max(0, Math.min(researchCap, Math.floor(Number(state.jobs.research) || 0)));
+    let p = Math.max(0, Math.min(prodCap, Math.floor(Number(state.jobs.prod) || 0)));
 
     let sum = c + r + p;
     if (sum > totalAgents) {
@@ -451,26 +590,6 @@ window.ZS = window.ZS || {};
       }
     }
 
-    if (c < minCombat) {
-      let need = minCombat - c;
-      const unassigned = Math.max(0, totalAgents - (c + r + p));
-      const fromUn = Math.min(unassigned, need);
-      c += fromUn;
-      need -= fromUn;
-      if (need > 0) {
-        const fromP = Math.min(p, need);
-        p -= fromP;
-        c += fromP;
-        need -= fromP;
-      }
-      if (need > 0) {
-        const fromR = Math.min(r, need);
-        r -= fromR;
-        c += fromR;
-        need -= fromR;
-      }
-    }
-
     state.jobs = { combat: c, research: r, prod: p };
     return state.jobs;
   }
@@ -480,14 +599,6 @@ window.ZS = window.ZS || {};
     if (add <= 0) return 0;
     normalizeJobs();
     state.agents += add;
-    let rem = add;
-    if ((state.jobs.research || 0) === 0 && rem > 0) {
-      state.jobs.research = 1;
-      rem -= 1;
-    }
-    if (rem > 0) {
-      state.jobs.combat = (state.jobs.combat || 0) + rem;
-    }
     normalizeJobs();
     return add;
   }
@@ -499,21 +610,30 @@ window.ZS = window.ZS || {};
     if (rawDelta === 0) return false;
 
     normalizeJobs();
+    const caps = state.jobCaps || { combat: 2, research: 2, prod: 2 };
+    const roleCap = Math.max(0, Math.floor(Number(caps[role]) || 0));
     const steps = Math.abs(rawDelta);
     const sign = rawDelta > 0 ? 1 : -1;
     let changed = false;
 
     for (let s = 0; s < steps; s++) {
       if (sign < 0) {
-        if (role === 'combat' && state.jobs.combat <= (state.popUsed || 0)) {
-          ZS.Audio.playError();
-          banner('전투요원 감원 불가', '초소에 배치된 전투요원(' + state.popUsed + '명) 미만으로 줄일 수 없습니다.', 'warn');
-          break;
-        }
         if ((state.jobs[role] || 0) <= 0) break;
         state.jobs[role] -= 1;
         changed = true;
       } else {
+        if ((state.jobs[role] || 0) >= roleCap) {
+          if (!changed) {
+            ZS.Audio.playError();
+            const capHint = role === 'combat'
+              ? '전투 초소를 더 건설하거나 본부 Lv.2 이상으로 증축하세요.'
+              : role === 'research'
+                ? '[전력·숙소] 탭에서 연구막사를 건설하거나 지하 연구 데스크를 추가하세요.'
+                : '[전력·숙소] 탭에서 작업장을 건설하거나 지하 파렛트 랙을 추가하세요.';
+            banner('직무 슬롯 상한 도달', capHint, 'warn');
+          }
+          break;
+        }
         const used = (state.jobs.combat || 0) + (state.jobs.research || 0) + (state.jobs.prod || 0);
         const unassigned = state.agents - used;
         if (unassigned > 0) {
@@ -531,6 +651,64 @@ window.ZS = window.ZS || {};
 
     if (!changed) return false;
     normalizeJobs();
+    if (role === 'combat') {
+      reconcileCombatCrew(state.jobs.combat);
+    }
+    if (G.recalculateBaseStats) G.recalculateBaseStats(true);
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function adjustStructCrew(tx, ty, delta, isMounted) {
+    if (state.phase === 'gameover') return false;
+    const rawDelta = Math.trunc(Number(delta) || 0);
+    if (rawDelta === 0) return false;
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) return false;
+    const cell = state.structGrid[ty] && state.structGrid[ty][tx];
+    if (!cell) return false;
+    const target = isMounted ? cell.mounted : cell;
+    if (!target) return false;
+    const maxC = getStructMaxCrew(target);
+    if (maxC <= 0) return false;
+
+    normalizeJobs();
+    let changed = false;
+    const steps = Math.abs(rawDelta);
+    const sign = rawDelta > 0 ? 1 : -1;
+
+    for (let s = 0; s < steps; s++) {
+      const curCrew = Math.max(0, Math.min(maxC, Math.floor(Number(target.crew) || 0)));
+      if (sign < 0) {
+        if (curCrew <= 0) break;
+        target.crew = curCrew - 1;
+        state.jobs.combat = Math.max(0, (state.jobs.combat || 0) - 1);
+        changed = true;
+      } else {
+        if (curCrew >= maxC) {
+          if (!changed) {
+            ZS.Audio.playError();
+            banner('배치 인원 가득 참', `이 시설은 최대 ${maxC}명까지 배치할 수 있습니다.`, 'warn');
+          }
+          break;
+        }
+        const used = (state.jobs.combat || 0) + (state.jobs.research || 0) + (state.jobs.prod || 0);
+        const unassigned = state.agents - used;
+        if (unassigned <= 0) {
+          if (!changed) {
+            ZS.Audio.playError();
+            banner('미배정 인원 없음', '전원 배치 중입니다. [인구 배치 P]에서 다른 직무 인원을 먼저 감원하세요.', 'warn');
+          }
+          break;
+        }
+        target.crew = curCrew + 1;
+        state.jobs.combat = (state.jobs.combat || 0) + 1;
+        changed = true;
+      }
+    }
+
+    if (!changed) return false;
+    if (G.invalidateStatsCache) G.invalidateStatsCache();
     if (G.recalculateBaseStats) G.recalculateBaseStats(true);
     saveGame();
     notifyUi();
@@ -1337,10 +1515,16 @@ window.ZS = window.ZS || {};
     const hqInfo = getHqLevelInfo(1);
     state.agents = DATA.HQ_STATS.startingAgents + (divDef.startingAgentsBonus || 0);
     state.jobs = {
-      combat: Math.max(1, state.agents - 1),
-      research: state.agents >= 1 ? 1 : 0,
+      combat: 2,
+      research: 0,
       prod: 0
     };
+    state.jobCaps = {
+      combat: 2,
+      research: hqInfo.researchSlots || 2,
+      prod: hqInfo.prodSlots || 2
+    };
+    state.prodCarry = { rp: 0, wood: 0, scrap: 0, digAp: 0 };
     state.debugBonusPopCap = 0;
     state.rp = 0;
     state.researchedTechs = {};
@@ -1411,12 +1595,38 @@ window.ZS = window.ZS || {};
     state.structGrid[hy][hx] = {
       id: 'command_hq',
       level: 1,
+      crew: 0,
       hp: hqInfo.maxHp,
       maxHp: hqInfo.maxHp,
       cooldown: 0,
       aimAngle: 0,
       upgradeAnimTimer: 0
     };
+
+    // Starter free Rifle Bunker guarding north plaza entrance (13, 12) pre-staffed with 2 combat crew
+    const starterBunkerDef = DATA.ITEMS && DATA.ITEMS.rifle_bunker;
+    if (starterBunkerDef && hy - 1 > 0 && !state.structGrid[hy - 1][hx]) {
+      const bHp = starterBunkerDef.maxHp || 210;
+      state.structGrid[hy - 1][hx] = {
+        uid: G.nextStructUid++,
+        id: 'rifle_bunker',
+        level: 1,
+        crew: 2,
+        xp: 0,
+        rank: 0,
+        kills: 0,
+        usedVoucher: true,
+        invested: { wood: 0, scrap: 0, coin: 0 },
+        hp: bHp,
+        maxHp: bHp,
+        cooldown: 0,
+        aimAngle: -Math.PI * 0.5,
+        buildAnimTimer: 0,
+        upgradeAnimTimer: 0,
+        promoAnimTimer: 0,
+        fallAnimTimer: 0
+      };
+    }
 
     // Starter free 5x5 razor-wire barricade perimeter surrounding the 3x3 HQ plaza
     const wallDef = DATA.ITEMS && DATA.ITEMS.barricade_wall;
@@ -1785,7 +1995,10 @@ window.ZS = window.ZS || {};
         coin: state.coin,
         power: state.power,
         agents: state.agents,
-        jobs: state.jobs ? { ...state.jobs } : { combat: state.agents, research: 0, prod: 0 },
+        jobs: state.jobs ? { ...state.jobs } : { combat: state.popUsed || 0, research: 0, prod: 0 },
+        jobCaps: state.jobCaps ? { ...state.jobCaps } : { combat: 0, research: 2, prod: 2 },
+        prodCarry: state.prodCarry ? { ...state.prodCarry } : { rp: 0, wood: 0, scrap: 0, digAp: 0 },
+        crewSlottedV1: true,
         debugBonusPopCap: state.debugBonusPopCap || 0,
         rp: state.rp || 0,
         researchedTechs: state.researchedTechs ? { ...state.researchedTechs } : {},
@@ -2091,6 +2304,15 @@ window.ZS = window.ZS || {};
         }
       }
 
+      state.prodCarry = (d.prodCarry && typeof d.prodCarry === 'object')
+        ? {
+            rp: Math.max(0, Number(d.prodCarry.rp) || 0),
+            wood: Math.max(0, Number(d.prodCarry.wood) || 0),
+            scrap: Math.max(0, Number(d.prodCarry.scrap) || 0),
+            digAp: Math.max(0, Number(d.prodCarry.digAp) || 0)
+          }
+        : { rp: 0, wood: 0, scrap: 0, digAp: 0 };
+
       state.jobs = (d.jobs && typeof d.jobs === 'object')
         ? {
             combat: Math.max(0, Math.floor(Number(d.jobs.combat) || 0)),
@@ -2107,14 +2329,12 @@ window.ZS = window.ZS || {};
       } else if (G.createDefaultUnderground) {
         state.underground = G.createDefaultUnderground();
       }
-      G.recalculateBaseStats(true);
-      if (!d.jobs || typeof d.jobs !== 'object') {
-        const minC = Math.min(state.agents, Math.max(1, state.popUsed || 0));
-        const rem = Math.max(0, state.agents - minC);
-        const rCount = rem >= 1 ? 1 : 0;
-        const cCount = minC + Math.max(0, rem - rCount);
-        state.jobs = { combat: cCount, research: rCount, prod: 0 };
+      if (!d.crewSlottedV1) {
+        const legacyCombat = state.jobs ? (state.jobs.combat || 0) : Math.max(0, state.agents - 1);
+        reconcileCombatCrew(legacyCombat);
+        migratedTechOrJobs = true;
       }
+      G.recalculateBaseStats(true);
       normalizeJobs();
       state.cozyTierUpTimer = 0;
       state.power = d.power ?? state.powerCap;
@@ -2364,9 +2584,13 @@ window.ZS = window.ZS || {};
     banner,
     isUndergroundUnlocked,
     getHqLevelInfo,
+    getStructMaxCrew,
+    getStructCrewRateMult,
+    reconcileCombatCrew,
     normalizeJobs,
     grantAgents,
     adjustJob,
+    adjustStructCrew,
     createEmptyGrids,
     getTerrainAt,
     getTerrainElevationAt,

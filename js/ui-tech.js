@@ -162,7 +162,7 @@ window.ZS = window.ZS || {};
       chips: [
         { icon: 'stat-unlock', tone: 'rp', text: '발전 · 배터리 · 막사 Lv.2' },
         { icon: 'act-repair', tone: 'rp', text: '정비 베이 Lv.2 강화 해금' },
-        { icon: 'res-agent', tone: 'muted', text: '야전 막사 인구 수용 +2' }
+        { icon: 'res-agent', tone: 'muted', text: '야전 막사 인구 수용 +6' }
       ]
     },
     inf_tier3: {
@@ -171,7 +171,7 @@ window.ZS = window.ZS || {};
       x: 381,
       y: 330,
       chips: [
-        { icon: 'stat-unlock', tone: 'rp', text: '발전 · ESS · 숙소 · 정비 Lv.3' },
+        { icon: 'stat-unlock', tone: 'rp', text: '발전 · ESS · 숙소 · 보급 · 연구' },
         { icon: 'res-power', tone: 'rp', text: '리튬 ESS 배터리 뱅크 해금' },
         { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.2 (W10) 인가' }
       ]
@@ -182,9 +182,9 @@ window.ZS = window.ZS || {};
       x: 558,
       y: 330,
       chips: [
-        { icon: 'stat-unlock', tone: 'rp', text: '발전 · 코어 · 생활관 Lv.4' },
+        { icon: 'stat-unlock', tone: 'rp', text: '발전 · 코어 · 생활관 · 보급소' },
         { icon: 'res-power', tone: 'rp', text: '초전도 에너지 코어 해금' },
-        { icon: 'res-agent', tone: 'muted', text: '작전 생활관 수용 +6' }
+        { icon: 'res-agent', tone: 'muted', text: '작전 생활관 수용 +24' }
       ]
     },
     infra_repeat: {
@@ -205,7 +205,7 @@ window.ZS = window.ZS || {};
       x: 381,
       y: 402,
       chips: [
-        { icon: 'b1-dig', tone: 'amber', text: '생산요원 굴착력 3→4 AP/명' },
+        { icon: 'b1-dig', tone: 'amber', text: '생산요원 굴착력 1.2→1.6 AP' },
         { icon: 'b1-ops', tone: 'amber', text: 'AP 이월 상한 +8 증가' },
         { icon: 'res-scrap', tone: 'gold', text: '매몰 전리품 획득 +25%' }
       ]
@@ -340,13 +340,18 @@ window.ZS = window.ZS || {};
     return (st.agents || 0) > used;
   }
 
+  function fmtPopDec(v) {
+    const n = +Number(v || 0).toFixed(1);
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+  }
+
   function getDailyRpPreview(st) {
-    const jobs = st.jobs || { combat: st.agents || 0, research: 0, prod: 0 };
-    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 2 };
+    const jobs = st.jobs || { combat: st.popUsed || 0, research: 0, prod: 0 };
+    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 0.8 };
     const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
-    const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 2) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
+    const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 0.8) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
     const rpMult = 1 + (st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0);
-    return Math.round(rawRp * rpMult);
+    return +(rawRp * rpMult).toFixed(1);
   }
 
   function renderPopModal() {
@@ -354,8 +359,9 @@ window.ZS = window.ZS || {};
     const st = ZS.Game.state;
     if (!body || !st) return;
 
-    const jobs = st.jobs || { combat: st.agents || 0, research: 0, prod: 0 };
-    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 2 };
+    const jobs = st.jobs || { combat: st.popUsed || 0, research: 0, prod: 0 };
+    const caps = st.jobCaps || { combat: 2, research: 2, prod: 2 };
+    const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 0.8 };
     const totalAgents = Math.max(0, st.agents || 0);
     const popUsed = Math.max(0, st.popUsed || 0);
     const assigned = (jobs.combat || 0) + (jobs.research || 0) + (jobs.prod || 0);
@@ -364,29 +370,21 @@ window.ZS = window.ZS || {};
 
     const totalBadge = document.getElementById('pop-modal-total-badge');
     if (totalBadge) {
-      totalBadge.innerHTML = `${ozIcon('res-agent', 15, 'icon-coin')}<span>총 인원 ${totalAgents} / ${st.popCap || 4}명</span>`;
+      totalBadge.innerHTML = `${ozIcon('res-agent', 15, 'icon-coin')}<span>총 인원 ${totalAgents} / ${st.popCap || 10}명</span>`;
     }
 
-    const spareCombat = Math.max(0, (jobs.combat || 0) - popUsed);
-    const hqRatePct = Math.min(25, spareCombat * 5);
-    const scavWood = (st.hqLevel || 1) === 1 ? spareCombat * 2 : 0;
-    const scavScrap = (st.hqLevel || 1) === 1 ? spareCombat * 1 : 0;
-
     const drill1Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_1') : 0;
-    const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
+    const rpPerScientist = hqInfo.baseRpPerScientist || 0.8;
     const rpGainPreview = getDailyRpPreview(st);
-    const bossRpBonus = Math.round(6 * (1 + (st.b1BossRpMult || 0)));
 
+    const prodRates = (ZS.DATA && ZS.DATA.PROD_RATES) || { woodPerWorker: 2.0, scrapPerWorker: 1.5, digBase: 1.2, digDrill1: 1.6 };
     const prodCount = jobs.prod || 0;
-    const prodWoodPreview = Math.round(prodCount * 5 + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0));
-    const prodScrapPreview = Math.round(prodCount * 4 + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0));
-    const prodCoinPreview = Math.round(st.b1SupplyCoin || 0);
-    const digPerProd = drill1Lv > 0 ? 4 : 3;
-    const digGainPreview = Math.round((2 + prodCount * digPerProd) * (1 + (st.b1DigApBonusMult || st.b1DigMult || 0)));
-    const digCapPreview = Math.max(16, (2 + prodCount * digPerProd) * 2 + (drill1Lv > 0 ? 8 : 0));
+    const prodWoodPreview = +(prodCount * prodRates.woodPerWorker + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0)).toFixed(1);
+    const prodScrapPreview = +(prodCount * prodRates.scrapPerWorker + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0)).toFixed(1);
+    const digPerProd = drill1Lv > 0 ? prodRates.digDrill1 : prodRates.digBase;
+    const digGainPreview = +((2 + prodCount * digPerProd) * (1 + (st.b1DigApBonusMult || st.b1DigMult || 0))).toFixed(1);
 
     const b1Open = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
-    const combatAtFloor = (jobs.combat || 0) <= popUsed;
     const isGameOver = st.phase === 'gameover';
 
     // Agent pips bar (shows assigned vs unassigned visually)
@@ -401,6 +399,9 @@ window.ZS = window.ZS || {};
     }
 
     const plusLockHint = !canAddAny ? '미배정 인원이 0명입니다. 먼저 다른 직무에서 (-)로 감원하세요.' : '';
+    const combatCap = Math.max(0, caps.combat || 0);
+    const researchCap = Math.max(0, caps.research || 0);
+    const prodCap = Math.max(0, caps.prod || 0);
 
     const roleCards = [
       {
@@ -410,21 +411,22 @@ window.ZS = window.ZS || {};
         iconId: 'cat-defense',
         iconCls: 'icon-coin',
         count: jobs.combat || 0,
-        canMinus: !isGameOver && !combatAtFloor && (jobs.combat || 0) > 0,
-        canPlus: !isGameOver && canAddAny,
-        minusTitle: combatAtFloor
-          ? `초소 고정 인원(${popUsed}명) 미만으로 감원 불가`
-          : '전투요원 1명을 미배정 대기 풀로 감원',
-        plusTitle: plusLockHint || '미배정 요원 1명을 전투요원으로 배정',
-        statLeftIcon: 'cat-defense',
-        statLeftCls: popUsed > 0 ? 'icon-coin' : 'icon-muted',
-        statLeftTop: `초소 고정 ${popUsed}명`,
-        statLeftSub: popUsed > 0 ? (combatAtFloor ? '감원 하한선' : '전선 초소 배치') : '고정 인원 없음',
-        statRightIcon: 'stat-dmg',
-        statRightCls: spareCombat > 0 ? 'icon-heal' : 'icon-muted',
-        statRightTop: `예비 ${spareCombat}명 · 연사 +${hqRatePct}%`,
-        statRightSub: (st.hqLevel || 1) === 1 ? `채집 +${scavWood}목/+${scavScrap}고` : '본부 화기 지원',
-        floorNote: combatAtFloor && popUsed > 0 ? '초소 배치 인원은 감원 불가' : '미배정 풀로 1명 이동 가능'
+        cap: combatCap,
+        canMinus: !isGameOver && (jobs.combat || 0) > 0,
+        canPlus: !isGameOver && canAddAny && (jobs.combat || 0) < combatCap,
+        atCap: (jobs.combat || 0) >= combatCap,
+        minusTitle: (jobs.combat || 0) <= 0 ? '감원할 전투요원 없음' : '전투요원 1명을 미배정 대기 풀로 감원 (미배치 초소 발생 가능)',
+        plusTitle: (jobs.combat || 0) >= combatCap
+          ? `전투 슬롯 상한(${combatCap}자리) 도달 — 초소 추가 건설 또는 본부 Lv.2+ 증축`
+          : (plusLockHint || '미배정 요원 1명을 빈 초소·포대에 자동 배정'),
+        stats: [
+          {
+            icon: 'cat-defense',
+            cls: popUsed > 0 ? 'icon-coin' : 'icon-muted',
+            main: `가동 ${popUsed}/${combatCap}자리`,
+            sub: combatCap > popUsed ? `빈 초소 슬롯 ${combatCap - popUsed}자리` : (combatCap > 0 ? '모든 전투 슬롯 가동' : '전투 초소를 건설하세요')
+          }
+        ]
       },
       {
         role: 'research',
@@ -433,21 +435,22 @@ window.ZS = window.ZS || {};
         iconId: 'res-rp',
         iconCls: 'icon-rp',
         count: jobs.research || 0,
+        cap: researchCap,
         canMinus: !isGameOver && (jobs.research || 0) > 0,
-        canPlus: !isGameOver && canAddAny,
+        canPlus: !isGameOver && canAddAny && (jobs.research || 0) < researchCap,
+        atCap: (jobs.research || 0) >= researchCap,
         minusTitle: (jobs.research || 0) <= 0 ? '감원할 연구요원 없음' : '연구요원 1명을 미배정 대기 풀로 감원',
-        plusTitle: plusLockHint || '미배정 요원 1명을 연구요원으로 배정',
-        statLeftIcon: 'res-rp',
-        statLeftCls: 'icon-rp',
-        statLeftTop: `+${rpGainPreview} RP / 일`,
-        statLeftSub: `기본 +${hqInfo.baseRpPerScientist || 2} RP/인${drill2Lv > 0 || (st.b1LabMult || 0) > 0 ? ` · 증폭` : ''}`,
-        statRightIcon: 'hud-enemy',
-        statRightCls: 'icon-rp',
-        statRightTop: `보스 +${bossRpBonus} RP`,
-        statRightSub: (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0) > 0
-          ? `연구실 고정 +${Math.round((st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0))}`
-          : '새벽 자동 정산',
-        floorNote: '연구트리(T) 해금 포인트 생산'
+        plusTitle: (jobs.research || 0) >= researchCap
+          ? `연구 슬롯 상한(${researchCap}자리) 도달 — [전력·숙소] 탭에서 연구막사 증설`
+          : (plusLockHint || '미배정 요원 1명을 연구요원으로 배정'),
+        stats: [
+          {
+            icon: 'res-rp',
+            cls: 'icon-rp',
+            main: `+${fmtPopDec(rpGainPreview)} RP / 일`,
+            sub: `1인당 +${fmtPopDec(rpPerScientist)} RP`
+          }
+        ]
       },
       {
         role: 'prod',
@@ -456,19 +459,35 @@ window.ZS = window.ZS || {};
         iconId: 'act-repair',
         iconCls: 'icon-ap',
         count: jobs.prod || 0,
+        cap: prodCap,
         canMinus: !isGameOver && (jobs.prod || 0) > 0,
-        canPlus: !isGameOver && canAddAny,
+        canPlus: !isGameOver && canAddAny && (jobs.prod || 0) < prodCap,
+        atCap: (jobs.prod || 0) >= prodCap,
         minusTitle: (jobs.prod || 0) <= 0 ? '감원할 생산요원 없음' : '생산요원 1명을 미배정 대기 풀로 감원',
-        plusTitle: plusLockHint || '미배정 요원 1명을 생산요원으로 배정',
-        statLeftIcon: 'res-wood',
-        statLeftCls: 'icon-wood',
-        statLeftTop: `+${prodWoodPreview}목 · +${prodScrapPreview}고`,
-        statLeftSub: prodCoinPreview > 0 ? `코인 +${prodCoinPreview}/일 포함` : '새벽 자원 채굴',
-        statRightIcon: 'b1-dig',
-        statRightCls: b1Open ? 'icon-ap' : 'icon-muted',
-        statRightTop: b1Open ? `+${digGainPreview} AP / 일` : '본부 Lv.2 개방',
-        statRightSub: b1Open ? `보유 ${st.digAp || 0}/${st.digApCap || digCapPreview} AP` : '지하 굴착(AP) 준비',
-        floorNote: b1Open ? '지하 암반 굴착력(AP) 생산' : '목재·고철 보급 생산'
+        plusTitle: (jobs.prod || 0) >= prodCap
+          ? `생산 슬롯 상한(${prodCap}자리) 도달 — [전력·숙소] 탭에서 작업장 증설`
+          : (plusLockHint || '미배정 요원 1명을 생산요원으로 배정'),
+        stats: b1Open
+          ? [
+              {
+                hideTopIcon: true,
+                mainHtml: `${ozIcon('res-wood', 14, 'icon-wood')}<span>+${fmtPopDec(prodWoodPreview)}</span><span class="pop-stat-sep">·</span>${ozIcon('res-scrap', 14, 'icon-scrap')}<span>+${fmtPopDec(prodScrapPreview)}</span>`,
+                sub: `1인당 목재 +${fmtPopDec(prodRates.woodPerWorker)} · 고철 +${fmtPopDec(prodRates.scrapPerWorker)}`
+              },
+              {
+                icon: 'b1-dig',
+                cls: 'icon-ap',
+                main: `+${fmtPopDec(digGainPreview)} AP / 일`,
+                sub: `지하 굴착 · 1인당 +${fmtPopDec(digPerProd)} AP`
+              }
+            ]
+          : [
+              {
+                hideTopIcon: true,
+                mainHtml: `${ozIcon('res-wood', 14, 'icon-wood')}<span>+${fmtPopDec(prodWoodPreview)}</span><span class="pop-stat-sep">·</span>${ozIcon('res-scrap', 14, 'icon-scrap')}<span>+${fmtPopDec(prodScrapPreview)}</span>`,
+                sub: `1인당 목재 +${fmtPopDec(prodRates.woodPerWorker)} · 고철 +${fmtPopDec(prodRates.scrapPerWorker)}`
+              }
+            ]
       }
     ];
 
@@ -479,23 +498,26 @@ window.ZS = window.ZS || {};
           <div class="pop-role-bar"></div>
           <header class="pop-role-head">
             <span class="pop-role-title">${escapeHtml(rc.title)}</span>
-            <span class="pop-role-sub">${escapeHtml(rc.floorNote)}</span>
           </header>
           <div class="pop-role-hero">
             <span class="pop-role-emblem">${ozIcon(rc.iconId, 44, rc.iconCls)}</span>
-            <strong class="pop-role-count">${rc.count}</strong>
+            <div class="pop-role-count-wrap">
+              <strong class="pop-role-count">${rc.count}</strong>
+              <span class="pop-role-cap">/ ${rc.cap}자리</span>
+            </div>
           </div>
-          <div class="pop-role-stats">
-            <div class="pop-stat-box">
-              <span class="pop-stat-icon">${ozIcon(rc.statLeftIcon, 16, rc.statLeftCls)}</span>
-              <span class="pop-stat-main">${escapeHtml(rc.statLeftTop)}</span>
-              <span class="pop-stat-sub">${escapeHtml(rc.statLeftSub)}</span>
-            </div>
-            <div class="pop-stat-box">
-              <span class="pop-stat-icon">${ozIcon(rc.statRightIcon, 16, rc.statRightCls)}</span>
-              <span class="pop-stat-main">${escapeHtml(rc.statRightTop)}</span>
-              <span class="pop-stat-sub">${escapeHtml(rc.statRightSub)}</span>
-            </div>
+          <div class="pop-role-stats ${rc.stats.length === 1 ? 'single' : ''}">
+            ${rc.stats
+              .map(
+                (sb) => `
+              <div class="pop-stat-box">
+                ${sb.hideTopIcon ? '' : `<span class="pop-stat-icon">${ozIcon(sb.icon, 16, sb.cls)}</span>`}
+                <span class="pop-stat-main">${sb.mainHtml || escapeHtml(sb.main)}</span>
+                <span class="pop-stat-sub">${escapeHtml(sb.sub)}</span>
+              </div>
+            `
+              )
+              .join('')}
           </div>
           <div class="pop-stepper">
             <button
@@ -511,7 +533,7 @@ window.ZS = window.ZS || {};
             </button>
             <button
               type="button"
-              class="pop-step-btn plus${canAddAny ? '' : ' pool-empty'}"
+              class="pop-step-btn plus${canAddAny ? '' : ' pool-empty'}${rc.atCap ? ' cap-full' : ''}"
               data-job-role="${rc.role}"
               data-job-delta="1"
               ${rc.canPlus ? '' : 'disabled'}
@@ -519,7 +541,6 @@ window.ZS = window.ZS || {};
               aria-label="${escapeHtml(rc.title)} 1명 배정"
             >
               <span>+</span>
-              ${!canAddAny ? `<span class="pop-plus-lock">${ozIcon('state-lock', 13)}</span>` : ''}
             </button>
           </div>
         </section>
@@ -540,17 +561,13 @@ window.ZS = window.ZS || {};
         <div class="pop-pool-notice">
           ${
             unassigned === 0
-              ? `${ozIcon('state-alert', 15, 'icon-coin')}<span>전원 배치 완료 — 타 직무로 전환하려면 먼저 다른 직무에서 <b>(−) 감원</b>한 뒤 <b>(+)</b>를 누르세요.</span>`
-              : `${ozIcon('stat-check', 15, 'icon-heal')}<span>대기 인원 <b>${unassigned}명</b> 배정 가능 — 원하는 직무 카드의 <b>(+)</b> 버튼을 눌러 배치하세요.</span>`
+              ? `${ozIcon('state-alert', 15, 'icon-coin')}<span>전원 배치 완료 — 타 직무로 전환하려면 먼저 다른 직무에서 <b>(−) 감원</b> 후 <b>(+) 배정</b>하세요.</span>`
+              : `${ozIcon('stat-check', 15, 'icon-heal')}<span>대기 인원 <b>${unassigned}명</b> 배정 가능 — 원하는 직무의 <b>(+)</b>를 눌러 배치하세요.</span>`
           }
         </div>
       </div>
 
       <div class="pop-roles-grid">${cardsHtml}</div>
-
-      <footer class="pop-footer-strip">
-        <span class="pop-step-guide">1. <b>(−)</b> 대기 풀로 감원 → 2. <b>(+)</b> 목표 직무 배정</span>
-      </footer>
     `;
 
     body.querySelectorAll('.pop-step-btn').forEach((btn) => {
@@ -573,22 +590,16 @@ window.ZS = window.ZS || {};
     const reqWave = ZS.Game.getHqUnlockWave ? ZS.Game.getHqUnlockWave(reqHq) : ([1, 10, 20, 35, 50][reqHq - 1] || 1);
 
     let stateCls = 'state-locked';
-    let stateLabel = '선행 잠금';
+    let stateLabel = '미해금';
     if (isMax) {
       stateCls = 'state-done';
       stateLabel = maxLv > 1 ? `Lv.${curLv}/${maxLv} 완료` : '연구 완료';
     } else if (check.ok) {
       stateCls = 'state-ready';
       stateLabel = '연구 가능';
-    } else if (check.lockedByHq) {
+    } else if (check.lockedByHq || check.missingReq) {
       stateCls = 'state-locked';
-      stateLabel = `본부 Lv.${reqHq} 잠금`;
-    } else if (check.missingReq) {
-      stateCls = 'state-locked';
-      const missingNames = (t.req || [])
-        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
-        .map((rid) => (tree[rid] ? tree[rid].name : rid));
-      stateLabel = missingNames.length > 0 ? `선행 필요` : '잠금';
+      stateLabel = '미해금';
     } else if (check.shortRp) {
       stateCls = 'state-short';
       stateLabel = 'RP 부족';
@@ -650,17 +661,6 @@ window.ZS = window.ZS || {};
     const stInfo = evaluateNodeStatus(st, t);
 
     const chips = Array.isArray(meta.chips) ? meta.chips.slice(0, 3) : [];
-    if (stInfo.check.lockedByHq) {
-      chips[2] = { icon: 'state-lock', tone: 'gold', text: `본부 Lv.${stInfo.reqHq} (W${stInfo.reqWave}) 필요` };
-    } else if (stInfo.check.missingReq && Array.isArray(t.req) && t.req.length > 0) {
-      const reqNames = t.req
-        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
-        .map((rid) => (TECH_GRAPH_META[rid] ? TECH_GRAPH_META[rid].shortLabel : rid));
-      if (reqNames.length > 0) {
-        chips[2] = { icon: 'state-lock', tone: 'muted', text: `선행: ${reqNames.join(' + ')}` };
-      }
-    }
-
     const chipsHtml = chips
       .map(
         (c) => `
@@ -672,17 +672,24 @@ window.ZS = window.ZS || {};
       )
       .join('');
 
+    let btnIcon = ozIcon('res-rp', 16, stInfo.check.ok ? 'icon-rp' : '');
     let btnLabel = '연구 불가';
     if (stInfo.isMax) {
+      btnIcon = ozIcon('stat-check', 16);
       btnLabel = '연구 완료';
     } else if (stInfo.check.ok) {
       btnLabel = `연구 진행 · ${stInfo.costRp} RP`;
     } else if (stInfo.check.lockedByHq) {
-      btnLabel = `본부 Lv.${stInfo.reqHq} 필요`;
+      btnIcon = ozIcon('state-lock', 15, 'icon-muted');
+      btnLabel = `본부 Lv.${stInfo.reqHq} (W${stInfo.reqWave}) 필요 · ${stInfo.costRp} RP`;
     } else if (stInfo.check.missingReq) {
-      btnLabel = '선행 연구 필요';
+      const reqNames = (t.req || [])
+        .filter((rid) => !(ZS.Game.getTechLevel && ZS.Game.getTechLevel(rid) > 0))
+        .map((rid) => (TECH_GRAPH_META[rid] ? TECH_GRAPH_META[rid].shortLabel : rid));
+      btnIcon = ozIcon('state-lock', 15, 'icon-muted');
+      btnLabel = reqNames.length > 0 ? `선행 [${reqNames.join(' + ')}] 필요 · ${stInfo.costRp} RP` : `선행 연구 필요 · ${stInfo.costRp} RP`;
     } else if (stInfo.check.shortRp) {
-      btnLabel = `RP 부족 (${stInfo.costRp} RP)`;
+      btnLabel = `RP 부족 (필요 ${stInfo.costRp} RP)`;
     }
 
     bar.style.setProperty('--branch-accent', branch.accent || '#C084FC');
@@ -696,7 +703,6 @@ window.ZS = window.ZS || {};
             <strong class="tech-insp-title">${escapeHtml(t.name)}</strong>
             <span class="tech-insp-badge ${stInfo.stateCls}">${escapeHtml(stInfo.stateLabel)}</span>
           </div>
-          <div class="tech-insp-sub">${escapeHtml(branch.name)} · ${escapeHtml(t.desc)}</div>
         </div>
       </div>
 
@@ -709,7 +715,7 @@ window.ZS = window.ZS || {};
           class="tech-exec-btn${stInfo.check.ok ? ' is-ready' : ''}${stInfo.isMax ? ' is-done' : ''}"
           ${stInfo.check.ok ? '' : 'disabled'}
         >
-          ${stInfo.isMax ? ozIcon('stat-check', 16) : ozIcon('res-rp', 16, stInfo.check.ok ? 'icon-rp' : '')}
+          ${btnIcon}
           <span>${escapeHtml(btnLabel)}</span>
         </button>
       </div>
@@ -737,7 +743,7 @@ window.ZS = window.ZS || {};
     }
     const hqBadge = document.getElementById('tech-modal-hq-badge');
     if (hqBadge) {
-      hqBadge.innerHTML = `${ozIcon('hud-hq', 14, 'icon-coin')}<span>지휘소 Lv.${st.hqLevel || 1}</span>`;
+      hqBadge.innerHTML = `${ozIcon('hud-hq', 14, 'icon-coin')}<span>본부 Lv.${st.hqLevel || 1}</span>`;
     }
 
     const branches = (ZS.DATA && ZS.DATA.TECH_BRANCHES) || [];
@@ -755,7 +761,7 @@ window.ZS = window.ZS || {};
       .map(
         (col) => `
         <div class="tech-tier-head${col.locked ? ' locked' : ''}">
-          <span>지휘소 Lv.${col.lv} · W${col.wave}</span>
+          <span>본부 Lv.${col.lv} · W${col.wave}</span>
           ${col.locked ? ozIcon('state-lock', 13, 'icon-muted') : ''}
         </div>
       `
