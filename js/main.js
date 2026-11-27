@@ -478,6 +478,7 @@ window.ZS = window.ZS || {};
     }
     closeGameOverModal();
     uiState.inspectedTile = null;
+    uiState.reconOpen = false;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
     setMainMenuOpen(false);
@@ -496,6 +497,7 @@ window.ZS = window.ZS || {};
     closeConfirmModal();
     closeGameOverModal();
     uiState.inspectedTile = null;
+    uiState.reconOpen = false;
     U.setToolMode('inspect');
     ZS.Iso.resetCamera();
     setMainMenuOpen(false);
@@ -531,6 +533,7 @@ window.ZS = window.ZS || {};
     }
     closeDivisionModal();
     closeConfirmModal();
+    uiState.reconOpen = false;
     document.getElementById('settings-popover')?.classList.add('hidden');
     const settingsBtn = document.getElementById('btn-settings');
     if (settingsBtn) {
@@ -893,6 +896,13 @@ window.ZS = window.ZS || {};
     const settingsPopover = document.getElementById('settings-popover');
     const setSettingsOpen = (open) => {
       if (!settingsPopover || !settingsBtn) return;
+      if (open && U.hideUnifiedTooltip) {
+        U.hideUnifiedTooltip();
+      }
+      if (open && typeof uiState.reconOpen !== 'undefined') {
+        uiState.reconOpen = false;
+        if (U.renderReconCard) U.renderReconCard(ZS.Game.state);
+      }
       settingsPopover.classList.toggle('hidden', !open);
       settingsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       settingsBtn.classList.toggle('active', !!open);
@@ -1077,13 +1087,6 @@ window.ZS = window.ZS || {};
     if (dockExpandBtn) {
       dockExpandBtn.addEventListener('click', () => U.setDockCollapsed(false));
     }
-    const hudResToggleBtn = document.getElementById('btn-toggle-hud-res');
-    if (hudResToggleBtn) {
-      hudResToggleBtn.addEventListener('click', () => {
-        uiState.hudResCompact = !uiState.hudResCompact;
-        U.syncDockAndHudState();
-      });
-    }
 
     document.getElementById('btn-start-wave').addEventListener('click', () => {
       setSettingsOpen(false);
@@ -1140,16 +1143,6 @@ window.ZS = window.ZS || {};
       document.getElementById('trader-modal').classList.remove('hidden');
     };
     document.getElementById('btn-trader').addEventListener('click', openTrader);
-    const traderPillEl = document.getElementById('btn-open-trader-pill');
-    if (traderPillEl) {
-      traderPillEl.addEventListener('click', openTrader);
-      traderPillEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          openTrader();
-        }
-      });
-    }
     document.getElementById('btn-close-trader').addEventListener('click', () => {
       document.getElementById('trader-modal').classList.add('hidden');
     });
@@ -1165,29 +1158,15 @@ window.ZS = window.ZS || {};
       setSettingsOpen(false);
       if (U.openTechModal) U.openTechModal(focusTechId);
     };
-    const popPillEl = document.getElementById('pop-pill');
-    if (popPillEl) {
-      popPillEl.addEventListener('click', openPop);
-      popPillEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          openPop();
-        }
-      });
-    }
-    const rpPillEl = document.getElementById('rp-pill');
-    if (rpPillEl) {
-      rpPillEl.addEventListener('click', () => openTech());
-      rpPillEl.addEventListener('keydown', (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          openTech();
-        }
-      });
-    }
     document.getElementById('btn-open-pop')?.addEventListener('click', () => {
       setSettingsOpen(false);
       if (U.togglePopModal) U.togglePopModal();
+    });
+    document.getElementById('btn-toggle-recon')?.addEventListener('click', () => {
+      setSettingsOpen(false);
+      uiState.reconOpen = !uiState.reconOpen;
+      if (U.renderReconCard) U.renderReconCard(ZS.Game.state);
+      else U.updateHud();
     });
     document.getElementById('btn-close-wave-report')?.addEventListener('click', () => {
       if (U.closeWaveReportModal) U.closeWaveReportModal();
@@ -1543,6 +1522,7 @@ window.ZS = window.ZS || {};
     U.renderCategoryTabs();
     U.updateHud();
     bindEvents();
+    if (U.initUnifiedTooltips) U.initUnifiedTooltips();
     setMainMenuOpen(true);
     requestAnimationFrame(loop);
   }

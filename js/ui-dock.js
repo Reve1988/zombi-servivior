@@ -47,6 +47,7 @@ window.ZS = window.ZS || {};
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tab-btn' + (uiState.activeCategory === cat.id ? ' active' : '');
+      btn.setAttribute('data-cat', cat.id);
       const iconId = cat.iconId || (cat.id === 'defense' ? 'cat-defense' : cat.id === 'infra' ? 'cat-infra' : 'cat-decor');
       btn.innerHTML = ozIcon(iconId, 20);
       btn.setAttribute('aria-label', cat.label);
@@ -115,11 +116,67 @@ window.ZS = window.ZS || {};
   }
 
   function formatInspectTechLockLabel(check) {
-    const tName = escapeHtml((check && check.reqTechName) || '필요');
     if (check && check.lockedByHq && check.reqHqLevel) {
-      return `본부 Lv.${check.reqHqLevel} · 연구 [${tName}]`;
+      return `본부 Lv.${check.reqHqLevel} 필요`;
     }
-    return `연구 [${tName}]`;
+    return '연구 필요';
+  }
+
+  function buildPopAttrsHtml(opts) {
+    const o = opts || {};
+    const pairs = [
+      ['data-pop-title', o.popTitle],
+      ['data-pop-icon', o.popIcon],
+      ['data-pop-icon-cls', o.popIconCls],
+      ['data-pop-tone', o.popTone],
+      ['data-pop-badge', o.popBadge],
+      ['data-pop-kbd', o.popKbd],
+      ['data-pop-highlight', o.popHighlight],
+      ['data-pop-body', o.popBody],
+      ['data-pop-foot', o.popFoot]
+    ];
+    return pairs
+      .filter(([, v]) => v !== undefined && v !== null && String(v) !== '')
+      .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
+      .join(' ');
+  }
+
+  function buildDetailPrimaryBtnHtml(opts) {
+    const o = opts || {};
+    const cls = ['detail-upgrade-btn', 'detail-hero-btn'];
+    if (o.extraCls) cls.push(o.extraCls);
+    const kbdHtml = o.kbd ? `<span class="hud-kbd">${escapeHtml(o.kbd)}</span>` : '';
+    const subHtml = o.subHtml ? `<span class="detail-btn-sub">${o.subHtml}</span>` : '';
+    const popAttrs = buildPopAttrsHtml({
+      popTitle: o.popTitle || o.label,
+      popIcon: o.popIcon,
+      popIconCls: o.popIconCls,
+      popTone: o.popTone || 'gold',
+      popBadge: o.popBadge,
+      popKbd: o.kbd,
+      popHighlight: o.popHighlight,
+      popBody: o.popBody,
+      popFoot: o.popFoot
+    });
+    return `<button id="${escapeHtml(o.id)}" type="button" class="${cls.join(' ')}" ${o.disabled ? 'disabled' : ''} ${popAttrs}><span class="detail-btn-top"><span class="detail-btn-title">${o.iconHtml || ''}<span>${escapeHtml(o.label || '')}</span></span>${kbdHtml}</span>${subHtml}</button>`;
+  }
+
+  function buildDetailIconBtnHtml(opts) {
+    const o = opts || {};
+    const cls = ['detail-upgrade-btn', 'detail-icon-btn'];
+    if (o.extraCls) cls.push(o.extraCls);
+    const kbdHtml = o.kbd ? `<span class="hud-kbd detail-icon-kbd">${escapeHtml(o.kbd)}</span>` : '';
+    const popAttrs = buildPopAttrsHtml({
+      popTitle: o.popTitle || o.ariaLabel,
+      popIcon: o.iconId,
+      popIconCls: o.iconCls,
+      popTone: o.popTone || 'scrap',
+      popKbd: o.kbd,
+      popHighlight: o.popHighlight,
+      popBody: o.popBody,
+      popFoot: o.popFoot
+    });
+    return `<button id="${escapeHtml(o.id)}" type="button" class="${cls.join(' ')}" ${o.disabled ? 'disabled' : ''} aria-label="${escapeHtml(o.ariaLabel || o.popTitle || '')}" ${popAttrs}>${ozIcon(o.iconId || 'tool-inspect', 20, o.iconCls || '')}${kbdHtml}</button>`;
   }
 
   function buildItemCostChipsHtml(def, st) {
@@ -509,6 +566,7 @@ window.ZS = window.ZS || {};
         (uiState.mode === 'build' && uiState.selectedItemId === def.id ? ' selected' : '') +
         (isLocked ? ' locked' : '') +
         (voucherBypass ? ' voucher-bypass' : '');
+      card.setAttribute('data-item-id', def.id);
 
       const tag = getCardTagInfo(def);
       const tagPlain = tag.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -900,16 +958,11 @@ window.ZS = window.ZS || {};
     }
     const secHudEl = document.getElementById('hud-secondary');
     if (secHudEl) {
-      secHudEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
+      secHudEl.classList.add('hud-res-compact');
     }
     const topLeftEl = document.getElementById('hud-top-left');
     if (topLeftEl) {
-      topLeftEl.classList.toggle('hud-res-compact', !!uiState.hudResCompact);
-    }
-    const hudResBtn = document.getElementById('btn-toggle-hud-res');
-    if (hudResBtn) {
-      hudResBtn.innerHTML = ozIcon(uiState.hudResCompact ? 'ui-chevron-down' : 'ui-chevron-up', 14);
-      hudResBtn.title = uiState.hudResCompact ? '보조 자원 라벨 펼치기' : '보조 자원 간소화';
+      topLeftEl.classList.add('hud-res-compact');
     }
     syncDetailBarVisibility();
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(syncDockScrollButtons);
@@ -1472,15 +1525,12 @@ window.ZS = window.ZS || {};
 
     const coinValEl = document.getElementById('trader-coin-val');
     if (coinValEl) {
-      if (coinValEl.previousElementSibling) {
-        coinValEl.previousElementSibling.textContent = '보유 자재:';
-      }
       coinValEl.innerHTML =
-        `${ozIcon('res-coin', 16, 'icon-coin')}<span>${Math.floor(st.coin)}</span>` +
+        `${ozIcon('res-coin', 15, 'icon-coin')}<span>${Math.floor(st.coin)}</span>` +
         `<span class="trader-res-sep">·</span>` +
-        `${ozIcon('res-wood', 15, 'icon-wood')}<span>${Math.floor(st.wood)}</span>` +
+        `${ozIcon('res-wood', 14, 'icon-wood')}<span>${Math.floor(st.wood)}</span>` +
         `<span class="trader-res-sep">·</span>` +
-        `${ozIcon('res-scrap', 15, 'icon-scrap')}<span>${Math.floor(st.scrap)}</span>`;
+        `${ozIcon('res-scrap', 14, 'icon-scrap')}<span>${Math.floor(st.scrap)}</span>`;
     }
 
     const refreshBtn = document.getElementById('btn-refresh-trader');
@@ -1488,7 +1538,11 @@ window.ZS = window.ZS || {};
     const discPct = Math.round((st.b1TraderDisc || 0) * 100);
     if (refreshBtn) {
       refreshBtn.disabled = !isDay || st.coin < refreshCost;
-      refreshBtn.innerHTML = `${ozIcon('sys-reset', 15)}<span>무전 보급 목록 갱신 (${refreshCost} 코인${discPct > 0 ? ` · -${discPct}%` : ''})</span>`;
+      refreshBtn.innerHTML = `${ozIcon('sys-reset', 14)}<span>목록 갱신 (${refreshCost}${discPct > 0 ? ` · -${discPct}%` : ''})</span>`;
+      refreshBtn.setAttribute('data-pop-title', '보급 목록 갱신');
+      refreshBtn.setAttribute('data-pop-highlight', `비용: ${refreshCost} 코인`);
+      refreshBtn.setAttribute('data-pop-body', '무전 보급 오퍼 6종을 새로 불러옵니다.');
+      refreshBtn.setAttribute('data-pop-tone', 'gold');
     }
 
     const grid = document.getElementById('trader-grid');
@@ -1506,7 +1560,7 @@ window.ZS = window.ZS || {};
               const need = r.cost * mult;
               const gain = r.give * mult;
               const disabled = !isDay || curStock < need ? 'disabled' : '';
-              return `<button type="button" class="exchange-mult-btn" data-route="${escapeHtml(r.id)}" data-mult="${mult}" ${disabled} title="${fromMeta.name} ${need} → ${toMeta.name} +${gain}">×${mult}</button>`;
+              return `<button type="button" class="exchange-mult-btn" data-route="${escapeHtml(r.id)}" data-mult="${mult}" ${disabled} data-pop-title="${escapeHtml(fromMeta.name)} → ${escapeHtml(toMeta.name)} 환전" data-pop-badge="×${mult}" data-pop-highlight="${escapeHtml(fromMeta.name)} ${need} → ${escapeHtml(toMeta.name)} +${gain}" data-pop-tone="gold">×${mult}</button>`;
             })
             .join('');
           return `
@@ -1582,7 +1636,7 @@ window.ZS = window.ZS || {};
 
     st.traderOffers.forEach((offer, idx) => {
       const card = document.createElement('div');
-      card.className = 'offer-card';
+      card.className = 'offer-card' + (offer.sold ? ' is-sold' : '');
       const effCost = ZS.Game.getEffectiveTraderOfferCost ? ZS.Game.getEffectiveTraderOfferCost(offer) : offer.coinCost;
       const canBuy = !offer.sold && st.coin >= effCost && isDay;
 
@@ -1590,7 +1644,7 @@ window.ZS = window.ZS || {};
       if (offer.type === 'free_item' && offer.itemId && ZS.Renderer.renderItemThumbnail) {
         const tierOpt = offer.spawnTier || (offer.itemId === 'shelter_pod' ? 3 : 1);
         const thumbSrc = ZS.Renderer.renderItemThumbnail(offer.itemId, 44, tierOpt);
-        iconVisualHtml = `<span class="offer-icon-box"><img class="offer-thumb" src="${thumbSrc}" width="40" height="40" alt="" /></span>`;
+        iconVisualHtml = `<span class="offer-icon-box"><img class="offer-thumb" src="${thumbSrc}" width="36" height="36" alt="" /></span>`;
       } else {
         const svgId =
           offer.svgIcon ||
@@ -1611,7 +1665,7 @@ window.ZS = window.ZS || {};
             : svgId === 'res-power'
             ? 'icon-power'
             : '';
-        iconVisualHtml = `<span class="offer-icon-box">${ozIcon(svgId, 24, svgCls)}</span>`;
+        iconVisualHtml = `<span class="offer-icon-box">${ozIcon(svgId, 22, svgCls)}</span>`;
       }
 
       card.innerHTML = `
@@ -1620,10 +1674,10 @@ window.ZS = window.ZS || {};
             ${iconVisualHtml}
             <span>${escapeHtml(offer.name)}</span>
           </div>
-          <p class="offer-desc" style="margin-top:8px;">${escapeHtml(offer.desc)}</p>
+          <p class="offer-desc">${escapeHtml(offer.desc)}</p>
         </div>
         <button class="buy-offer-btn" ${canBuy ? '' : 'disabled'}>
-          ${offer.sold ? '<span>보급 완료</span>' : `${ozIcon('res-coin', 15, 'icon-coin')}<span>${effCost} 코인으로 구매${effCost < offer.coinCost ? ` (-${Math.round((st.b1TraderDisc || 0) * 100)}%)` : ''}</span>`}
+          ${offer.sold ? '<span>보급 완료</span>' : `${ozIcon('res-coin', 14, 'icon-coin')}<span>${effCost} 코인 구매${effCost < offer.coinCost ? ` (-${Math.round((st.b1TraderDisc || 0) * 100)}%)` : ''}</span>`}
         </button>
       `;
       card.querySelector('button').addEventListener('click', () => {
@@ -1643,7 +1697,19 @@ window.ZS = window.ZS || {};
 
     if (cell.elevator) {
       const sum = ZS.Game.getB1Summary ? ZS.Game.getB1Summary() : { roomCount: 0, connectedRooms: 0 };
-      const exitBtnHtml = `<button id="btn-exit-b1" class="detail-upgrade-btn b1-action-btn">${ozIcon('b1-elevator', 15, 'icon-ap')}<span>지상 본부 복귀</span></button>`;
+      const exitBtnHtml = `<div class="detail-action-row">${buildDetailPrimaryBtnHtml({
+        id: 'btn-exit-b1',
+        extraCls: 'b1-action-btn',
+        iconHtml: ozIcon('b1-elevator', 15, 'icon-ap'),
+        label: '지상 본부 복귀',
+        kbd: 'B',
+        subHtml: '<span>지상 방어 구역 전환</span>',
+        popTitle: '지상 본부 복귀',
+        popIcon: 'b1-elevator',
+        popIconCls: 'icon-ap',
+        popTone: 'gold',
+        popBody: '지상 본부 레이어로 돌아갑니다.'
+      })}</div>`;
       setDetailHtml(
         buildDetailCardHtml({
           iconId: 'b1-elevator',
@@ -1677,7 +1743,36 @@ window.ZS = window.ZS || {};
       const rotLabel = getB1RotLabel(gadget.rot || 0);
       const actionBtns =
         st.phase === 'day'
-          ? `<button id="btn-b1-inspect-rotate" class="detail-upgrade-btn b1-action-btn">${ozIcon('sys-reset', 14)}<span>회전 (R)</span></button><button id="btn-b1-inspect-move" class="detail-upgrade-btn b1-action-btn">${ozIcon('tool-move', 14)}<span>이동 (M)</span></button><button id="btn-b1-inspect-remove" class="detail-upgrade-btn">${ozIcon('tool-remove', 14, 'icon-danger')}<span>철거 (X)</span></button>`
+          ? `<div class="detail-action-row">${buildDetailIconBtnHtml({
+              id: 'btn-b1-inspect-rotate',
+              extraCls: 'b1-action-btn',
+              iconId: 'sys-reset',
+              kbd: 'R',
+              ariaLabel: '설비 회전 [R]',
+              popTitle: '설비 회전',
+              popHighlight: `현재 방향: ${rotLabel}`,
+              popBody: '지하 설비를 90도 시계 방향으로 회전합니다.',
+              popTone: 'gold'
+            })}${buildDetailIconBtnHtml({
+              id: 'btn-b1-inspect-move',
+              extraCls: 'b1-action-btn',
+              iconId: 'tool-move',
+              kbd: 'M',
+              ariaLabel: '설비 이동 [M]',
+              popTitle: '설비 이동',
+              popBody: '선택한 지하 설비를 다른 구역 타일로 옮깁니다.',
+              popTone: 'gold'
+            })}${buildDetailIconBtnHtml({
+              id: 'btn-b1-inspect-remove',
+              extraCls: 'danger',
+              iconId: 'tool-remove',
+              iconCls: 'icon-danger',
+              kbd: 'X',
+              ariaLabel: '설비 철거 [X]',
+              popTitle: '설비 철거',
+              popBody: '지하 설비를 철거하고 건설 비용의 80%를 회수합니다.',
+              popTone: 'danger'
+            })}</div>`
           : '';
       setDetailHtml(
         buildDetailCardHtml({
@@ -1879,29 +1974,59 @@ window.ZS = window.ZS || {};
           : `무장: ${hqInfo.weapon.name} (미배치 비활성)`)
         : '무장 없음 (Lv.2 개방)';
       const upCheck = ZS.Game.canUpgradeHq();
-      let actionHtml = '';
+      const metaParts = [];
+      const rowParts = [];
       if (hqMaxCrew > 0) {
-        actionHtml += buildCrewStepperHtml(st, obj, tx, ty, false);
+        metaParts.push(buildCrewStepperHtml(st, obj, tx, ty, false));
       }
       if (st.hqLevel < maxHqLv) {
         const nextInfo = ZS.Game.getHqLevelInfo(st.hqLevel + 1);
         const hqCost = upCheck.cost || (ZS.Game.getEffectiveHqUpgradeCost ? ZS.Game.getEffectiveHqUpgradeCost(st.hqLevel + 1) : nextInfo.cost) || {};
-        const costHtml = formatInlineCostHtml(hqCost, 14);
-        const disabledAttr = upCheck.ok ? '' : 'disabled';
-        if (upCheck.lockedByWave) {
-          actionHtml += `<button id="btn-upgrade-hq" class="detail-upgrade-btn" disabled title="${escapeHtml(upCheck.reason)}">${ozIcon('state-lock', 14, 'icon-muted')}<span>WAVE ${upCheck.reqWave}+ 필요</span>(${costHtml})</button>`;
-        } else {
-          const nextTip = `${nextInfo.name} 증축 (HP ${nextInfo.maxHp} · 수용 ${nextInfo.basePopCap}명 · 충전 +${nextInfo.baseDayCharge})`;
-          actionHtml += `<button id="btn-upgrade-hq" class="detail-upgrade-btn" ${disabledAttr} title="${escapeHtml(upCheck.ok ? nextTip : upCheck.reason)}">${ozIcon('state-upgrade', 16)}<span>본부 Lv.${nextInfo.level} 증축</span>(${costHtml})</button>`;
-        }
+        const costHtml = formatInlineCostHtml(hqCost, 13);
+        const nextStatHighlight = `HP ${nextInfo.maxHp} · 수용 ${nextInfo.basePopCap}명 · 충전 +${nextInfo.baseDayCharge}`;
+        const labelTxt = upCheck.lockedByWave ? `W${upCheck.reqWave}+ 필요` : `본부 Lv.${nextInfo.level} 증축`;
+        rowParts.push(
+          buildDetailPrimaryBtnHtml({
+            id: 'btn-upgrade-hq',
+            disabled: !upCheck.ok,
+            iconHtml: upCheck.lockedByWave ? ozIcon('state-lock', 14, 'icon-muted') : ozIcon('state-upgrade', 15),
+            label: labelTxt,
+            subHtml: costHtml,
+            popTitle: `본부 Lv.${nextInfo.level} 증축 (${nextInfo.name})`,
+            popIcon: upCheck.lockedByWave ? 'state-lock' : 'hud-hq',
+            popTone: upCheck.lockedByWave ? 'scrap' : 'gold',
+            popHighlight: upCheck.ok ? nextStatHighlight : upCheck.reason || `WAVE ${upCheck.reqWave}+ 필요`,
+            popBody: `증축 시 ${nextStatHighlight}${nextInfo.weapon ? ` · 옥상 포대 ${nextInfo.weapon.name}` : ''}`,
+            popFoot: upCheck.ok ? '클릭하여 본부 증축' : ''
+          })
+        );
       } else {
-        actionHtml += `<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`;
+        metaParts.push(`<span class="cost-chip free">★ 최고 등급(Lv.${maxHqLv})</span>`);
       }
 
       if ((st.hqLevel || 1) >= 2 && st.undergroundUnlocked) {
-        const b1Dis = st.phase !== 'day' ? 'disabled' : '';
-        actionHtml += `<button id="btn-enter-b1" class="detail-upgrade-btn b1-action-btn" ${b1Dis} title="지하 B1 쉘터 레이어 진입 (주간 전용 · 단축키 B)">${ozIcon('b1-elevator', 15, 'icon-ap')}<span>지하 B1 진입</span></button>`;
+        const isDayPhase = st.phase === 'day';
+        rowParts.push(
+          buildDetailIconBtnHtml({
+            id: 'btn-enter-b1',
+            extraCls: 'b1-action-btn',
+            disabled: !isDayPhase,
+            iconId: 'b1-elevator',
+            iconCls: 'icon-ap',
+            kbd: 'B',
+            ariaLabel: '지하 B1 진입 [B]',
+            popTitle: '지하 B1 쉘터 진입',
+            popHighlight: isDayPhase ? `보유 굴착력 ${Math.floor(st.digAp || 0)}/${st.digApCap || 24} AP` : '야간 방어 중 이동 불가',
+            popBody: '지하 B1 쉘터 레이어로 이동해 구역을 굴착하고 설비를 배치합니다.',
+            popFoot: '주간 정비 전용 · 단축키 B',
+            popTone: 'gold'
+          })
+        );
       }
+
+      const actionHtml =
+        (metaParts.length > 0 ? `<div class="detail-meta-row">${metaParts.join('')}</div>` : '') +
+        (rowParts.length > 0 ? `<div class="detail-action-row">${rowParts.join('')}</div>` : '');
 
       const nightBuffs = [];
       if (st.nightConsumables && st.nightConsumables.overpressureAmmo) nightBuffs.push('고압 탄약');
@@ -2039,41 +2164,100 @@ window.ZS = window.ZS || {};
       }
 
       let topUpHtml = '';
+      let topMaxChipHtml = '';
       if (mDef && ZS.Game.isUpgradeableDef(mDef)) {
         const topCheck = ZS.Game.canUpgradeStructure(tx, ty);
         if (mLv >= 3) {
-          topUpHtml = `<span class="cost-chip free">◆◆◆ Lv.3 MAX</span>`;
+          topMaxChipHtml = `<span class="cost-chip free">◆◆◆ Lv.3 MAX</span>`;
         } else {
           const topCost = (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(mDef, mLv) : ZS.Game.getUpgradeCost(mDef, mLv)) || {};
-          const topCostHtml = formatInlineCostHtml(topCost, 13);
+          const topCostHtml = formatInlineCostHtml(topCost, 12);
           const upCls = mLv + 1 === 3 && !topCheck.techLocked ? 'icon-max' : '';
           const nextTopEff = mDef.subType === 'manned' || mDef.subType === 'turret'
             ? ZS.Game.getStructureEffectiveStats(m, tx, ty, mLv + 1, true)
             : null;
-          const nextTopTip = nextTopEff
-            ? `Lv.${mLv + 1} 강화 (화력 ${Math.round(nextTopEff.damage)} · 사거리 ${nextTopEff.range.toFixed(1).replace(/\.0$/, '')})`
-            : '단축키 U로 상부 강화';
-          const inner = topCheck.techLocked
-            ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>${formatInspectTechLockLabel(topCheck)}</span>(${topCostHtml})`
-            : `${ozIcon('state-upgrade', 14, upCls)}<span>상부 Lv.${mLv + 1}</span>(${topCostHtml})<span>[U]</span>`;
-          topUpHtml = `<button id="btn-comp-up-top" class="detail-upgrade-btn" ${topCheck.ok ? '' : 'disabled'} title="${escapeHtml(topCheck.ok ? nextTopTip : topCheck.reason)}">${inner}</button>`;
+          const nextTopHighlight = nextTopEff
+            ? `화력 ${Math.round(nextTopEff.damage)} · 사거리 ${nextTopEff.range.toFixed(1).replace(/\.0$/, '')}`
+            : `Lv.${mLv + 1} 능력치 강화`;
+          topUpHtml = buildDetailPrimaryBtnHtml({
+            id: 'btn-comp-up-top',
+            disabled: !topCheck.ok,
+            iconHtml: topCheck.techLocked ? ozIcon('state-lock', 13, 'icon-muted') : ozIcon('state-upgrade', 14, upCls),
+            label: topCheck.techLocked ? formatInspectTechLockLabel(topCheck) : `상부 Lv.${mLv + 1}`,
+            kbd: topCheck.techLocked ? '' : 'U',
+            subHtml: topCostHtml,
+            popTitle: `${mDef.name} Lv.${mLv + 1} 강화`,
+            popIcon: topCheck.techLocked ? 'state-lock' : 'state-upgrade',
+            popTone: topCheck.techLocked ? 'rp' : mDef.requiresPower || mDef.subType === 'turret' ? 'power' : 'gold',
+            popHighlight: topCheck.ok ? nextTopHighlight : topCheck.reason || `필요 연구: ${topCheck.reqTechName || ''}`,
+            popBody: topCheck.ok ? '상부 거치 유닛의 등급을 올려 화력과 내구도를 강화합니다.' : '',
+            popFoot: topCheck.techLocked
+              ? `강화 시: ${nextTopHighlight}`
+              : topCheck.ok
+              ? '클릭 또는 [U] 키로 상부 강화'
+              : ''
+          });
         }
       }
 
       let wallUpHtml = '';
+      let wallMaxChipHtml = '';
       const wallCheck = ZS.Game.canUpgradeWallBase ? ZS.Game.canUpgradeWallBase(tx, ty) : null;
       const wallMaxLv = ZS.Game.getStructMaxTier ? ZS.Game.getStructMaxTier(def) : 3;
       if (lv >= wallMaxLv) {
-        wallUpHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
+        wallMaxChipHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
       } else if (wallCheck) {
         const wCost = wallCheck.cost || (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(def, lv) : ZS.Game.getUpgradeCost(def, lv)) || {};
-        const wCostHtml = formatInlineCostHtml(wCost, 13);
+        const wCostHtml = formatInlineCostHtml(wCost, 12);
         const nextWallProf = ZS.Game.getStructLevelProfile(def, lv + 1);
-        const wInner = wallCheck.techLocked
-          ? `${ozIcon('state-lock', 13, 'icon-muted')}<span>${formatInspectTechLockLabel(wallCheck)}</span>(${wCostHtml})`
-          : `${ozIcon('wall-upgrade', 14)}<span>${escapeHtml(nextWallProf.levelName || '합금 장갑 성벽')} 업그레이드</span>(${wCostHtml})<span>[G]</span>`;
-        wallUpHtml = `<button id="btn-comp-up-wall" class="detail-upgrade-btn" ${wallCheck.ok ? '' : 'disabled'} title="${escapeHtml(wallCheck.ok ? `단축키 G로 ${nextWallProf.levelName || '성벽'} 승격 (HP ${nextWallProf.baseMaxHp})` : wallCheck.reason)}">${wInner}</button>`;
+        const nextWallName = nextWallProf.levelName || '합금 장갑 성벽';
+        wallUpHtml = buildDetailPrimaryBtnHtml({
+          id: 'btn-comp-up-wall',
+          disabled: !wallCheck.ok,
+          iconHtml: wallCheck.techLocked ? ozIcon('state-lock', 13, 'icon-muted') : ozIcon('wall-upgrade', 14),
+          label: wallCheck.techLocked ? formatInspectTechLockLabel(wallCheck) : `${nextWallName} 승격`,
+          kbd: wallCheck.techLocked ? '' : 'G',
+          subHtml: wCostHtml,
+          popTitle: `${nextWallName} 승격 (Lv.${lv + 1})`,
+          popIcon: wallCheck.techLocked ? 'state-lock' : 'wall-upgrade',
+          popTone: wallCheck.techLocked ? 'rp' : 'gold',
+          popHighlight: wallCheck.ok ? `성벽 HP ${nextWallProf.baseMaxHp} · 반사 ${Math.round((nextWallProf.thornsRatio || 0) * 100)}%` : wallCheck.reason || '',
+          popBody: wallCheck.ok ? '하부 성벽을 상위 티어로 승격합니다.' : '',
+          popFoot: wallCheck.techLocked
+            ? `승격 시: 성벽 HP ${nextWallProf.baseMaxHp} · 반사 ${Math.round((nextWallProf.thornsRatio || 0) * 100)}%`
+            : wallCheck.ok
+            ? '클릭 또는 [G] 키로 성벽 승격'
+            : ''
+        });
       }
+
+      const compMoveBtnHtml = buildDetailIconBtnHtml({
+        id: 'btn-comp-move-top',
+        disabled: st.phase !== 'day',
+        iconId: 'unmount',
+        kbd: 'M',
+        ariaLabel: '상부 분리 이동 [M]',
+        popTitle: '상부 분리 이동',
+        popHighlight: st.phase === 'day' ? '주간 무료 재배치' : '주간 정비 전용',
+        popBody: '성벽 위의 상부 유닛만 분리하여 빈 타일 또는 다른 헤스코+ 성벽으로 옮깁니다.',
+        popTone: 'scrap'
+      });
+      const compDemolishBtnHtml = buildDetailIconBtnHtml({
+        id: 'btn-comp-demolish-top',
+        extraCls: 'danger',
+        disabled: st.phase !== 'day',
+        iconId: 'tool-remove',
+        iconCls: 'icon-danger',
+        kbd: 'X',
+        ariaLabel: '상부 유닛 철거 [X]',
+        popTitle: '상부 철거',
+        popHighlight: st.phase === 'day' ? '건설 비용 80% 환급' : '주간 정비 전용',
+        popBody: '상부 유닛만 먼저 철거하고 하부 성벽은 그대로 유지합니다.',
+        popTone: 'danger'
+      });
+      const topMetaHtml = (mCrewCtlHtml || topMaxChipHtml)
+        ? `<div class="detail-meta-row">${mCrewCtlHtml}${topMaxChipHtml}</div>`
+        : '';
 
       const wallDiv = ZS.Game.getDivisionDef ? ZS.Game.getDivisionDef() : null;
       const defRepLv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('def_repeat') : 0;
@@ -2098,10 +2282,8 @@ window.ZS = window.ZS || {};
               <div class="comp-sub">${mSubStats}</div>
             </div>
             <div class="comp-actions">
-              ${mCrewCtlHtml}
-              ${topUpHtml}
-              <button id="btn-comp-move-top" class="detail-upgrade-btn" ${st.phase !== 'day' ? 'disabled' : ''} title="상부 유닛만 분리해 이동 (M)">${ozIcon('unmount', 13)}<span>분리 이동 M</span></button>
-              <button id="btn-comp-demolish-top" class="detail-upgrade-btn danger" ${st.phase !== 'day' ? 'disabled' : ''} title="상부 유닛만 먼저 철거 (X)">${ozIcon('tool-remove', 13, 'icon-danger')}<span>상부 철거 X</span></button>
+              ${topMetaHtml}
+              <div class="detail-action-row">${topUpHtml}${compMoveBtnHtml}${compDemolishBtnHtml}</div>
             </div>
           </div>
           <div class="comp-row">
@@ -2120,7 +2302,8 @@ window.ZS = window.ZS || {};
               <div class="comp-sub">${wallStatSummary}</div>
             </div>
             <div class="comp-actions">
-              ${wallUpHtml}
+              ${wallMaxChipHtml ? `<div class="detail-meta-row">${wallMaxChipHtml}</div>` : ''}
+              ${wallUpHtml ? `<div class="detail-action-row">${wallUpHtml}</div>` : ''}
             </div>
           </div>
         </div>
@@ -2150,39 +2333,59 @@ window.ZS = window.ZS || {};
 
     const isTierEvo = !!(ZS.Game.isTierEvolutionDef && ZS.Game.isTierEvolutionDef(def));
     const maxLv = isTierEvo && ZS.Game.getStructMaxTier ? ZS.Game.getStructMaxTier(def) : 3;
-    let actionHtml = '';
-    let upgradeBtnTitle = '';
+    let upgradeBtnHtml = '';
+    let maxBadgeHtml = '';
     if (ZS.Game.isUpgradeableDef(def)) {
       const upCheck = ZS.Game.canUpgradeStructure(tx, ty);
       if (lv >= maxLv) {
         if (isTierEvo) {
-          actionHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
+          maxBadgeHtml = `<span class="cost-chip free">최종 진화 완료</span>`;
         } else {
           const perk = ZS.DATA.LV3_PERK_LABELS && ZS.DATA.LV3_PERK_LABELS[def.id];
-          actionHtml = `<span class="cost-chip free" title="${escapeHtml(perk || '')}">◆◆◆ Lv.3 MAX</span>`;
+          maxBadgeHtml = `<span class="cost-chip free" title="${escapeHtml(perk || '')}">◆◆◆ Lv.3 MAX</span>`;
         }
       } else {
         const cost = (ZS.Game.getEffectiveUpgradeCost ? ZS.Game.getEffectiveUpgradeCost(def, lv) : ZS.Game.getUpgradeCost(def, lv)) || {};
-        const costHtml = formatInlineCostHtml(cost, 14);
+        const costHtml = formatInlineCostHtml(cost, 13);
         const upIconCls = lv + 1 === maxLv && !upCheck.techLocked ? 'icon-max' : '';
         const nextProfBtn = ZS.Game.getStructLevelProfile(def, lv + 1);
-        if (upCheck.ok) {
-          if (def.subType === 'manned' || def.subType === 'turret') {
-            const nextEffBtn = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
-            const nextDmgBtn = (nextEffBtn.salvoCount || 1) > 1 ? `${Math.round(nextEffBtn.damage)}×${nextEffBtn.salvoCount}` : Math.round(nextEffBtn.damage);
-            upgradeBtnTitle = `Lv.${lv + 1} 강화: 화력 ${nextDmgBtn} · 사거리 ${nextEffBtn.range.toFixed(1).replace(/\.0$/, '')}`;
-          } else {
-            upgradeBtnTitle = `${nextProfBtn.levelName || `Lv.${lv + 1}`} 강화: HP ${nextProfBtn.baseMaxHp || obj.maxHp}`;
-          }
+        let upgradeHighlight = '';
+        if (def.subType === 'manned' || def.subType === 'turret') {
+          const nextEffBtn = ZS.Game.getStructureEffectiveStats(obj, tx, ty, lv + 1);
+          const nextDmgBtn = (nextEffBtn.salvoCount || 1) > 1 ? `${Math.round(nextEffBtn.damage)}×${nextEffBtn.salvoCount}` : Math.round(nextEffBtn.damage);
+          upgradeHighlight = `화력 ${nextDmgBtn} · 사거리 ${nextEffBtn.range.toFixed(1).replace(/\.0$/, '')} · HP ${nextProfBtn.baseMaxHp || obj.maxHp}`;
         } else {
-          upgradeBtnTitle = upCheck.reason || '';
+          const nextExtras = [`HP ${nextProfBtn.baseMaxHp || obj.maxHp}`];
+          if (nextProfBtn.popCap) nextExtras.push(`수용 +${nextProfBtn.popCap}명`);
+          if (nextProfBtn.dayCharge) nextExtras.push(`충전 +${Math.round(nextProfBtn.dayCharge)}`);
+          if (nextProfBtn.powerCap) nextExtras.push(`용량 +${nextProfBtn.powerCap}`);
+          if (nextProfBtn.cozy) nextExtras.push(`안락함 +${nextProfBtn.cozy}`);
+          upgradeHighlight = nextExtras.join(' · ');
         }
-        const btnInner = upCheck.techLocked
-          ? `${ozIcon('state-lock', 14, 'icon-muted')}<span>${formatInspectTechLockLabel(upCheck)}</span>(${costHtml})`
+        const label = upCheck.techLocked
+          ? formatInspectTechLockLabel(upCheck)
           : isTierEvo
-          ? `${ozIcon('state-upgrade', 16, upIconCls)}<span>${escapeHtml(nextProfBtn.levelName || def.name)} 업그레이드</span>(${costHtml})<span>[U]</span>`
-          : `${ozIcon('state-upgrade', 16, upIconCls)}<span>Lv.${lv + 1} 강화</span>(${costHtml})<span>[U]</span>`;
-        actionHtml = `<button id="btn-upgrade-struct" class="detail-upgrade-btn" ${upCheck.ok ? '' : 'disabled'} title="${escapeHtml(upgradeBtnTitle)}">${btnInner}</button>`;
+          ? `${nextProfBtn.levelName || def.name}`
+          : `Lv.${lv + 1} 강화`;
+        const isElectricStruct = !!(def.requiresPower || def.subType === 'power' || def.subType === 'turret');
+        upgradeBtnHtml = buildDetailPrimaryBtnHtml({
+          id: 'btn-upgrade-struct',
+          disabled: !upCheck.ok,
+          iconHtml: upCheck.techLocked ? ozIcon('state-lock', 14, 'icon-muted') : ozIcon('state-upgrade', 15, upIconCls),
+          label,
+          kbd: upCheck.techLocked ? '' : 'U',
+          subHtml: costHtml,
+          popTitle: isTierEvo ? `${nextProfBtn.levelName || def.name} 승격` : `${def.name} Lv.${lv + 1} 강화`,
+          popIcon: upCheck.techLocked ? 'state-lock' : 'state-upgrade',
+          popTone: upCheck.techLocked ? 'rp' : isElectricStruct ? 'power' : 'gold',
+          popHighlight: upCheck.ok ? upgradeHighlight : upCheck.reason || `필요 연구: ${upCheck.reqTechName || ''}`,
+          popBody: upCheck.ok ? `${def.name}을(를) 다음 등급으로 업그레이드합니다.` : '',
+          popFoot: upCheck.techLocked
+            ? `강화 시: ${upgradeHighlight}`
+            : !upCheck.ok
+            ? upgradeHighlight
+            : ''
+        });
       }
     }
 
@@ -2192,7 +2395,10 @@ window.ZS = window.ZS || {};
       const eff = ZS.Game.getStructureEffectiveStats(obj, tx, ty);
       const rankWidgetHtml = buildRankWidgetHtml(obj, eff);
       const crewStepperHtml = def.subType === 'manned' ? buildCrewStepperHtml(st, obj, tx, ty, false) : '';
-      actionHtml = crewStepperHtml + rankWidgetHtml + actionHtml;
+      const metaItems = [crewStepperHtml, rankWidgetHtml, maxBadgeHtml].filter(Boolean).join('');
+      const actionHtml =
+        (metaItems ? `<div class="detail-meta-row">${metaItems}</div>` : '') +
+        (upgradeBtnHtml ? `<div class="detail-action-row">${upgradeBtnHtml}</div>` : '');
 
       const pwrInfo = def.requiresPower
         ? `${ozIcon('res-power', 13, 'icon-power')}<span title="야간 1웨이브 예상 전력 소모량">야간 ~${getEstimatedNightPowerUse(def, eff)} 전력</span>`
@@ -2269,6 +2475,9 @@ window.ZS = window.ZS || {};
       } else if (def.id === 'research_lab') {
         statSummary = `${ozIcon('res-rp', 13, 'icon-rp')}연구 직무 +${prof.researchSlots}자리 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }
+      const nonDefenseActionHtml =
+        (maxBadgeHtml ? `<div class="detail-meta-row">${maxBadgeHtml}</div>` : '') +
+        (upgradeBtnHtml ? `<div class="detail-action-row">${upgradeBtnHtml}</div>` : '');
       setDetailHtml(
         buildDetailCardHtml({
           thumbItemId: def.id,
@@ -2282,7 +2491,7 @@ window.ZS = window.ZS || {};
           statsHtml: statSummary,
           descHtml: escapeHtml(def.desc || '')
         }),
-        actionHtml,
+        nonDefenseActionHtml,
         '시설 정보'
       );
     } else {
