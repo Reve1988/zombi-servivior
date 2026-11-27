@@ -886,16 +886,17 @@ window.ZS = window.ZS || {};
 
   function canZoneB1Rect(x0, y0, x1, y1, role) {
     if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
-      return { ok: false, validTiles: [], blockedTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 지정할 수 있습니다.' };
+      return { ok: false, validTiles: [], blockedTiles: [], gadgetBlockedTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 지정할 수 있습니다.' };
     }
     const isCorridorRole = role === 'corridor';
     if (!isCorridorRole && !getB1RoomDef(role)) {
-      return { ok: false, validTiles: [], blockedTiles: [], reason: '알 수 없는 방 역할입니다.' };
+      return { ok: false, validTiles: [], blockedTiles: [], gadgetBlockedTiles: [], reason: '알 수 없는 방 역할입니다.' };
     }
     const ug = ensureUndergroundState();
     const { minX, maxX, minY, maxY } = getRectBounds(x0, y0, x1, y1);
     const validTiles = [];
     const blockedTiles = [];
+    const gadgetBlockedTiles = [];
     const touchedRoomIds = new Set();
 
     for (let y = minY; y <= maxY; y++) {
@@ -905,16 +906,36 @@ window.ZS = window.ZS || {};
           blockedTiles.push([x, y]);
           continue;
         }
+        const hasG = !!(ug.b1StructGrid[y] && ug.b1StructGrid[y][x]);
+        if (hasG) {
+          const cRoom = c.roomId != null ? ug.rooms[c.roomId] : null;
+          const sameRole = isCorridorRole ? !!(c.corridor && !c.permanentCorridor) : !!(cRoom && cRoom.role === role);
+          if (!sameRole) {
+            gadgetBlockedTiles.push([x, y]);
+            blockedTiles.push([x, y]);
+            continue;
+          }
+        }
         validTiles.push([x, y]);
         if (c.roomId != null) touchedRoomIds.add(c.roomId);
       }
     }
 
     if (validTiles.length === 0) {
+      if (gadgetBlockedTiles.length > 0) {
+        return {
+          ok: false,
+          validTiles,
+          blockedTiles,
+          gadgetBlockedTiles,
+          reason: '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 구역을 변경하세요.'
+        };
+      }
       return {
         ok: false,
         validTiles,
         blockedTiles,
+        gadgetBlockedTiles,
         reason: '굴착된 빈 공간(중앙 승강기 홀 복도 제외) 위에서만 구역을 지정할 수 있습니다.'
       };
     }
@@ -938,30 +959,7 @@ window.ZS = window.ZS || {};
       }
     }
 
-    for (const rid of touchedRoomIds) {
-      const r = ug.rooms[rid];
-      const isSameRoleExpansion = !isCorridorRole && r && r.role === role;
-      if (!isSameRoleExpansion && roomHasGadgets(rid)) {
-        return {
-          ok: false,
-          validTiles,
-          blockedTiles,
-          lockedRoomId: rid,
-          reason: '가젯이 배치된 구역은 축소·용도 변경할 수 없습니다. 먼저 가젯을 제거하세요.'
-        };
-      }
-    }
-
-    if (findFirstB1TileGadgetCoord(ug, validTiles, role)) {
-      return {
-        ok: false,
-        validTiles,
-        blockedTiles,
-        reason: '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 구역을 변경하세요.'
-      };
-    }
-
-    return { ok: true, validTiles, blockedTiles, touchedRoomIds };
+    return { ok: true, validTiles, blockedTiles, gadgetBlockedTiles, touchedRoomIds };
   }
 
   function zoneB1Rect(x0, y0, x1, y1, role) {
@@ -1046,11 +1044,13 @@ window.ZS = window.ZS || {};
 
   function canUnzoneB1Rect(x0, y0, x1, y1) {
     if (state.phase !== 'day' || !isB1Unlocked() || state.activeLayer !== 'underground') {
-      return { ok: false, validTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 해제할 수 있습니다.' };
+      return { ok: false, validTiles: [], blockedTiles: [], gadgetBlockedTiles: [], reason: '주간 지하 B1 레이어에서만 구역을 해제할 수 있습니다.' };
     }
     const ug = ensureUndergroundState();
     const { minX, maxX, minY, maxY } = getRectBounds(x0, y0, x1, y1);
     const validTiles = [];
+    const blockedTiles = [];
+    const gadgetBlockedTiles = [];
     const touchedRoomIds = new Set();
 
     for (let y = minY; y <= maxY; y++) {
@@ -1058,35 +1058,30 @@ window.ZS = window.ZS || {};
         const c = ug.grid[y][x];
         if (!c || !c.excavated) continue;
         if (c.roomId == null && !(c.corridor && !c.permanentCorridor)) continue;
+        if (ug.b1StructGrid[y] && ug.b1StructGrid[y][x]) {
+          gadgetBlockedTiles.push([x, y]);
+          blockedTiles.push([x, y]);
+          continue;
+        }
         validTiles.push([x, y]);
         if (c.roomId != null) touchedRoomIds.add(c.roomId);
       }
     }
 
     if (validTiles.length === 0) {
-      return { ok: false, validTiles, reason: '해제할 구역 또는 전술 복도 타일이 없습니다.' };
-    }
-
-    for (const rid of touchedRoomIds) {
-      if (roomHasGadgets(rid)) {
+      if (gadgetBlockedTiles.length > 0) {
         return {
           ok: false,
           validTiles,
-          lockedRoomId: rid,
-          reason: '가젯이 배치된 구역은 축소·용도 변경할 수 없습니다. 먼저 가젯을 제거하세요.'
+          blockedTiles,
+          gadgetBlockedTiles,
+          reason: '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 해제하세요.'
         };
       }
+      return { ok: false, validTiles, blockedTiles, gadgetBlockedTiles, reason: '해제할 구역 또는 전술 복도 타일이 없습니다.' };
     }
 
-    if (findFirstB1TileGadgetCoord(ug, validTiles)) {
-      return {
-        ok: false,
-        validTiles,
-        reason: '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 해제하세요.'
-      };
-    }
-
-    return { ok: true, validTiles, touchedRoomIds };
+    return { ok: true, validTiles, blockedTiles, gadgetBlockedTiles, touchedRoomIds };
   }
 
   function unzoneB1Rect(x0, y0, x1, y1) {
@@ -1096,6 +1091,9 @@ window.ZS = window.ZS || {};
         triggerB1LockHighlight(check.lockedRoomId);
       } else {
         if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
+        if (check.gadgetBlockedTiles && check.gadgetBlockedTiles.length > 0) {
+          G.banner('구역 해제 불가', check.reason, 'warn');
+        }
       }
       return false;
     }
