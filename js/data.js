@@ -252,7 +252,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.8.1',
+  VERSION: 'v0.8.2',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
   B1_SIZE: 23,
