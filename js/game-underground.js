@@ -602,7 +602,7 @@ window.ZS = window.ZS || {};
     ug.lockedHighlightRoomId = roomId;
     ug.lockedHighlightTimer = 2.0;
     if (ZS.Audio && ZS.Audio.playError) ZS.Audio.playError();
-    G.banner('구역 수정 잠금', '구역 내부의 시설·가젯을 모두 제거한 뒤 수정하세요.', 'warn');
+    G.banner('구역 수정 잠금', '가젯이 배치된 구역은 축소·용도 변경할 수 없습니다. 먼저 가젯을 제거하세요.', 'warn');
     G.notifyUi();
   }
 
@@ -864,11 +864,21 @@ window.ZS = window.ZS || {};
     G.notifyUi();
   }
 
-  function findFirstB1TileGadgetCoord(ug, tiles) {
+  function findFirstB1TileGadgetCoord(ug, tiles, allowMatchingRole) {
+    const hasRoleFilter = allowMatchingRole !== undefined && allowMatchingRole !== null;
+    const isCorr = allowMatchingRole === 'corridor';
     for (let i = 0; i < tiles.length; i++) {
       const [vx, vy] = tiles[i];
       if (ug.b1StructGrid[vy] && ug.b1StructGrid[vy][vx]) {
-        return tiles[i];
+        if (!hasRoleFilter) return tiles[i];
+        const vc = ug.grid[vy] && ug.grid[vy][vx];
+        if (!vc) return tiles[i];
+        if (isCorr) {
+          if (!(vc.corridor && !vc.permanentCorridor)) return tiles[i];
+        } else {
+          const vRoom = vc.roomId != null ? ug.rooms[vc.roomId] : null;
+          if (!vRoom || vRoom.role !== allowMatchingRole) return tiles[i];
+        }
       }
     }
     return null;
@@ -929,18 +939,20 @@ window.ZS = window.ZS || {};
     }
 
     for (const rid of touchedRoomIds) {
-      if (roomHasGadgets(rid)) {
+      const r = ug.rooms[rid];
+      const isSameRoleExpansion = !isCorridorRole && r && r.role === role;
+      if (!isSameRoleExpansion && roomHasGadgets(rid)) {
         return {
           ok: false,
           validTiles,
           blockedTiles,
           lockedRoomId: rid,
-          reason: '구역 내부의 시설·가젯을 모두 제거한 뒤 수정하세요.'
+          reason: '가젯이 배치된 구역은 축소·용도 변경할 수 없습니다. 먼저 가젯을 제거하세요.'
         };
       }
     }
 
-    if (findFirstB1TileGadgetCoord(ug, validTiles)) {
+    if (findFirstB1TileGadgetCoord(ug, validTiles, role)) {
       return {
         ok: false,
         validTiles,
@@ -1061,7 +1073,7 @@ window.ZS = window.ZS || {};
           ok: false,
           validTiles,
           lockedRoomId: rid,
-          reason: '구역 내부의 시설·가젯을 모두 제거한 뒤 수정하세요.'
+          reason: '가젯이 배치된 구역은 축소·용도 변경할 수 없습니다. 먼저 가젯을 제거하세요.'
         };
       }
     }
