@@ -1007,9 +1007,9 @@ window.ZS = window.ZS || {};
       case 'ramp':
         return {
           title: '경사로',
-          badge: '가시 함정 전용 경사로',
-          desc: '일반 시설은 불가하며 가시 함정만 설치 가능합니다.',
-          tipText: '경사로 (함정 전용)',
+          badge: '철조망·통문·함정 경사로',
+          desc: '일반 시설은 불가하며 철조망·통문·가시 함정만 설치 가능합니다.',
+          tipText: '경사로 (철조망·함정 가능)',
           tipIcon: 'nav-recon',
           tipIconCls: 'icon-muted'
         };
@@ -1103,7 +1103,8 @@ window.ZS = window.ZS || {};
               tipIcon = 'state-lock';
               tipIconCls = 'icon-danger';
             } else {
-              tipText = isCorrRole ? `놓아서 [${rName}] 확장/지정` : `놓아서 [${rName}] 구역 확장/지정`;
+              const skipNote = dragCheck && dragCheck.gadgetBlockedTiles && dragCheck.gadgetBlockedTiles.length > 0 ? ' (설비 칸 제외)' : '';
+              tipText = isCorrRole ? `놓아서 [${rName}] 확장/지정${skipNote}` : `놓아서 [${rName}] 구역 확장/지정${skipNote}`;
               tipKind = 'ok';
               tipIcon = isCorrRole ? 'b1-corridor' : ((rDef && rDef.iconId) || 'b1-zone');
               tipIconCls = 'icon-heal';
@@ -1113,13 +1114,7 @@ window.ZS = window.ZS || {};
             const cellRoom = cell.roomId != null && ug.rooms ? ug.rooms[cell.roomId] : null;
             const isSameRoleRoom = !!(!isCorrRole && cellRoom && cellRoom.role === uiState.selectedB1Role);
             const isSameCorr = !!(isCorrRole && cell.corridor && !cell.permanentCorridor);
-            const roomHasG = !!(cell.roomId != null && ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId));
-            if (roomHasG && !isSameRoleRoom) {
-              tipText = '가젯이 배치된 구역은 축소·용도 변경할 수 없습니다.';
-              tipKind = 'err';
-              tipIcon = 'state-lock';
-              tipIconCls = 'icon-danger';
-            } else if (hasG && !isSameRoleRoom && !isSameCorr) {
+            if (hasG && !isSameRoleRoom && !isSameCorr) {
               tipText = '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 변경하세요.';
               tipKind = 'err';
               tipIcon = 'state-lock';
@@ -1127,7 +1122,7 @@ window.ZS = window.ZS || {};
             } else if (isSameRoleRoom || isSameCorr) {
               tipText = isCorrRole
                 ? '드래그하여 [전술 복도] 확장'
-                : `드래그하여 [${rName}] 구역 확장${roomHasG || hasG ? ' (설비 유지)' : ''}`;
+                : `드래그하여 [${rName}] 구역 확장${hasG ? ' (설비 유지)' : ''}`;
               tipKind = 'ok';
               tipIcon = isCorrRole ? 'b1-corridor' : ((rDef && rDef.iconId) || 'b1-zone');
               tipIconCls = 'icon-heal';
@@ -1146,14 +1141,28 @@ window.ZS = window.ZS || {};
             tipIconCls = 'icon-danger';
           }
         } else if (uiState.mode === 'b1_unzone') {
-          const hasG = !!(ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx]);
-          if (cell && (cell.roomId != null || (cell.corridor && !cell.permanentCorridor))) {
-            if (cell.roomId != null && ZS.Game.roomHasGadgets && ZS.Game.roomHasGadgets(cell.roomId)) {
-              tipText = '가젯이 배치된 구역은 축소·해제할 수 없습니다.';
+          if (uiState.b1DragStart && uiState.b1DragCurrent && ZS.Game.canUnzoneB1Rect) {
+            const dragCheck = ZS.Game.canUnzoneB1Rect(
+              uiState.b1DragStart.tx,
+              uiState.b1DragStart.ty,
+              uiState.b1DragCurrent.tx,
+              uiState.b1DragCurrent.ty
+            );
+            if (dragCheck && !dragCheck.ok) {
+              tipText = dragCheck.reason || '이 범위에는 해제할 구역이 없습니다.';
               tipKind = 'err';
               tipIcon = 'state-lock';
               tipIconCls = 'icon-danger';
-            } else if (hasG) {
+            } else {
+              const skipNote = dragCheck && dragCheck.gadgetBlockedTiles && dragCheck.gadgetBlockedTiles.length > 0 ? ' (설비 칸 제외)' : '';
+              tipText = `놓아서 구역 지정 해제${skipNote}`;
+              tipKind = 'info';
+              tipIcon = 'b1-unzone';
+              tipIconCls = 'icon-ap';
+            }
+          } else if (cell && (cell.roomId != null || (cell.corridor && !cell.permanentCorridor))) {
+            const hasG = !!(ug && ug.b1StructGrid && ug.b1StructGrid[ty] && ug.b1StructGrid[ty][tx]);
+            if (hasG) {
               tipText = '설비가 배치된 타일은 설비를 먼저 철거·이동한 뒤 해제하세요.';
               tipKind = 'err';
               tipIcon = 'state-lock';
@@ -1361,6 +1370,8 @@ window.ZS = window.ZS || {};
           return (tCell.tier || 1) >= 2 ? '돌풍 핵심 +70%' : '강풍 +40%';
         } else if (tCell.kind === 'ramp' && def.id === 'razor_pad') {
           return '경사로 함정 설치';
+        } else if (tCell.kind === 'ramp' && (def.id === 'barricade_wall' || def.id === 'tactical_gate')) {
+          return '경사로 방어선 설치';
         }
         return null;
       };
@@ -1407,8 +1418,8 @@ window.ZS = window.ZS || {};
         } else if (hoveredTerrain && hoveredTerrain.kind === 'rock') {
           tipText = '암석 지형 이동 불가';
           tipIcon = 'state-lock';
-        } else if (hoveredTerrain && hoveredTerrain.kind === 'ramp' && (!srcDef || srcDef.id !== 'razor_pad')) {
-          tipText = '경사로: 가시 함정 전용';
+        } else if (hoveredTerrain && hoveredTerrain.kind === 'ramp' && (!srcDef || (srcDef.id !== 'razor_pad' && srcDef.id !== 'barricade_wall' && srcDef.id !== 'tactical_gate'))) {
+          tipText = '경사로: 철조망·통문·함정 전용';
           tipIcon = 'state-lock';
         } else if (!(uiState.movingSource.tx === tx && uiState.movingSource.ty === ty) && st.structGrid[ty] && st.structGrid[ty][tx]) {
           const dest = st.structGrid[ty][tx];

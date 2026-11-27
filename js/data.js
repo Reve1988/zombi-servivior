@@ -252,7 +252,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.8.3',
+  VERSION: 'v0.8.4',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
   B1_SIZE: 23,
@@ -451,7 +451,7 @@ ZS.DATA = (function () {
       id: 'ramp',
       name: '경사 언덕',
       elev: 5,
-      desc: '고지대 연결 경사로. 오르막 이속 -30%·내리막 +25%. 스파이크 트랩만 설치 가능.'
+      desc: '고지대 연결 경사로. 오르막 이속 -30%·내리막 +25%. 철조망·통문·스파이크 트랩 설치 가능.'
     },
     wind: {
       id: 'wind',

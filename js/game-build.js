@@ -1237,6 +1237,10 @@ window.ZS = window.ZS || {};
     return true;
   }
 
+  function isRampAllowedItem(itemId) {
+    return itemId === 'razor_pad' || itemId === 'barricade_wall' || itemId === 'tactical_gate';
+  }
+
   function canPlaceItem(rawItemId, tx, ty) {
     if (state.phase !== 'day') {
       return { ok: false, reason: '정비 페이즈(낮)에만 건설할 수 있습니다.' };
@@ -1265,8 +1269,8 @@ window.ZS = window.ZS || {};
       if (def.layer === 'floor') {
         return { ok: false, reason: '경사 언덕 지형에는 바닥재를 시공할 수 없습니다.' };
       }
-      if (itemId !== 'razor_pad') {
-        return { ok: false, reason: '경사 언덕에는 스파이크 트랩만 설치할 수 있습니다.' };
+      if (!isRampAllowedItem(itemId)) {
+        return { ok: false, reason: '경사 언덕에는 철조망·통문·스파이크 트랩만 설치할 수 있습니다.' };
       }
     }
 
@@ -1806,9 +1810,9 @@ window.ZS = window.ZS || {};
       G.banner('이동 불가', '자연 암석(바위) 지형에는 설치할 수 없습니다.', 'warn');
       return false;
     }
-    if (destTerrain && destTerrain.kind === 'ramp' && moving.id !== 'razor_pad') {
+    if (destTerrain && destTerrain.kind === 'ramp' && !isRampAllowedItem(moving.id)) {
       ZS.Audio.playError();
-      G.banner('이동 불가', '경사 언덕에는 스파이크 트랩만 설치할 수 있습니다.', 'warn');
+      G.banner('이동 불가', '경사 언덕에는 철조망·통문·스파이크 트랩만 설치할 수 있습니다.', 'warn');
       return false;
     }
     const dest = state.structGrid[toY][toX];

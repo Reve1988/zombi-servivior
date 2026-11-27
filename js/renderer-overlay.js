@@ -919,7 +919,7 @@ window.ZS = window.ZS || {};
             let terrainOk = true;
             if (destTerrain) {
               if (destTerrain.kind === 'rock') terrainOk = false;
-              else if (destTerrain.kind === 'ramp' && (!srcDef || srcDef.id !== 'razor_pad')) terrainOk = false;
+              else if (destTerrain.kind === 'ramp' && (!srcDef || (srcDef.id !== 'razor_pad' && srcDef.id !== 'barricade_wall' && srcDef.id !== 'tactical_gate'))) terrainOk = false;
             }
             const canMountDest = !!(terrainOk && dest && srcDef && srcDef.canMountOnWall && dest.id === 'barricade_wall' && (dest.level || 1) >= 2 && !dest.mounted);
             const canDrop = inBounds && terrainOk && (!dest || canMountDest);
