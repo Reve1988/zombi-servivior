@@ -1218,6 +1218,136 @@ window.ZS = window.ZS || {};
         if (onCyan && !P.isThumb) P.glowEllipse(0.36, 0.84, 9.0, 9, 5, '#5EF2FF', 0.16);
         break;
       }
+      case 'b1_ammo_press': {
+        // Mechanical hydraulic ammo stamping press + brass belt + olive ammo crate (UNPOWERED: 0px cyan!)
+        P.box(0.14, 0.22, 0, 0.72, 0.56, 4.2, { base: '#434E5B', stroke: darkStroke });
+        P.box(0.16, 0.24, 4.2, 0.14, 0.52, 12.6, { base: '#556372', stroke: darkStroke });
+        P.box(0.68, 0.24, 4.2, 0.14, 0.52, 12.6, { base: '#556372', stroke: darkStroke });
+        P.box(0.14, 0.22, 15.6, 0.70, 0.56, 3.0, { base: '#697888', stroke: darkStroke });
+        if (!P.isSil) {
+          const ramBob = P.active && !P.isThumb ? Math.abs(Math.sin(P.timeSec * 3.2)) * 2.2 : 0;
+          P.box(0.36, 0.36, 9.5 + ramBob, 0.26, 0.26, 6.2 - ramBob * 0.4, { base: '#94A3B8', stroke: darkStroke });
+          // Brass casing feed belt & olive ammo box
+          P.box(0.28, 0.32, 4.2, 0.42, 0.36, 1.4, { base: '#D49B38', stroke: darkStroke });
+          P.box(0.54, 0.54, 4.2, 0.30, 0.24, 3.6, { base: '#5F7742', stroke: darkStroke });
+          P.box(0.32, 0.75, 11.4, 0.14, 0.05, 1.4, { base: '#E59838', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_rocket_rig': {
+        // Powered rocket warhead assembly gantry + twin warheads + #5EF2FF laser alignment screen
+        P.box(0.14, 0.18, 0, 0.72, 0.64, 2.4, { base: '#3B4654', stroke: darkStroke });
+        P.box(0.18, 0.22, 2.4, 0.46, 0.56, 9.6, { base: '#4F5E6E', stroke: darkStroke });
+        if (!P.isSil) {
+          // Twin red-tipped rockets mounted in cradle
+          P.box(0.22, 0.28, 12.0, 0.16, 0.46, 2.8, { base: '#CBD5E1', stroke: darkStroke });
+          P.box(0.24, 0.66, 12.3, 0.12, 0.16, 2.2, { base: '#DC2626', stroke: darkStroke });
+          P.box(0.44, 0.28, 12.0, 0.16, 0.46, 2.8, { base: '#CBD5E1', stroke: darkStroke });
+          P.box(0.46, 0.66, 12.3, 0.12, 0.16, 2.2, { base: '#DC2626', stroke: darkStroke });
+          // Side powered alignment console
+          P.box(0.68, 0.28, 2.4, 0.18, 0.44, 11.4, { base: '#2D3744', stroke: darkStroke });
+          P.box(0.70, 0.70, 8.6, 0.14, 0.04, 3.6, { base: cyan, stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.76, 0.74, 10.5, 10, 6, '#5EF2FF', 0.22 * pulse);
+        break;
+      }
+      case 'b1_hydro_bed': {
+        // Unpowered white-slate hydroponic trough + lush layered crops + amber valve (0px cyan!)
+        P.box(0.14, 0.20, 0, 0.72, 0.60, 4.6, { base: '#697888', stroke: darkStroke });
+        P.box(0.10, 0.16, 4.6, 0.80, 0.68, 2.2, { base: '#CBD5E1', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.16, 0.22, 6.8, 0.68, 0.56, 1.2, { base: '#3F4B3E', stroke: darkStroke });
+          P.box(0.18, 0.24, 8.0, 0.26, 0.22, 3.8, { base: '#22C55E', stroke: darkStroke });
+          P.box(0.52, 0.24, 8.0, 0.26, 0.22, 4.2, { base: '#4ADE80', stroke: darkStroke });
+          P.box(0.18, 0.52, 8.0, 0.26, 0.22, 4.4, { base: '#4ADE80', stroke: darkStroke });
+          P.box(0.52, 0.52, 8.0, 0.26, 0.22, 3.4, { base: '#16A34A', stroke: darkStroke });
+          P.box(0.74, 0.74, 4.8, 0.12, 0.12, 1.8, { base: '#D97706', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_grow_led': {
+        // Powered overhead horticultural grow-LED rack over seedling tray (#5EF2FF indicator + magenta bar)
+        P.box(0.14, 0.18, 0, 0.72, 0.62, 3.4, { base: '#4F5E6D', stroke: darkStroke });
+        P.box(0.16, 0.20, 3.4, 0.08, 0.08, 13.6, { base: '#8B9AA8', stroke: darkStroke });
+        P.box(0.76, 0.20, 3.4, 0.08, 0.08, 13.6, { base: '#8B9AA8', stroke: darkStroke });
+        P.box(0.16, 0.72, 3.4, 0.08, 0.08, 13.6, { base: '#8B9AA8', stroke: darkStroke });
+        P.box(0.76, 0.72, 3.4, 0.08, 0.08, 13.6, { base: '#8B9AA8', stroke: darkStroke });
+        P.box(0.14, 0.18, 16.4, 0.72, 0.62, 2.2, { base: '#627282', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.22, 0.26, 3.4, 0.56, 0.46, 2.4, { base: '#22C55E', stroke: darkStroke });
+          const growMag = onCyan ? '#E879F9' : '#3E2B42';
+          P.box(0.20, 0.26, 15.2, 0.60, 0.16, 1.2, { base: growMag, stroke: darkStroke });
+          P.box(0.20, 0.56, 15.2, 0.60, 0.16, 1.2, { base: growMag, stroke: darkStroke });
+          P.box(0.22, 0.76, 16.8, 0.22, 0.04, 1.2, { base: cyan, stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.5, 11.5, 15, 9, '#E879F9', 0.24 * pulse);
+        break;
+      }
+      case 'b1_nutrient_tank': {
+        // Unpowered cylindrical-stepped nutrient circulation tank + emerald sight glass (0px cyan!)
+        P.box(0.18, 0.20, 0, 0.64, 0.60, 2.2, { base: '#3F4B58', stroke: darkStroke });
+        P.box(0.22, 0.24, 2.2, 0.56, 0.52, 13.6, { base: '#64748B', stroke: darkStroke });
+        P.box(0.28, 0.30, 15.8, 0.44, 0.40, 2.2, { base: '#7B8A98', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.36, 0.72, 4.4, 0.22, 0.05, 8.8, { base: '#10B981', stroke: darkStroke });
+          P.box(0.40, 0.74, 6.2, 0.14, 0.04, 5.4, { base: '#34D399', stroke: darkStroke });
+          P.box(0.66, 0.38, 12.6, 0.16, 0.20, 2.4, { base: '#D97706', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_cold_storage': {
+        // Powered walk-in frost-white food chiller cabinet + #5EF2FF cryo gauge (0px when paused)
+        P.box(0.14, 0.18, 0, 0.72, 0.64, 19.2, { base: '#CBD5E1', stroke: darkStroke });
+        P.box(0.18, 0.78, 1.8, 0.64, 0.06, 15.8, { base: '#94A3B8', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.70, 0.81, 8.4, 0.06, 0.05, 4.2, { base: '#475569', stroke: darkStroke });
+          P.box(0.24, 0.80, 14.6, 0.26, 0.04, 1.8, { base: cyan, stroke: darkStroke });
+          P.box(0.22, 0.24, 19.2, 0.56, 0.44, 1.8, { base: '#64748B', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.38, 0.84, 15.2, 10, 6, '#5EF2FF', 0.20 * pulse);
+        break;
+      }
+      case 'b1_powder_bench': {
+        // Unpowered ordnance workbench + brass powder measure + matte orange ammo tray (0px cyan!)
+        P.box(0.14, 0.22, 0, 0.72, 0.56, 8.2, { base: '#57534E', stroke: darkStroke });
+        P.box(0.10, 0.18, 8.2, 0.80, 0.64, 1.6, { base: '#78716C', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.18, 0.26, 9.8, 0.30, 0.34, 3.2, { base: '#EA580C', stroke: darkStroke });
+          P.box(0.54, 0.30, 9.8, 0.14, 0.14, 4.4, { base: '#F59E0B', stroke: darkStroke });
+          P.box(0.72, 0.32, 9.8, 0.10, 0.24, 2.2, { base: '#CBD5E1', stroke: darkStroke });
+          P.box(0.16, 0.20, 9.8, 0.68, 0.06, 5.4, { base: '#44403C', stroke: darkStroke });
+        }
+        break;
+      }
+      case 'b1_armor_welder': {
+        // Powered armor plating welding jig + steel plate + orange torch + #5EF2FF welder console
+        P.box(0.14, 0.20, 0, 0.72, 0.60, 5.2, { base: '#475569', stroke: darkStroke });
+        P.box(0.20, 0.28, 5.2, 0.40, 0.44, 6.2, { base: '#94A3B8', stroke: darkStroke });
+        if (!P.isSil) {
+          P.box(0.62, 0.24, 5.2, 0.22, 0.48, 10.6, { base: '#334155', stroke: darkStroke });
+          P.box(0.64, 0.70, 11.4, 0.18, 0.04, 2.4, { base: cyan, stroke: darkStroke });
+          P.box(0.46, 0.36, 11.4, 0.18, 0.12, 3.2, { base: '#F97316', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.52, 0.56, 12.2, 11, 7, '#5EF2FF', 0.22 * pulse);
+        break;
+      }
+      case 'b1_drone_station': {
+        // Powered drone repair pad + docked quad-drone + amber rotor tips + #5EF2FF telemetry ring
+        P.box(0.14, 0.14, 0, 0.72, 0.72, 2.6, { base: '#334155', stroke: darkStroke });
+        P.box(0.22, 0.22, 2.6, 0.56, 0.56, 1.0, { base: cyanMid, stroke: darkStroke });
+        if (!P.isSil) {
+          const hoverZ = onCyan && !P.isThumb ? 5.6 + Math.sin(P.timeSec * 3.0) * 1.1 : 4.2;
+          P.box(0.36, 0.36, hoverZ, 0.28, 0.28, 3.0, { base: '#E2E8F0', stroke: darkStroke });
+          P.box(0.42, 0.42, hoverZ + 3.0, 0.16, 0.16, 0.8, { base: cyan, stroke: darkStroke });
+          // 4 rotor arms with amber tips
+          P.box(0.22, 0.22, hoverZ + 1.8, 0.14, 0.14, 1.0, { base: '#F59E0B', stroke: darkStroke });
+          P.box(0.64, 0.22, hoverZ + 1.8, 0.14, 0.14, 1.0, { base: '#F59E0B', stroke: darkStroke });
+          P.box(0.22, 0.64, hoverZ + 1.8, 0.14, 0.14, 1.0, { base: '#F59E0B', stroke: darkStroke });
+          P.box(0.64, 0.64, hoverZ + 1.8, 0.14, 0.14, 1.0, { base: '#F59E0B', stroke: darkStroke });
+        }
+        if (onCyan && !P.isThumb) P.glowEllipse(0.5, 0.5, 4.0, 14, 8, '#5EF2FF', 0.24 * pulse);
+        break;
+      }
       case 'b1_ceiling_led':
       default: {
         // Unpowered tactical amber tripod worklight (STRICTLY warm amber #FFB347, 0px cyan!)

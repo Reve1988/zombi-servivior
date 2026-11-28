@@ -19,11 +19,36 @@ window.ZS = window.ZS || {};
   function scaleWaveDrop(rawAmount, waveNum, isBoss) {
     const w = waveNum || 1;
     if (w < 9 || rawAmount <= 0) return rawAmount;
-    const baseScale = Math.max(0.25, 1 / (1 + (w - 8) * 0.11));
+    const baseScale = Math.max(0.24, 1 / (1 + (w - 8) * 0.11));
     const scale = isBoss ? Math.max(0.70, baseScale) : baseScale;
     const exact = rawAmount * scale;
     const whole = Math.floor(exact);
     return whole + (Math.random() < (exact - whole) ? 1 : 0);
+  }
+
+  function getDawnRecruitRate(waveNum) {
+    const rules = DATA.RECRUIT_RULES || {
+      brackets: [
+        { maxWave: 5, baseRate: 0.65 },
+        { maxWave: 12, baseRate: 0.95 },
+        { maxWave: 25, baseRate: 1.35 },
+        { maxWave: 999, baseRate: 1.85 }
+      ],
+      cozyMult: [1.0, 1.12, 1.25, 1.40, 1.55, 1.70, 1.85]
+    };
+    const w = Math.max(1, Number(waveNum) || state.wave || 1);
+    const brackets = rules.brackets || [];
+    let baseRate = 0.65;
+    for (let i = 0; i < brackets.length; i++) {
+      if (w <= brackets[i].maxWave) {
+        baseRate = brackets[i].baseRate;
+        break;
+      }
+    }
+    const cozyLv = (state.cozyTier && state.cozyTier.level) || 1;
+    const multArr = rules.cozyMult || [1.0];
+    const mult = multArr[Math.max(0, Math.min(multArr.length - 1, cozyLv - 1))] || 1.0;
+    return +(baseRate * mult).toFixed(2);
   }
 
   function damageZombie(index, amount, textColor, isCrit, sourceUid) {
@@ -52,8 +77,9 @@ window.ZS = window.ZS || {};
       const rawScrap = randInt(def.scrapDrop[0], def.scrapDrop[1]);
       const rawCoin = randInt(def.coinDrop[0], def.coinDrop[1]);
       const scrapGain = scaleWaveDrop(rawScrap, state.wave, !!def.isBoss);
-      const coinGain = scaleWaveDrop(rawCoin, state.wave, !!def.isBoss);
-      const woodGain = def.woodDrop ? randInt(def.woodDrop[0], def.woodDrop[1]) : 0;
+      const coinGain = Math.round(scaleWaveDrop(rawCoin, state.wave, !!def.isBoss) * 0.72);
+      const rawWood = def.woodDrop ? randInt(def.woodDrop[0], def.woodDrop[1]) : 0;
+      const woodGain = rawWood > 0 ? scaleWaveDrop(rawWood, state.wave, !!def.isBoss) : 0;
       state.scrap += scrapGain;
       state.coin += coinGain;
       if (woodGain > 0) state.wood += woodGain;
@@ -776,8 +802,10 @@ window.ZS = window.ZS || {};
     state.projectiles = [];
     state.burstQueue = [];
     state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
-    state.traderRefreshCost = 15;
+    state.traderRefreshCost = (DATA.TRADER_LIMITS && DATA.TRADER_LIMITS.refreshCosts && DATA.TRADER_LIMITS.refreshCosts[0]) || 20;
     state.traderRefreshCount = 0;
+    state.traderExchangeUsed = {};
+    state.traderEmergencyUsed = {};
 
     G.recalculateBaseStats();
     if (G.invalidateStatsCache) G.invalidateStatsCache();
@@ -785,9 +813,9 @@ window.ZS = window.ZS || {};
     // 1. Wave clearance rewards + Cozy dividend bonus
     const wEarly = Math.min(clearedWave, 12);
     const wLate = Math.max(0, clearedWave - 12);
-    const woodReward = Math.round(34 + wEarly * 7.5 + Math.sqrt(wLate) * 18);
+    const woodReward = Math.round(32 + wEarly * 6.5 + Math.sqrt(wLate) * 14);
     const scrapReward = Math.round(14 + wEarly * 4.0 + Math.sqrt(wLate) * 11);
-    const baseCoin = Math.round(14 + wEarly * 3.2 + Math.sqrt(wLate) * 9);
+    const baseCoin = Math.round(12 + wEarly * 2.0 + Math.sqrt(wLate) * 5.0);
     const bonusCoin = Math.round(baseCoin * state.cozyTier.coinBonus);
     const totalCoin = baseCoin + bonusCoin;
 
@@ -821,30 +849,32 @@ window.ZS = window.ZS || {};
     state.power = Math.min(maxTarget, state.power + state.dayCharge);
     const gainedPower = Math.round(state.power - beforePower);
 
-    // 3.5. Dawn 3-Job Settlement (Research RP, Production Wood/Scrap/Dig AP with decimal carry-over)
+    // 3.5. Dawn 3-Job & Supply Settlement (Research RP, Wood/Scrap/Dig AP, Ammo/Rocket/Food with decimal carry-over)
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
     const jobs = G.normalizeJobs ? G.normalizeJobs() : (state.jobs || { combat: state.popUsed || 0, research: 0, prod: 0 });
     if (!state.prodCarry || typeof state.prodCarry !== 'object') {
-      state.prodCarry = { rp: 0, wood: 0, scrap: 0, digAp: 0 };
+      state.prodCarry = { rp: 0, wood: 0, scrap: 0, digAp: 0, food: 0, ammo: 0, rocket: 0 };
     }
+    const rules = DATA.SUPPLY_RULES || {};
+    const starveOutMult = state.starving ? (1 - (rules.starveOutputPenalty || 0.35)) : 1.0;
     const scavengeWood = 0;
     const scavengeScrap = 0;
 
     const rawScientistRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 0.8) + (state.b1LabFlatRp || 0) + (state.b1LabFlatPerWaveRp || 0);
     const drill2Bonus = (G.getTechLevel && G.getTechLevel('b1_drill_2') > 0) ? 0.15 : 0;
     const rpMult = 1 + (state.b1LabMult || 0) + drill2Bonus;
-    const rpTotal = rawScientistRp * rpMult + (state.prodCarry.rp || 0);
+    const rpTotal = rawScientistRp * rpMult * starveOutMult + (state.prodCarry.rp || 0);
     const rpGain = Math.floor(rpTotal + 1e-6);
     state.prodCarry.rp = +(rpTotal - rpGain).toFixed(4);
     state.rp = (state.rp || 0) + rpGain;
 
     const prodCount = jobs.prod || 0;
-    const prodRates = DATA.PROD_RATES || { woodPerWorker: 2.0, scrapPerWorker: 1.5, digBase: 1.2, digDrill1: 1.6 };
-    const woodTotal = prodCount * prodRates.woodPerWorker + (state.b1SupplyWood || 0) + (state.b1SupplyProdWood || 0) + (state.prodCarry.wood || 0);
+    const prodRates = DATA.PROD_RATES || { woodPerWorker: 2.0, scrapPerWorker: 1.5, foodPerWorker: 1.5, ammoPerWorker: 2.0, rocketPerWorker: 0, digBase: 1.2, digDrill1: 1.6 };
+    const woodTotal = (prodCount * prodRates.woodPerWorker + (state.b1SupplyWood || 0) + (state.b1SupplyProdWood || 0)) * starveOutMult + (state.prodCarry.wood || 0);
     const prodWood = Math.floor(woodTotal + 1e-6);
     state.prodCarry.wood = +(woodTotal - prodWood).toFixed(4);
 
-    const scrapTotal = prodCount * prodRates.scrapPerWorker + (state.b1SupplyScrap || 0) + (state.b1SupplyProdScrap || 0) + (state.prodCarry.scrap || 0);
+    const scrapTotal = (prodCount * prodRates.scrapPerWorker + (state.b1SupplyScrap || 0) + (state.b1SupplyProdScrap || 0)) * starveOutMult + (state.prodCarry.scrap || 0);
     const prodScrap = Math.floor(scrapTotal + 1e-6);
     state.prodCarry.scrap = +(scrapTotal - prodScrap).toFixed(4);
 
@@ -852,6 +882,52 @@ window.ZS = window.ZS || {};
     state.wood += prodWood;
     state.scrap += prodScrap;
     if (supplyCoin > 0) state.coin += supplyCoin;
+
+    // Ammo & Rocket dawn settlement
+    const ammoRaw = (
+      (hqInfo.baseAmmoSupply || 0) +
+      (state.surfaceDawnAmmo || 0) +
+      prodCount * ((prodRates.ammoPerWorker || 2.0) + (state.b1ProdAmmoAdd || 0)) +
+      (state.b1DawnAmmo || 0)
+    ) * starveOutMult;
+    const ammoTotal = ammoRaw + (state.prodCarry.ammo || 0);
+    const ammoGain = Math.floor(ammoTotal + 1e-6);
+    state.prodCarry.ammo = +(ammoTotal - ammoGain).toFixed(4);
+    state.ammo = Math.min(state.ammoCap || 140, +((state.ammo || 0) + ammoGain).toFixed(4));
+
+    const rocketRaw = (
+      (hqInfo.baseRocketSupply || 0) +
+      prodCount * ((prodRates.rocketPerWorker || 0) + (state.b1ProdRocketAdd || 0)) +
+      (state.b1DawnRocket || 0)
+    ) * starveOutMult;
+    const rocketTotal = rocketRaw + (state.prodCarry.rocket || 0);
+    const rocketGain = Math.floor(rocketTotal + 1e-6);
+    state.prodCarry.rocket = +(rocketTotal - rocketGain).toFixed(4);
+    state.rocket = Math.min(state.rocketCap || 40, +((state.rocket || 0) + rocketGain).toFixed(4));
+
+    // Food dawn settlement (food production is NOT starvation-penalized so recovery isn't softlocked)
+    const foodRaw =
+      (hqInfo.baseFoodRation || 0) +
+      (state.surfaceDawnFood || 0) +
+      prodCount * ((prodRates.foodPerWorker || 1.5) + (state.b1ProdFoodAdd || 0)) +
+      (state.b1DawnFood || 0);
+    const foodTotal = foodRaw + (state.prodCarry.food || 0);
+    const foodGain = Math.floor(foodTotal + 1e-6);
+    state.prodCarry.food = +(foodTotal - foodGain).toFixed(4);
+    const foodNeeded = Math.max(0, (state.agents || 0) * (rules.foodPerAgent || 1));
+    const foodAvailable = (state.food || 0) + foodGain;
+    const wasStarving = !!state.starving;
+    let recoveredFromStarve = false;
+    if (foodAvailable >= foodNeeded) {
+      state.food = Math.min(state.foodCap || 160, +(foodAvailable - foodNeeded).toFixed(2));
+      state.starving = false;
+      if (wasStarving) recoveredFromStarve = true;
+    } else {
+      state.food = 0;
+      state.starving = true;
+    }
+    state.ammoDepletedBannered = false;
+    state.rocketDepletedBannered = false;
 
     let digGain = 0;
     if ((state.hqLevel || 1) >= 2 && state.undergroundUnlocked) {
@@ -865,24 +941,51 @@ window.ZS = window.ZS || {};
       state.digAp = Math.min(digCap, (state.digAp || 0) + digGain);
     }
 
-    // 4. Morning Survivor Influx (0~20 scaled by wave bracket & cozy tier; surplus beyond free beds turns away)
-    const bracket = clearedWave <= 3 ? [0, 3]
-      : clearedWave <= 8 ? [1, 6]
-        : clearedWave <= 15 ? [2, 10]
-          : [3, 14];
-    const baseIncoming = bracket[0] + Math.floor(Math.random() * (bracket[1] - bracket[0] + 1));
-    const cozyLv = (state.cozyTier && state.cozyTier.level) || 1;
-    const cozyInfluxMult = [1.0, 1.10, 1.22, 1.34, 1.45][Math.max(0, Math.min(4, cozyLv - 1))];
-    const incomingAgents = Math.min(20, Math.round(baseIncoming * cozyInfluxMult));
-    const freeBeds = Math.max(0, state.popCap - state.agents);
-    const arrivedAgent = Math.min(incomingAgents, freeBeds);
-    const turnedAway = Math.max(0, incomingAgents - arrivedAgent);
-    if (arrivedAgent > 0) {
-      if (G.grantAgents) G.grantAgents(arrivedAgent);
-      else state.agents += arrivedAgent;
+    // Recompute stats immediately after starvation change so Cozy tier & UI previews reflect it
+    if (wasStarving !== !!state.starving) {
+      G.recalculateBaseStats(true);
     }
-    state.agentRecruitProgress = 0;
-    const recruitNote = turnedAway > 0 ? ` · 숙소 부족 ${turnedAway}명 되돌아감` : '';
+
+    // 4. Morning Survivor Recruitment Gauge (deterministic Option C rate + Option B tight cap)
+    const recruitRules = DATA.RECRUIT_RULES || { maxPerDawn: 3, fullBedCarryCap: 0.90 };
+    const maxPerDawn = recruitRules.maxPerDawn || 3;
+    const fullBedCarryCap = recruitRules.fullBedCarryCap ?? 0.90;
+    const dawnRecruitRate = getDawnRecruitRate(clearedWave);
+    const starveBlockedArrival = !!state.starving;
+    const prevProg = Math.max(0, Number(state.agentRecruitProgress) || 0);
+    const freeBeds = Math.max(0, state.popCap - state.agents);
+    let arrivedAgent = 0;
+    let incomingAgents = 0;
+    let turnedAway = 0;
+    let recruitWaiting = false;
+
+    if (starveBlockedArrival) {
+      state.agentRecruitProgress = +prevProg.toFixed(2);
+    } else if (freeBeds <= 0) {
+      state.agentRecruitProgress = Math.min(fullBedCarryCap, +(prevProg + dawnRecruitRate).toFixed(2));
+      recruitWaiting = state.agentRecruitProgress >= fullBedCarryCap - 1e-6;
+    } else {
+      const totalProg = +(prevProg + dawnRecruitRate).toFixed(2);
+      const rawReady = Math.min(maxPerDawn, Math.floor(totalProg + 1e-6));
+      incomingAgents = rawReady;
+      arrivedAgent = Math.min(rawReady, freeBeds);
+      turnedAway = Math.max(0, rawReady - arrivedAgent);
+      if (arrivedAgent > 0) {
+        if (G.grantAgents) G.grantAgents(arrivedAgent);
+        else state.agents += arrivedAgent;
+      }
+      if (state.agents >= state.popCap) {
+        state.agentRecruitProgress = Math.min(fullBedCarryCap, Math.max(0, +(totalProg - rawReady).toFixed(2)));
+        recruitWaiting = state.agentRecruitProgress >= fullBedCarryCap - 1e-6;
+      } else {
+        state.agentRecruitProgress = Math.min(fullBedCarryCap, Math.max(0, +(totalProg - arrivedAgent).toFixed(2)));
+      }
+    }
+    const recruitNote = starveBlockedArrival
+      ? ' · 기아로 인해 신규 유입 중단'
+      : (turnedAway > 0
+          ? ` · 숙소 부족 ${turnedAway}명 되돌아감`
+          : (arrivedAgent <= 0 && freeBeds > 0 ? ` · 모집 진행 ${Math.round((state.agentRecruitProgress || 0) * 100)}%` : ''));
 
     state.wave += 1;
     state.reconNightFadeTimer = 0;
@@ -943,9 +1046,24 @@ window.ZS = window.ZS || {};
         incomingAgents,
         turnedAway,
         popFull: state.agents >= state.popCap,
-        recruitWaiting: false,
+        recruitWaiting,
+        recruitProgress: Math.round((state.agentRecruitProgress || 0) * 100),
+        recruitRate: dawnRecruitRate,
         totalAgents: state.agents,
         popCap: state.popCap,
+        foodGain,
+        foodUsed: foodNeeded,
+        foodAfter: Math.floor(state.food || 0),
+        foodCap: state.foodCap || 160,
+        starving: !!state.starving,
+        recoveredFromStarve,
+        starveBlockedArrival,
+        ammoGain,
+        ammoAfter: Math.floor(state.ammo || 0),
+        ammoCap: state.ammoCap || 140,
+        rocketGain,
+        rocketAfter: Math.floor(state.rocket || 0),
+        rocketCap: state.rocketCap || 40,
         jobs: { ...(state.jobs || { combat: state.agents, research: 0, prod: 0 }) },
         unlockedHqLevel,
         newlyUnlocked
@@ -1269,7 +1387,8 @@ window.ZS = window.ZS || {};
     updateParticles,
     addFloatingText,
     updateFloatingTexts,
-    randInt
+    randInt,
+    getDawnRecruitRate
   });
 
   ZS.Game = {
@@ -1342,8 +1461,14 @@ window.ZS = window.ZS || {};
     repairAllStructures: G.repairAllStructures,
     getEffectiveTraderOfferCost: G.getEffectiveTraderOfferCost,
     getEffectiveTraderRefreshCost: G.getEffectiveTraderRefreshCost,
+    getDawnRecruitRate: G.getDawnRecruitRate,
+    getTraderRefreshLimit: G.getTraderRefreshLimit,
+    getExchangeRouteLimit: G.getExchangeRouteLimit,
+    getEmergencySupplyLimit: G.getEmergencySupplyLimit,
     refreshTraderOffers: G.refreshTraderOffers,
     exchangeResource: G.exchangeResource,
+    getEmergencySupplyCost: G.getEmergencySupplyCost,
+    buyEmergencySupply: G.buyEmergencySupply,
     getNightConsumableCost: G.getNightConsumableCost,
     buyNightConsumable: G.buyNightConsumable,
     buyTraderOffer: G.buyTraderOffer,
@@ -1359,6 +1484,7 @@ window.ZS = window.ZS || {};
     triggerNanoRepair: G.triggerNanoRepair,
     triggerAirstrikeAt: G.triggerAirstrikeAt,
     debugAddResources: G.debugAddResources,
+    debugAddSupplies: G.debugAddSupplies,
     debugTogglePower: G.debugTogglePower,
     debugAddAgents: G.debugAddAgents,
     debugAddRp: G.debugAddRp,

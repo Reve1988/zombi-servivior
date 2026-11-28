@@ -216,8 +216,8 @@ window.ZS = window.ZS || {};
       x: 558,
       y: 402,
       chips: [
-        { icon: 'stat-unlock', tone: 'amber', text: '지하 쉘터 고급 가젯 인가' },
-        { icon: 'b1-lab', tone: 'rp', text: '심층 지원 설비 건설 개방' },
+        { icon: 'stat-unlock', tone: 'amber', text: '로켓 조립·양액 탱크 인가' },
+        { icon: 'b1-armory', tone: 'orange', text: '장갑 용접·드론 정비 개방' },
         { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.3 (W20) 인가' }
       ]
     },
@@ -351,7 +351,8 @@ window.ZS = window.ZS || {};
     const drill2Lv = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
     const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 0.8) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
     const rpMult = 1 + (st.b1LabMult || 0) + (drill2Lv > 0 ? 0.15 : 0);
-    return +(rawRp * rpMult).toFixed(1);
+    const starveMult = st.starving ? (1 - ((ZS.DATA.SUPPLY_RULES && ZS.DATA.SUPPLY_RULES.starveOutputPenalty) || 0.35)) : 1.0;
+    return +(rawRp * rpMult * starveMult).toFixed(1);
   }
 
   function renderPopModal() {
@@ -377,12 +378,15 @@ window.ZS = window.ZS || {};
     const rpPerScientist = hqInfo.baseRpPerScientist || 0.8;
     const rpGainPreview = getDailyRpPreview(st);
 
-    const prodRates = (ZS.DATA && ZS.DATA.PROD_RATES) || { woodPerWorker: 2.0, scrapPerWorker: 1.5, digBase: 1.2, digDrill1: 1.6 };
+    const prodRates = (ZS.DATA && ZS.DATA.PROD_RATES) || { woodPerWorker: 2.0, scrapPerWorker: 1.5, foodPerWorker: 1.5, ammoPerWorker: 2.0, digBase: 1.2, digDrill1: 1.6 };
     const prodCount = jobs.prod || 0;
-    const prodWoodPreview = +(prodCount * prodRates.woodPerWorker + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0)).toFixed(1);
-    const prodScrapPreview = +(prodCount * prodRates.scrapPerWorker + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0)).toFixed(1);
+    const starveMult = st.starving ? (1 - ((ZS.DATA.SUPPLY_RULES && ZS.DATA.SUPPLY_RULES.starveOutputPenalty) || 0.35)) : 1.0;
+    const prodWoodPreview = +((prodCount * prodRates.woodPerWorker + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0)) * starveMult).toFixed(1);
+    const prodScrapPreview = +((prodCount * prodRates.scrapPerWorker + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0)) * starveMult).toFixed(1);
     const digPerProd = drill1Lv > 0 ? prodRates.digDrill1 : prodRates.digBase;
     const digGainPreview = +((2 + prodCount * digPerProd) * (1 + (st.b1DigApBonusMult || st.b1DigMult || 0))).toFixed(1);
+    const prodFoodPerW = (prodRates.foodPerWorker || 1.5) + (st.b1ProdFoodAdd || 0);
+    const prodAmmoPerW = (prodRates.ammoPerWorker || 2.0) + (st.b1ProdAmmoAdd || 0);
 
     const b1Open = (st.hqLevel || 1) >= 2 && !!st.undergroundUnlocked;
     const isGameOver = st.phase === 'gameover';
@@ -472,7 +476,7 @@ window.ZS = window.ZS || {};
               {
                 hideTopIcon: true,
                 mainHtml: `${ozIcon('res-wood', 14, 'icon-wood')}<span>+${fmtPopDec(prodWoodPreview)}</span><span class="pop-stat-sep">·</span>${ozIcon('res-scrap', 14, 'icon-scrap')}<span>+${fmtPopDec(prodScrapPreview)}</span>`,
-                sub: `1인당 목재 +${fmtPopDec(prodRates.woodPerWorker)} · 고철 +${fmtPopDec(prodRates.scrapPerWorker)}`
+                sub: `1인당 목재 +${fmtPopDec(prodRates.woodPerWorker)} · 고철 +${fmtPopDec(prodRates.scrapPerWorker)} · 식량 +${fmtPopDec(prodFoodPerW)} · 탄환 +${fmtPopDec(prodAmmoPerW)}`
               },
               {
                 icon: 'b1-dig',
@@ -548,7 +552,23 @@ window.ZS = window.ZS || {};
       )
       .join('');
 
+    const starveBannerHtml = st.starving
+      ? `<div class="pop-starve-alert">${ozIcon('state-alert', 16, 'icon-danger')}<span>기아 상태: 유인 화력 -25% · 연구/생산 -35% · 안락함 -2티어 · 신규 유입 중단 (식량 보급 시 즉시 해제)</span></div>`
+      : '';
+
+    const recruitPct = Math.min(100, Math.max(0, Math.round((st.agentRecruitProgress || 0) * 100)));
+    const recruitRate = ZS.Game.getDawnRecruitRate ? ZS.Game.getDawnRecruitRate(st.wave) : 0.75;
+    const maxPerDawn = (ZS.DATA && ZS.DATA.RECRUIT_RULES && ZS.DATA.RECRUIT_RULES.maxPerDawn) || 3;
+    const isFullBeds = totalAgents >= (st.popCap || 9);
+    const recruitStateCls = st.starving ? ' is-starving' : (isFullBeds ? ' is-full' : '');
+    const recruitText = st.starving
+      ? `기아로 모집 중단 (진행도 ${recruitPct}% 정지)`
+      : (isFullBeds
+          ? `숙소 만원 · 증설 대기 ${recruitPct}% (일일 +${fmtPopDec(recruitRate)}명 · 상한 ${maxPerDawn}명/일)`
+          : `다음 생존자 모집 ${recruitPct}% (일일 +${fmtPopDec(recruitRate)}명 · 상한 ${maxPerDawn}명/일)`);
+
     body.innerHTML = `
+      ${starveBannerHtml}
       <div class="pop-pool-banner${unassigned > 0 ? ' has-free' : ' all-assigned'}">
         <div class="pop-pool-top">
           <div class="pop-pool-count-wrap">
@@ -564,6 +584,15 @@ window.ZS = window.ZS || {};
               ? `${ozIcon('state-alert', 15, 'icon-coin')}<span>전원 배치 완료 — 타 직무로 전환하려면 먼저 다른 직무에서 <b>(−) 감원</b> 후 <b>(+) 배정</b>하세요.</span>`
               : `${ozIcon('stat-check', 15, 'icon-heal')}<span>대기 인원 <b>${unassigned}명</b> 배정 가능 — 원하는 직무의 <b>(+)</b>를 눌러 배치하세요.</span>`
           }
+        </div>
+        <div class="pop-recruit-row${recruitStateCls}">
+          <div class="pop-recruit-meta">
+            <span>${ozIcon('res-agent', 14, st.starving ? 'icon-danger' : 'icon-coin')} ${escapeHtml(recruitText)}</span>
+            <strong>${recruitPct}%</strong>
+          </div>
+          <div class="pop-recruit-track" role="progressbar" aria-valuenow="${recruitPct}" aria-valuemin="0" aria-valuemax="100">
+            <div class="pop-recruit-fill" style="width:${recruitPct}%"></div>
+          </div>
         </div>
       </div>
 

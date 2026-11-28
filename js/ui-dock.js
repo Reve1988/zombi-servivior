@@ -246,6 +246,30 @@ window.ZS = window.ZS || {};
       if ((def.powerCap || 0) > 0 || (def.dayCharge || 0) > 0 || (def.nightGen || 0) > 0) {
         return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>${escapeHtml(roleTag)} · 전력 지원</span>`, cls: 'tag-power' };
       }
+      if ((def.dawnFood || 0) > 0) {
+        return { html: `${ozIcon('res-food', 13, 'icon-food')}<span>식량+${def.dawnFood} · 안락+${def.cozy || 0}</span>`, cls: 'tag-manned' };
+      }
+      if ((def.roomFoodBonusPct || 0) > 0) {
+        return { html: `${pwrPrefix}<span>수경 생산 +${Math.round(def.roomFoodBonusPct * 100)}%</span>`, cls: 'tag-power' };
+      }
+      if ((def.foodCap || 0) >= 100) {
+        return { html: `${pwrPrefix}${ozIcon('res-food', 13, 'icon-food')}<span>식량고 +${def.foodCap}</span>`, cls: 'tag-power' };
+      }
+      if ((def.dawnAmmo || 0) > 0) {
+        return { html: `${ozIcon('res-ammo', 13, 'icon-ammo')}<span>탄환+${def.dawnAmmo} · 슬롯+${def.prodSlots || 1}</span>`, cls: 'tag-manned' };
+      }
+      if ((def.dawnRocket || 0) > 0) {
+        return { html: `${pwrPrefix}${ozIcon('res-rocket', 13, 'icon-rocket')}<span>로켓+${def.dawnRocket}</span>`, cls: 'tag-power' };
+      }
+      if ((def.armoryDmgAdd || 0) > 0) {
+        return { html: `${ozIcon('stat-dmg', 13)}<span>화력 +${Math.round(def.armoryDmgAdd * 100)}%</span>`, cls: 'tag-manned' };
+      }
+      if ((def.armoryWallHpAdd || 0) > 0) {
+        return { html: `${pwrPrefix}<span>성벽+${Math.round(def.armoryWallHpAdd * 100)}% · 수리-${Math.round((def.armoryRepairDisc || 0) * 100)}%</span>`, cls: 'tag-power' };
+      }
+      if ((def.armoryDroneHealAdd || 0) > 0) {
+        return { html: `${pwrPrefix}<span>드론 +${def.armoryDroneHealAdd} HP</span>`, cls: 'tag-power' };
+      }
       if (def.requiredRole === 'research_lab' || def.requiredRole === 'supply_depot') {
         return { html: `${pwrPrefix}<span>${escapeHtml(roleTag)} 보너스</span>`, cls: def.requiresPower ? 'tag-power' : 'tag-manned' };
       }
@@ -273,7 +297,12 @@ window.ZS = window.ZS || {};
     }
     if (def.subType === 'turret') {
       const estPwr = getEstimatedNightPowerUse(def);
-      return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>야간 ~${estPwr} 전력</span>`, cls: 'tag-power' };
+      const supBadge = def.ammoShot
+        ? ` · ${ozIcon('res-ammo', 12, 'icon-ammo')}<span>탄환</span>`
+        : def.rocketShot
+        ? ` · ${ozIcon('res-rocket', 12, 'icon-rocket')}<span>로켓</span>`
+        : '';
+      return { html: `${ozIcon('res-power', 13, 'icon-power')}<span>전력~${estPwr}</span>${supBadge}`, cls: 'tag-power' };
     }
     if (def.subType === 'power') {
       const prof = ZS.Game.getStructLevelProfile ? ZS.Game.getStructLevelProfile(def, 1) : def;
@@ -385,7 +414,9 @@ window.ZS = window.ZS || {};
     lounge: '휴게',
     research_lab: '연구',
     supply_depot: '보급',
-    power_vault: '축전'
+    power_vault: '축전',
+    hydroponics: '수경',
+    armory: '공방'
   };
 
   function renderB1GadgetCards(container, st) {
@@ -1571,18 +1602,29 @@ window.ZS = window.ZS || {};
         `<span class="trader-res-sep">·</span>` +
         `${ozIcon('res-wood', 14, 'icon-wood')}<span>${Math.floor(st.wood)}</span>` +
         `<span class="trader-res-sep">·</span>` +
-        `${ozIcon('res-scrap', 14, 'icon-scrap')}<span>${Math.floor(st.scrap)}</span>`;
+        `${ozIcon('res-scrap', 14, 'icon-scrap')}<span>${Math.floor(st.scrap)}</span>` +
+        `<span class="trader-res-sep">·</span>` +
+        `${ozIcon('res-food', 14, 'icon-food')}<span>${Math.floor(st.food || 0)}</span>` +
+        `<span class="trader-res-sep">·</span>` +
+        `${ozIcon('res-ammo', 14, 'icon-ammo')}<span>${Math.floor(st.ammo || 0)}</span>` +
+        `<span class="trader-res-sep">·</span>` +
+        `${ozIcon('res-rocket', 14, 'icon-rocket')}<span>${Math.floor(st.rocket || 0)}</span>`;
     }
 
     const refreshBtn = document.getElementById('btn-refresh-trader');
-    const refreshCost = ZS.Game.getEffectiveTraderRefreshCost ? ZS.Game.getEffectiveTraderRefreshCost() : (st.traderRefreshCost || 15);
+    const refreshCost = ZS.Game.getEffectiveTraderRefreshCost ? ZS.Game.getEffectiveTraderRefreshCost() : (st.traderRefreshCost || 20);
+    const refreshMax = ZS.Game.getTraderRefreshLimit ? ZS.Game.getTraderRefreshLimit() : 2;
+    const refreshUsed = Math.max(0, st.traderRefreshCount || 0);
+    const refreshRem = Math.max(0, refreshMax - refreshUsed);
     const discPct = Math.round((st.b1TraderDisc || 0) * 100);
     if (refreshBtn) {
-      refreshBtn.disabled = !isDay || st.coin < refreshCost;
-      refreshBtn.innerHTML = `${ozIcon('sys-reset', 14)}<span>목록 갱신 (${refreshCost}${discPct > 0 ? ` · -${discPct}%` : ''})</span>`;
+      refreshBtn.disabled = !isDay || refreshRem <= 0 || st.coin < refreshCost;
+      refreshBtn.innerHTML = refreshRem <= 0
+        ? `${ozIcon('sys-reset', 14)}<span>갱신 한도 완료 (0/${refreshMax})</span>`
+        : `${ozIcon('sys-reset', 14)}<span>목록 갱신 (${refreshCost}${discPct > 0 ? ` · -${discPct}%` : ''} · ${refreshRem}/${refreshMax})</span>`;
       refreshBtn.setAttribute('data-pop-title', '보급 목록 갱신');
-      refreshBtn.setAttribute('data-pop-highlight', `비용: ${refreshCost} 코인`);
-      refreshBtn.setAttribute('data-pop-body', '무전 보급 오퍼 6종을 새로 불러옵니다.');
+      refreshBtn.setAttribute('data-pop-highlight', refreshRem <= 0 ? `오늘 갱신 한도(${refreshMax}회) 소진` : `비용: ${refreshCost} 코인 · 남은 횟수 ${refreshRem}/${refreshMax}`);
+      refreshBtn.setAttribute('data-pop-body', '무전 보급 오퍼 6종을 새로 불러옵니다. 내일 새벽 초기화 (지하 물류 단말기 +1회).');
       refreshBtn.setAttribute('data-pop-tone', 'gold');
     }
 
@@ -1591,17 +1633,22 @@ window.ZS = window.ZS || {};
 
     if (exchangeWrap) {
       const routes = ZS.DATA.TRADER_EXCHANGE_ROUTES || [];
+      const exUsedMap = st.traderExchangeUsed || {};
       const rowsHtml = routes
         .map((r) => {
           const fromMeta = RES_ICON[r.from] || RES_ICON.scrap;
           const toMeta = RES_ICON[r.to] || RES_ICON.wood;
           const curStock = st[r.from] || 0;
-          const btnsHtml = [1, 5, 10]
+          const limit = ZS.Game.getExchangeRouteLimit ? ZS.Game.getExchangeRouteLimit(r.id) : (r.dailyLimit || 4);
+          const used = Math.max(0, exUsedMap[r.id] || 0);
+          const rem = Math.max(0, limit - used);
+          const quotaHtml = `<span class="exchange-quota-badge${rem <= 0 ? ' is-soldout' : ''}">${rem > 0 ? `${rem}/${limit}` : '매진'}</span>`;
+          const btnsHtml = [1, 3]
             .map((mult) => {
               const need = r.cost * mult;
               const gain = r.give * mult;
-              const disabled = !isDay || curStock < need ? 'disabled' : '';
-              return `<button type="button" class="exchange-mult-btn" data-route="${escapeHtml(r.id)}" data-mult="${mult}" ${disabled} data-pop-title="${escapeHtml(fromMeta.name)} → ${escapeHtml(toMeta.name)} 환전" data-pop-badge="×${mult}" data-pop-highlight="${escapeHtml(fromMeta.name)} ${need} → ${escapeHtml(toMeta.name)} +${gain}" data-pop-tone="gold">×${mult}</button>`;
+              const disabled = !isDay || rem < mult || curStock < need ? 'disabled' : '';
+              return `<button type="button" class="exchange-mult-btn" data-route="${escapeHtml(r.id)}" data-mult="${mult}" ${disabled} data-pop-title="${escapeHtml(fromMeta.name)} → ${escapeHtml(toMeta.name)} 환전" data-pop-badge="×${mult}" data-pop-highlight="${escapeHtml(fromMeta.name)} ${need} → ${escapeHtml(toMeta.name)} +${gain} (잔여 ${rem}/${limit})" data-pop-tone="gold">×${mult}</button>`;
             })
             .join('');
           return `
@@ -1610,6 +1657,42 @@ window.ZS = window.ZS || {};
                 <span class="inline-icon-text">${ozIcon(fromMeta.icon, 14, fromMeta.cls)}<b>${r.cost}</b></span>
                 <span class="exchange-arrow">→</span>
                 <span class="inline-icon-text">${ozIcon(toMeta.icon, 14, toMeta.cls)}<b>+${r.give}</b></span>
+                ${quotaHtml}
+              </div>
+              <div class="exchange-btns">${btnsHtml}</div>
+            </div>
+          `;
+        })
+        .join('');
+
+      const emgList = ZS.DATA.TRADER_EMERGENCY_SUPPLIES || [];
+      const emgUsedMap = st.traderEmergencyUsed || {};
+      const emgRowsHtml = emgList
+        .map((item) => {
+          const unitCost = ZS.Game.getEmergencySupplyCost ? ZS.Game.getEmergencySupplyCost(item.id) : item.coin;
+          const capVal = item.supply === 'food' ? (st.foodCap || 160) : item.supply === 'ammo' ? (st.ammoCap || 140) : (st.rocketCap || 40);
+          const curVal = Math.floor(st[item.supply] || 0);
+          const isFull = curVal >= capVal;
+          const limit = ZS.Game.getEmergencySupplyLimit ? ZS.Game.getEmergencySupplyLimit(item.id) : (item.dailyLimit || 3);
+          const used = Math.max(0, emgUsedMap[item.id] || 0);
+          const rem = Math.max(0, limit - used);
+          const quotaHtml = `<span class="exchange-quota-badge${rem <= 0 ? ' is-soldout' : ''}">${rem > 0 ? `${rem}/${limit}` : '매진'}</span>`;
+          const btnsHtml = [1, 3]
+            .map((mult) => {
+              const need = unitCost * mult;
+              const gain = item.give * mult;
+              const disabled = !isDay || isFull || rem < mult || st.coin < need ? 'disabled' : '';
+              return `<button type="button" class="exchange-mult-btn emg-supply-btn" data-emg-id="${escapeHtml(item.id)}" data-mult="${mult}" ${disabled} data-pop-title="${escapeHtml(item.name)}" data-pop-badge="×${mult}" data-pop-highlight="코인 ${need} → +${gain} (${curVal}/${capVal} · 잔여 ${rem}/${limit})" data-pop-tone="gold">×${mult}</button>`;
+            })
+            .join('');
+          return `
+            <div class="exchange-row supply-emg-row">
+              <div class="exchange-rate">
+                <span class="inline-icon-text">${ozIcon('res-coin', 14, 'icon-coin')}<b>${unitCost}</b></span>
+                <span class="exchange-arrow">→</span>
+                <span class="inline-icon-text">${ozIcon(item.icon, 14, item.cls)}<b>+${item.give}</b></span>
+                <span class="trader-section-sub">(${curVal}/${capVal})</span>
+                ${quotaHtml}
               </div>
               <div class="exchange-btns">${btnsHtml}</div>
             </div>
@@ -1620,15 +1703,28 @@ window.ZS = window.ZS || {};
       exchangeWrap.innerHTML = `
         <div class="trader-section-head">
           <span class="inline-icon-text">${ozIcon('act-trader', 15, 'icon-coin')}<b>대량 자원 환전소</b></span>
+          <span class="trader-section-sub">일일 한도 · 새벽 초기화</span>
         </div>
         <div class="exchange-grid">${rowsHtml}</div>
+        <div class="trader-section-head trader-emergency-subhead">
+          <span class="inline-icon-text">${ozIcon('res-ammo', 15, 'icon-ammo')}<b>긴급 보급 (식량·탄환·로켓)</b></span>
+          <span class="trader-section-sub">일일 한정</span>
+        </div>
+        <div class="exchange-grid">${emgRowsHtml}</div>
       `;
 
-      exchangeWrap.querySelectorAll('.exchange-mult-btn').forEach((btn) => {
+      exchangeWrap.querySelectorAll('.exchange-mult-btn:not(.emg-supply-btn)').forEach((btn) => {
         btn.addEventListener('click', () => {
           const rId = btn.getAttribute('data-route');
           const mult = Number(btn.getAttribute('data-mult'));
           ZS.Game.exchangeResource(rId, mult);
+        });
+      });
+      exchangeWrap.querySelectorAll('.emg-supply-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const eid = btn.getAttribute('data-emg-id');
+          const mult = Number(btn.getAttribute('data-mult'));
+          if (ZS.Game.buyEmergencySupply) ZS.Game.buyEmergencySupply(eid, mult);
         });
       });
     }
@@ -2188,11 +2284,16 @@ window.ZS = window.ZS || {};
         if (mDef.subType === 'manned') {
           mCrewCtlHtml = buildCrewStepperHtml(st, m, tx, ty, true);
         }
+        const mSupplyTxt = mEff.ammoShot > 0
+          ? ` · 탄환 ${mEff.ammoShot}/발${(st.ammo || 0) + 1e-6 < mEff.ammoShot ? ' (NO AMMO)' : ''}`
+          : mEff.rocketShot > 0
+          ? ` · 로켓 ${mEff.rocketShot}/발사${(st.rocket || 0) + 1e-6 < mEff.rocketShot ? ' (NO ROCKET)' : ''}`
+          : '';
         const mPopTxt = mDef.subType === 'manned'
           ? (mEff.isInactive
             ? ` · 배치 0/${mEff.maxCrew || 1}명 (비활성)`
             : ` · 배치 ${mEff.crew || 0}/${mEff.maxCrew || 1}명 (공속 ${Math.round((mEff.crewRateMult || 1) * 100)}%)`)
-          : ` · 전력 ~${getEstimatedNightPowerUse(mDef, mEff)}`;
+          : ` · 전력 ~${getEstimatedNightPowerUse(mDef, mEff)}${mSupplyTxt}`;
         const mAuraTxt = formatAuraStacksText(mEff.auraStacks);
         const platTxt = mEff.onPlateau ? ' · 고지대 보너스' : '';
         const rangeTxt = mEff.range.toFixed(1).replace(/\.0$/, '');
@@ -2441,8 +2542,13 @@ window.ZS = window.ZS || {};
         (metaItems ? `<div class="detail-meta-row">${metaItems}</div>` : '') +
         (upgradeBtnHtml ? `<div class="detail-action-row">${upgradeBtnHtml}</div>` : '');
 
+      const turretSupplyTag = eff.ammoShot > 0
+        ? ` · ${ozIcon('res-ammo', 13, (st.ammo || 0) + 1e-6 < eff.ammoShot ? 'icon-danger' : 'icon-ammo')}<span>탄환 ${eff.ammoShot}/발${(st.ammo || 0) + 1e-6 < eff.ammoShot ? ' (고갈 OFF)' : ''}</span>`
+        : eff.rocketShot > 0
+        ? ` · ${ozIcon('res-rocket', 13, (st.rocket || 0) + 1e-6 < eff.rocketShot ? 'icon-danger' : 'icon-rocket')}<span>로켓 ${eff.rocketShot}/발사${(st.rocket || 0) + 1e-6 < eff.rocketShot ? ' (고갈 OFF)' : ''}</span>`
+        : '';
       const pwrInfo = def.requiresPower
-        ? `${ozIcon('res-power', 13, 'icon-power')}<span title="야간 1웨이브 예상 전력 소모량">야간 ~${getEstimatedNightPowerUse(def, eff)} 전력</span>`
+        ? `${ozIcon('res-power', 13, 'icon-power')}<span title="야간 1웨이브 예상 전력 소모량">야간 ~${getEstimatedNightPowerUse(def, eff)} 전력</span>${turretSupplyTag}`
         : eff.isInactive
         ? `<span class="cost-chip short">${ozIcon('res-agent', 13, 'icon-danger')}<span>미배치 비활성 (0/${eff.maxCrew || 1}명)</span></span>`
         : `${ozIcon('res-agent', 13, 'icon-heal')}<span>배치 ${eff.crew || 0}/${eff.maxCrew || 1}명 · 공속 ${Math.round((eff.crewRateMult || 1) * 100)}% · 무전력</span>`;
@@ -2512,7 +2618,7 @@ window.ZS = window.ZS || {};
       } else if (def.subType === 'housing') {
         statSummary = `${ozIcon('res-agent', 13)}수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       } else if (def.id === 'supply_workshop') {
-        statSummary = `${ozIcon('act-repair', 13, 'icon-ap')}생산 직무 +${prof.prodSlots}자리 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
+        statSummary = `${ozIcon('act-repair', 13, 'icon-ap')}생산 +${prof.prodSlots}자리 · 식량+${prof.dawnFood || 0} · 탄환+${prof.dawnAmmo || 0} · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       } else if (def.id === 'research_lab') {
         statSummary = `${ozIcon('res-rp', 13, 'icon-rp')}연구 직무 +${prof.researchSlots}자리 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }

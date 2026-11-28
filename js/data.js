@@ -202,16 +202,16 @@ ZS.DATA = (function () {
   };
 
   const BARRACKS_TIERS = {
-    1: { level: 1, name: '전술 돔 막사', reqTech: null, cost: { wood: 60, scrap: 30 }, maxHp: 170, popCap: 4, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
-    2: { level: 2, name: '확장형 야전 막사', reqTech: 'inf_tier2', upCost: { wood: 60, scrap: 75, coin: 35 }, maxHp: 230, popCap: 6, cozy: 10, cozyGroup: 'infra_housing', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
-    3: { level: 3, name: '모듈러 컨테이너 숙소', reqTech: 'inf_tier3', upCost: { wood: 90, scrap: 140, coin: 75 }, maxHp: 310, popCap: 12, cozy: 18, cozyGroup: 'infra_housing', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
-    4: { level: 4, name: '강화 작전 생활관', reqTech: 'inf_tier4', upCost: { wood: 140, scrap: 240, coin: 140 }, maxHp: 420, popCap: 18, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
+    1: { level: 1, name: '전술 돔 막사', reqTech: null, cost: { wood: 60, scrap: 30 }, maxHp: 170, popCap: 3, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
+    2: { level: 2, name: '확장형 야전 막사', reqTech: 'inf_tier2', upCost: { wood: 60, scrap: 75, coin: 35 }, maxHp: 230, popCap: 5, cozy: 10, cozyGroup: 'infra_housing', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
+    3: { level: 3, name: '모듈러 컨테이너 숙소', reqTech: 'inf_tier3', upCost: { wood: 90, scrap: 140, coin: 75 }, maxHp: 310, popCap: 9, cozy: 18, cozyGroup: 'infra_housing', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
+    4: { level: 4, name: '강화 작전 생활관', reqTech: 'inf_tier4', upCost: { wood: 140, scrap: 240, coin: 140 }, maxHp: 420, popCap: 14, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
   };
 
   const WORKSHOP_TIERS = {
-    1: { level: 1, name: '작업장', reqTech: null, cost: { wood: 45, scrap: 20 }, maxHp: 150, prodSlots: 2, cozy: 3, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 17 },
-    2: { level: 2, name: '보급창고', reqTech: 'inf_tier3', upCost: { wood: 55, scrap: 50, coin: 25 }, maxHp: 240, prodSlots: 4, cozy: 6, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 21 },
-    3: { level: 3, name: '보급소', reqTech: 'inf_tier4', upCost: { wood: 80, scrap: 95, coin: 55 }, maxHp: 360, prodSlots: 6, cozy: 10, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 25 }
+    1: { level: 1, name: '작업장', reqTech: null, cost: { wood: 45, scrap: 20 }, maxHp: 150, prodSlots: 2, dawnFood: 4, dawnAmmo: 8, ammoCap: 30, cozy: 3, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 17 },
+    2: { level: 2, name: '보급창고', reqTech: 'inf_tier3', upCost: { wood: 55, scrap: 50, coin: 25 }, maxHp: 240, prodSlots: 4, dawnFood: 8, dawnAmmo: 15, ammoCap: 60, cozy: 6, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 21 },
+    3: { level: 3, name: '보급소', reqTech: 'inf_tier4', upCost: { wood: 80, scrap: 95, coin: 55 }, maxHp: 360, prodSlots: 6, dawnFood: 12, dawnAmmo: 24, ammoCap: 100, cozy: 10, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 25 }
   };
 
   const RESEARCH_LAB_TIERS = {
@@ -252,7 +252,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.8.5',
+  VERSION: 'v0.9.0',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
   B1_SIZE: 23,
@@ -282,7 +282,7 @@ ZS.DATA = (function () {
       accent: '#D49A5A',
       floorTint: '#686F76',
       iconId: 'b1-supply',
-      desc: '자재·고철 비축 및 물류 관제 구역 (파렛트 랙·물류 단말기 배치)'
+      desc: '자재·탄환·로켓 탄두 생산 및 물류 관제 구역'
     },
     lounge: {
       id: 'lounge',
@@ -299,13 +299,30 @@ ZS.DATA = (function () {
       floorTint: '#616B77',
       iconId: 'b1-vault',
       desc: '피격 면역 비상 축전·배전 구역 (ESS 배터리 랙·배전 제어반·비상 보조 발전기 배치)'
+    },
+    hydroponics: {
+      id: 'hydroponics',
+      name: '수경재배실',
+      accent: '#22C55E',
+      floorTint: '#5B6E62',
+      iconId: 'b1-hydro',
+      desc: '지하 식량 자급 생산 및 저온 저장 구역 (수경 베드·생장 LED·양액 탱크·저온 저장고 배치)'
+    },
+    armory: {
+      id: 'armory',
+      name: '병기 공방',
+      accent: '#F97316',
+      floorTint: '#6E6660',
+      iconId: 'b1-armory',
+      desc: '화기 장약·성벽 장갑·수리 드론 강화 공방 (장약 작업대·장갑 용접·드론 정비 배치)'
     }
   },
-  B1_ROOM_ORDER: ['quarters', 'research_lab', 'supply_depot', 'lounge', 'power_vault'],
+  B1_ROOM_ORDER: ['quarters', 'research_lab', 'supply_depot', 'lounge', 'power_vault', 'hydroponics', 'armory'],
   B1_CATEGORIES: [
-    { id: 'b1_ops',     iconId: 'b1-ops',     label: '굴착·구역·방폭문',   desc: '암반 굴착, 전술 복도·5대 방 구역 지정·해제 및 3D 방폭문 연결' },
-    { id: 'b1_living',  iconId: 'b1-living',  label: '생활관·휴게실',       desc: '생활관(4종) & 휴게실(5종) 지하 설비 배치' },
-    { id: 'b1_systems', iconId: 'b1-systems', label: '연구·보급·축전·공용', desc: '연구실(4종)·보급 창고(2종)·지하 축전실(3종)·공용 조명(1종)' }
+    { id: 'b1_ops',      iconId: 'b1-ops',      label: '굴착·구역', desc: '암반 굴착, 전술 복도·7대 방 구역 지정·해제 및 3D 방폭문 연결' },
+    { id: 'b1_living',   iconId: 'b1-living',   label: '생활·휴게', desc: '생활관(4종) & 휴게실(5종) 지하 설비 배치' },
+    { id: 'b1_systems',  iconId: 'b1-systems',  label: '연구·전력', desc: '연구실(4종)·지하 축전실(3종)·공용 조명(1종)' },
+    { id: 'b1_industry', iconId: 'b1-industry', label: '보급·산업', desc: '보급 창고(4종)·수경재배실(4종)·병기 공방(3종) 지하 산업 설비 배치' }
   ],
   B1_TOOLS: [
     {
@@ -395,6 +412,28 @@ ZS.DATA = (function () {
       desc: '드래그로 지하 축전실 구역을 지정해 전술 콘크리트 바닥과 자동 격벽을 형성합니다.'
     },
     {
+      id: 'b1_zone_hydroponics',
+      mode: 'b1_zone',
+      role: 'hydroponics',
+      name: '수경재배실 구역',
+      iconId: 'b1-hydro',
+      tag: '드래그 지정',
+      costLabel: '수경재배실',
+      accent: '#22C55E',
+      desc: '드래그로 수경재배실 구역을 지정해 식량 자급 생산 및 저온 저장 설비를 가동합니다.'
+    },
+    {
+      id: 'b1_zone_armory',
+      mode: 'b1_zone',
+      role: 'armory',
+      name: '병기 공방 구역',
+      iconId: 'b1-armory',
+      tag: '드래그 지정',
+      costLabel: '병기 공방',
+      accent: '#F97316',
+      desc: '드래그로 병기 공방 구역을 지정해 화기·방벽 장갑·수리 드론 개조 설비를 가동합니다.'
+    },
+    {
       id: 'b1_unzone',
       mode: 'b1_unzone',
       name: '구역 해제',
@@ -472,14 +511,54 @@ ZS.DATA = (function () {
     coin: 60
   },
 
+  INITIAL_SUPPLIES: {
+    food: 120,
+    ammo: 80,
+    rocket: 20
+  },
+
+  BASE_SUPPLY_CAPS: {
+    food: 160,
+    ammo: 140,
+    rocket: 40
+  },
+
+  SUPPLY_RULES: {
+    foodPerAgent: 1,
+    starveMannedDmgPenalty: 0.25,
+    starveOutputPenalty: 0.35,
+    starveCozyTierPenalty: 2,
+    prodFoodPerWorker: 1.5,
+    prodAmmoPerWorker: 2.0,
+    prodRocketPerWorker: 0,
+    armoryDmgCap: 0.24,
+    armoryWallHpCap: 0.30,
+    armoryRepairDiscCap: 0.45,
+    armoryDroneHealCap: 105,
+    armoryDroneCdRedCap: 4.5,
+    growLedRoomFoodCap: 0.40
+  },
+
+  RECRUIT_RULES: {
+    brackets: [
+      { maxWave: 5, baseRate: 0.75 },
+      { maxWave: 12, baseRate: 1.15 },
+      { maxWave: 25, baseRate: 1.60 },
+      { maxWave: 999, baseRate: 2.10 }
+    ],
+    cozyMult: [1.0, 1.12, 1.25, 1.40, 1.55, 1.70, 1.85],
+    maxPerDawn: 3,
+    fullBedCarryCap: 0.90
+  },
+
   HQ_STATS: {
     id: 'command_hq',
     name: '전술 지휘 본부',
     maxHp: 800,
     basePowerCap: 70,
     baseDayCharge: 32,
-    basePopCap: 10,
-    startingAgents: 10
+    basePopCap: 9,
+    startingAgents: 9
   },
 
   HQ_LEVELS: [
@@ -491,8 +570,14 @@ ZS.DATA = (function () {
       maxHp: 800,
       basePowerCap: 70,
       baseDayCharge: 32,
-      basePopCap: 10,
+      basePopCap: 9,
       baseRpPerScientist: 0.8,
+      baseFoodRation: 14,
+      baseAmmoSupply: 14,
+      baseRocketSupply: 0,
+      foodCapAdd: 0,
+      ammoCapAdd: 0,
+      rocketCapAdd: 0,
       combatSlots: 0,
       researchSlots: 2,
       prodSlots: 2,
@@ -510,8 +595,14 @@ ZS.DATA = (function () {
       maxHp: 1350,
       basePowerCap: 105,
       baseDayCharge: 46,
-      basePopCap: 14,
+      basePopCap: 13,
       baseRpPerScientist: 1.0,
+      baseFoodRation: 20,
+      baseAmmoSupply: 24,
+      baseRocketSupply: 4,
+      foodCapAdd: 40,
+      ammoCapAdd: 50,
+      rocketCapAdd: 20,
       combatSlots: 2,
       researchSlots: 2,
       prodSlots: 2,
@@ -541,8 +632,14 @@ ZS.DATA = (function () {
       maxHp: 2100,
       basePowerCap: 145,
       baseDayCharge: 64,
-      basePopCap: 18,
+      basePopCap: 17,
       baseRpPerScientist: 1.25,
+      baseFoodRation: 28,
+      baseAmmoSupply: 36,
+      baseRocketSupply: 12,
+      foodCapAdd: 90,
+      ammoCapAdd: 110,
+      rocketCapAdd: 50,
       combatSlots: 3,
       researchSlots: 3,
       prodSlots: 3,
@@ -570,8 +667,14 @@ ZS.DATA = (function () {
       maxHp: 3100,
       basePowerCap: 195,
       baseDayCharge: 88,
-      basePopCap: 24,
+      basePopCap: 22,
       baseRpPerScientist: 1.5,
+      baseFoodRation: 38,
+      baseAmmoSupply: 50,
+      baseRocketSupply: 20,
+      foodCapAdd: 160,
+      ammoCapAdd: 180,
+      rocketCapAdd: 90,
       combatSlots: 4,
       researchSlots: 4,
       prodSlots: 4,
@@ -599,8 +702,14 @@ ZS.DATA = (function () {
       maxHp: 4600,
       basePowerCap: 260,
       baseDayCharge: 120,
-      basePopCap: 30,
+      basePopCap: 28,
       baseRpPerScientist: 2.0,
+      baseFoodRation: 50,
+      baseAmmoSupply: 66,
+      baseRocketSupply: 30,
+      foodCapAdd: 240,
+      ammoCapAdd: 260,
+      rocketCapAdd: 140,
       combatSlots: 4,
       researchSlots: 5,
       prodSlots: 5,
@@ -888,6 +997,9 @@ ZS.DATA = (function () {
   PROD_RATES: {
     woodPerWorker: 2.0,
     scrapPerWorker: 1.5,
+    foodPerWorker: 1.5,
+    ammoPerWorker: 2.0,
+    rocketPerWorker: 0,
     digBase: 1.2,
     digDrill1: 1.6
   },
@@ -1082,6 +1194,8 @@ ZS.DATA = (function () {
       requiresPower: true,
       powerIdle: 0.55,
       powerShot: 0.28,
+      supplyType: 'ammo',
+      ammoShot: 0.12,
       maxHp: 240,
       range: 4.6,
       damage: 15,
@@ -1089,7 +1203,7 @@ ZS.DATA = (function () {
       projType: 'vulcan',
       canMountOnWall: true,
       mountTopOffset: 12,
-      desc: '[전력 소모 · 연구 해금] 레이더 돔 탑재 고속 개틀링 포탑. 압도적인 화력을 퍼붓지만 야간 전력을 소모합니다.'
+      desc: '[전력+탄환 소모 · 연구 해금] 레이더 돔 탑재 고속 개틀링 포탑. 탄환(0.12/발)과 전력을 소모하며 탄환 고갈 시 정지합니다.'
     },
     missile_pod: {
       id: 'missile_pod',
@@ -1102,6 +1216,8 @@ ZS.DATA = (function () {
       requiresPower: true,
       powerIdle: 0.85,
       powerShot: 1.7,
+      supplyType: 'rocket',
+      rocketShot: 1.0,
       maxHp: 260,
       minRange: 2.2,
       range: 8.0,
@@ -1111,7 +1227,7 @@ ZS.DATA = (function () {
       splashRadius: 1.20,
       fireRate: 0.48,
       projType: 'rocket',
-      desc: '[전력 소모 · 다연장 곡사 · 연구 해금] 산맥 너머 적군에 고각 로켓을 연속 일제 발사(2→3→6발)해 광역 제압합니다. (최소 사거리 2.2 · 정전 시 정지)'
+      desc: '[전력+로켓 소모 · 다연장 곡사 · 연구 해금] 산맥 너머 적군에 고각 로켓을 일제 발사(2→3→6발)합니다. (1발/일제사 · 고갈 시 정지)'
     },
     emp_coil: {
       id: 'emp_coil',
@@ -1192,12 +1308,12 @@ ZS.DATA = (function () {
       reqHqLevel: 1,
       cost: { wood: 60, scrap: 30 },
       maxHp: 170,
-      popCap: 4,
+      popCap: 3,
       cozy: 5,
       cozyGroup: 'housing_t1',
       lightRadius: 1.8,
       lightColor: 'rgba(255, 206, 112, 0.34)',
-      desc: '[요원 숙소 · 4단 진화] 요원 수용량 +4명(+4→+6→+12→+18)을 확장합니다. 인프라 연구 시 모듈러 숙소·강화 작전 생활관으로 진화합니다.'
+      desc: '[요원 숙소 · 4단 진화] 요원 수용량 +3명(+3→+5→+9→+14)을 확장합니다. 인프라 연구 시 모듈러 숙소·강화 작전 생활관으로 진화합니다.'
     },
     supply_workshop: {
       id: 'supply_workshop',
@@ -1209,9 +1325,12 @@ ZS.DATA = (function () {
       cost: { wood: 45, scrap: 20 },
       maxHp: 150,
       prodSlots: 2,
+      dawnFood: 4,
+      dawnAmmo: 8,
+      ammoCap: 30,
       cozy: 3,
       cozyGroup: 'infra_workshop',
-      desc: '[생산 슬롯 +2 · 무전력 · 3단 진화] 야전 공방 작업장. 생산요원 배치 상한을 확장합니다 (보급창고 +4 → 보급소 +6).'
+      desc: '[생산 슬롯 +2 · 식량+4/탄환+8 · 무전력] 야전 공방 작업장. 생산 슬롯과 매일 아침 식량·탄환 비축량을 늘립니다.'
     },
     research_lab: {
       id: 'research_lab',
@@ -1379,11 +1498,11 @@ ZS.DATA = (function () {
       category: 'b1_living',
       layer: 'struct',
       subType: 'housing',
-      cost: { wood: 40, scrap: 30, coin: 12 },
-      popCap: 4,
+      cost: { wood: 32, scrap: 24, coin: 10 },
+      popCap: 2,
       cozy: 8,
       cozyGroup: 'b1_bunk_bed',
-      desc: '[생활관 전용] 2층 강철 침대. 요원 수용 +4명 (고정 · 감쇠 없음) · 안락함 +8 (안락함 4개째부터 감쇠).'
+      desc: '[생활관 전용] 2층 강철 침대. 요원 수용 +2명 (고정 · 감쇠 없음) · 안락함 +8 (안락함 4개째부터 감쇠).'
     },
     b1_locker: {
       id: 'b1_locker',
@@ -1536,14 +1655,14 @@ ZS.DATA = (function () {
       desc: '[연구실 전용 · 0.55/s 전력] 기지 전역 RP 획득률 +15% · 지상 유인 초소 & 자동 포탑 전역 치명타율 +4%p.'
     },
 
-    // ================= UNDERGROUND B1 GADGETS: SUPPLY DEPOT (2) =================
+    // ================= UNDERGROUND B1 GADGETS: SUPPLY DEPOT (4) =================
     b1_pallet_rack: {
       id: 'b1_pallet_rack',
       name: '자재 파렛트 랙',
       domain: 'underground',
-      b1Category: 'b1_systems',
+      b1Category: 'b1_industry',
       requiredRole: 'supply_depot',
-      category: 'b1_systems',
+      category: 'b1_industry',
       layer: 'struct',
       subType: 'b1_supply',
       cost: { wood: 20, scrap: 14 },
@@ -1552,15 +1671,18 @@ ZS.DATA = (function () {
       prodWood: 1.2,
       prodScrap: 1.2,
       prodSlots: 1,
-      desc: '[보급 창고 전용] 생산 슬롯 +1자리 · 매일 아침 +2.0 목재 · +1.5 고철 + 생산요원당 +1.2 목재 · +1.2 고철.'
+      foodCap: 20,
+      ammoCap: 30,
+      rocketCap: 10,
+      desc: '[보급 창고 전용] 생산 슬롯 +1 · 아침 목재+2/고철+1.5 · 요원당 목재/고철 +1.2 · 식량/탄환/로켓 저장고 확장.'
     },
     b1_logistics_term: {
       id: 'b1_logistics_term',
       name: '물류 단말기',
       domain: 'underground',
-      b1Category: 'b1_systems',
+      b1Category: 'b1_industry',
       requiredRole: 'supply_depot',
-      category: 'b1_systems',
+      category: 'b1_industry',
       layer: 'struct',
       subType: 'b1_supply',
       reqTech: 'b1_gadgets_adv',
@@ -1570,7 +1692,167 @@ ZS.DATA = (function () {
       dawnCoin: 6,
       traderDiscAdd: 0.08,
       traderDiscCap: 0.24,
-      desc: '[보급 창고 전용 · 0.30/s 전력] 매일 아침 +6 코인 · 외부 교역소 구매·갱신 비용 -8% (상한 -24%).'
+      desc: '[보급 창고 전용 · 0.30/s 전력] 매일 +6 코인 · 상점 -8% 할인(상한 -24%) · 일일 환전 +1회(최대 +2) · 목록 갱신 +1회.'
+    },
+    b1_ammo_press: {
+      id: 'b1_ammo_press',
+      name: '탄약 프레스 라인',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'supply_depot',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_supply',
+      cost: { wood: 14, scrap: 28, coin: 8 },
+      dawnAmmo: 20,
+      prodAmmo: 5,
+      ammoCap: 90,
+      prodSlots: 1,
+      desc: '[보급 창고 전용 · 무전력] 생산 슬롯 +1 · 탄환 상한 +90 · 매일 아침 +20 탄환 + 생산요원당 +5 탄환.'
+    },
+    b1_rocket_rig: {
+      id: 'b1_rocket_rig',
+      name: '로켓 탄두 조립대',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'supply_depot',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_supply',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.30,
+      cost: { wood: 16, scrap: 42, coin: 16 },
+      dawnRocket: 10,
+      prodRocket: 2.5,
+      rocketCap: 40,
+      prodSlots: 1,
+      desc: '[보급 창고 전용 · 0.30/s 전력 · 연구 해금] 생산 슬롯 +1 · 로켓 상한 +40 · 매일 아침 +10 로켓 + 생산요원당 +2.5 로켓.'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: HYDROPONICS (4) =================
+    b1_hydro_bed: {
+      id: 'b1_hydro_bed',
+      name: '수경 식량 베드',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'hydroponics',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_hydro',
+      cost: { wood: 18, scrap: 14, coin: 6 },
+      dawnFood: 14,
+      prodFood: 3,
+      foodCap: 40,
+      cozy: 5,
+      cozyGroup: 'b1_hydro_bed',
+      desc: '[수경재배실 전용 · 무전력] 식량 상한 +40 · 안락함 +5 · 매일 아침 +14 식량 + 생산요원당 +3 식량.'
+    },
+    b1_grow_led: {
+      id: 'b1_grow_led',
+      name: '생장 LED 랙',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'hydroponics',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_hydro',
+      requiresPower: true,
+      powerIdle: 0.30,
+      cost: { wood: 10, scrap: 24, coin: 10 },
+      roomFoodBonusPct: 0.20,
+      cozy: 4,
+      cozyGroup: 'b1_grow_led',
+      desc: '[수경재배실 전용 · 0.30/s 전력] 안락함 +4 · 같은 수경재배실 식량 생산 +20% 증폭 (방당 상한 +40%).'
+    },
+    b1_nutrient_tank: {
+      id: 'b1_nutrient_tank',
+      name: '양액 순환 탱크',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'hydroponics',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_hydro',
+      reqTech: 'b1_gadgets_adv',
+      cost: { wood: 14, scrap: 30, coin: 12 },
+      dawnFood: 8,
+      foodCap: 30,
+      cozy: 9,
+      cozyGroup: 'b1_nutrient_tank',
+      desc: '[수경재배실 전용 · 연구 해금] 식량 상한 +30 · 안락함 +9 · 매일 아침 +8 식량 자급.'
+    },
+    b1_cold_storage: {
+      id: 'b1_cold_storage',
+      name: '저온 식량 저장고',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'hydroponics',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_hydro',
+      requiresPower: true,
+      powerIdle: 0.25,
+      cost: { wood: 14, scrap: 28, coin: 10 },
+      foodCap: 160,
+      cozy: 3,
+      cozyGroup: 'b1_cold_storage',
+      desc: '[수경재배실 전용 · 0.25/s 전력] 안락함 +3 · 식량 최대 저장 용량 +160 대폭 확장.'
+    },
+
+    // ================= UNDERGROUND B1 GADGETS: ARMORY (3) =================
+    b1_powder_bench: {
+      id: 'b1_powder_bench',
+      name: '정밀 장약 작업대',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'armory',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_armory',
+      cost: { wood: 14, scrap: 30, coin: 12 },
+      armoryDmgAdd: 0.08,
+      cozy: 2,
+      cozyGroup: 'b1_powder_bench',
+      desc: '[병기 공방 전용 · 무전력] 안락함 +2 · 모든 유인 초소·발칸·로켓 포대 화력 +8% (상한 +24%).'
+    },
+    b1_armor_welder: {
+      id: 'b1_armor_welder',
+      name: '장갑 용접 벤치',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'armory',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_armory',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.30,
+      cost: { wood: 16, scrap: 38, coin: 16 },
+      armoryWallHpAdd: 0.10,
+      armoryRepairDisc: 0.15,
+      cozy: 2,
+      cozyGroup: 'b1_armor_welder',
+      desc: '[병기 공방 전용 · 0.30/s 전력 · 연구 해금] 성벽·통문 최대 HP +10% (상한 +30%) · 주간 일괄 수리 비용 -15% (상한 -45%).'
+    },
+    b1_drone_station: {
+      id: 'b1_drone_station',
+      name: '드론 정비 스테이션',
+      domain: 'underground',
+      b1Category: 'b1_industry',
+      requiredRole: 'armory',
+      category: 'b1_industry',
+      layer: 'struct',
+      subType: 'b1_armory',
+      reqTech: 'b1_gadgets_adv',
+      requiresPower: true,
+      powerIdle: 0.35,
+      cost: { wood: 16, scrap: 40, coin: 18 },
+      armoryDroneHealAdd: 35,
+      armoryDroneCdRed: 1.5,
+      cozy: 3,
+      cozyGroup: 'b1_drone_station',
+      desc: '[병기 공방 전용 · 0.35/s 전력 · 연구 해금] 긴급 나노 수리 드론 회복량 +35 HP · 대기시간 -1.5초 (최대 +105 HP · -4.5초).'
     },
 
     // ================= UNDERGROUND B1 GADGETS: POWER VAULT (3) =================
@@ -1827,7 +2109,7 @@ ZS.DATA = (function () {
     {
       id: 'crate_pod',
       name: '프리팹: 모듈러 컨테이너 숙소',
-      desc: '목재·고철·코인 없이 모듈러 컨테이너 숙소(3단계 · 수용 +12명) 1회 무료 배치권을 확보합니다.',
+      desc: '목재·고철·코인 없이 모듈러 컨테이너 숙소(3단계 · 수용 +9명) 1회 무료 배치권을 확보합니다.',
       coinCost: 95,
       type: 'free_item',
       itemId: 'field_tent',
@@ -1848,18 +2130,31 @@ ZS.DATA = (function () {
       svgIcon: 'res-rp',
       svgColorCls: 'icon-rp',
       desc: '외부 연구소에서 암호 해독한 전술 데이터 디스크. 즉시 연구포인트 +5 RP를 획득합니다.',
-      coinCost: 28,
+      coinCost: 36,
       type: 'rp',
       amount: 5
     }
   ],
 
+  TRADER_LIMITS: {
+    baseRefreshLimit: 2,
+    logisticsRefreshBonus: 1,
+    refreshCosts: [20, 40, 65],
+    logisticsExchangeBonusCap: 2
+  },
+
   TRADER_EXCHANGE_ROUTES: [
-    { id: 'scrap_to_wood', from: 'scrap', to: 'wood', cost: 20, give: 24, label: '고철 → 목재' },
-    { id: 'coin_to_wood',  from: 'coin',  to: 'wood', cost: 10, give: 22, label: '코인 → 목재' },
-    { id: 'coin_to_scrap', from: 'coin',  to: 'scrap', cost: 12, give: 20, label: '코인 → 고철' },
-    { id: 'scrap_to_coin', from: 'scrap', to: 'coin', cost: 28, give: 10, label: '고철 → 코인' },
-    { id: 'wood_to_coin',  from: 'wood',  to: 'coin', cost: 35, give: 10, label: '목재 → 코인' }
+    { id: 'scrap_to_wood', from: 'scrap', to: 'wood', cost: 20, give: 24, dailyLimit: 4, label: '고철 → 목재' },
+    { id: 'coin_to_wood',  from: 'coin',  to: 'wood', cost: 12, give: 22, dailyLimit: 4, label: '코인 → 목재' },
+    { id: 'coin_to_scrap', from: 'coin',  to: 'scrap', cost: 15, give: 20, dailyLimit: 4, label: '코인 → 고철' },
+    { id: 'scrap_to_coin', from: 'scrap', to: 'coin', cost: 32, give: 10, dailyLimit: 3, label: '고철 → 코인' },
+    { id: 'wood_to_coin',  from: 'wood',  to: 'coin', cost: 40, give: 10, dailyLimit: 3, label: '목재 → 코인' }
+  ],
+
+  TRADER_EMERGENCY_SUPPLIES: [
+    { id: 'emg_food',   supply: 'food',   name: '긴급 식량 배급', coin: 14, give: 30, dailyLimit: 3, icon: 'res-food',   cls: 'icon-food' },
+    { id: 'emg_ammo',   supply: 'ammo',   name: '긴급 탄환 보급', coin: 16, give: 45, dailyLimit: 3, icon: 'res-ammo',   cls: 'icon-ammo' },
+    { id: 'emg_rocket', supply: 'rocket', name: '긴급 로켓 탄두', coin: 18, give: 15, dailyLimit: 2, icon: 'res-rocket', cls: 'icon-rocket' }
   ],
 
   TRADER_NIGHT_CONSUMABLES: [
@@ -1987,6 +2282,7 @@ ZS.DATA = (function () {
       startingVouchers: { wind_turbine: 1, battery_bank: 1 },
       overdriveThreshold: 0.50,
       turretPowerShotMult: 0.75,
+      supplyCostMult: 0.80,
       overdriveTurretFireRateMult: 1.25,
       overdriveFloodlightMult: 1.25,
       overdriveEmpDurationMult: 0.35,
@@ -1994,7 +2290,7 @@ ZS.DATA = (function () {
       badgeTag: 'ARC ≥50%',
       pros: [
         '시작 시 풍력 터빈 보급권 ×1 + 배터리 보급권 ×1 지급',
-        '자동 포탑 사격 전력 소모 -25%',
+        '자동 포탑 사격 전력 -25% · 탄환/로켓 소모 -20%',
         '전력 ≥50% 유지 시 자동 포탑 연사력 +25%',
         '전력 ≥50% 유지 시 LED 투광등 조명·오라 반경 +25%',
         '전력 ≥50% 유지 시 전기 시설 EMP 기절 시간 -65%'
