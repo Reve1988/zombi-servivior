@@ -33,6 +33,24 @@ window.ZS = window.ZS || {};
     scrap: DATA.INITIAL_RESOURCES.scrap,
     coin: DATA.INITIAL_RESOURCES.coin,
 
+    food: (DATA.INITIAL_SUPPLIES && DATA.INITIAL_SUPPLIES.food) || 120,
+    foodCap: (DATA.BASE_SUPPLY_CAPS && DATA.BASE_SUPPLY_CAPS.food) || 160,
+    ammo: (DATA.INITIAL_SUPPLIES && DATA.INITIAL_SUPPLIES.ammo) || 80,
+    ammoCap: (DATA.BASE_SUPPLY_CAPS && DATA.BASE_SUPPLY_CAPS.ammo) || 140,
+    rocket: (DATA.INITIAL_SUPPLIES && DATA.INITIAL_SUPPLIES.rocket) || 20,
+    rocketCap: (DATA.BASE_SUPPLY_CAPS && DATA.BASE_SUPPLY_CAPS.rocket) || 40,
+    starving: false,
+    ammoDepletedBannered: false,
+    rocketDepletedBannered: false,
+    supplyDaily: {
+      foodIn: 0,
+      foodOut: 0,
+      ammoIn: 0,
+      rocketIn: 0
+    },
+    surfaceDawnFood: 0,
+    surfaceDawnAmmo: 0,
+
     power: DATA.HQ_STATS.basePowerCap,
     powerCap: DATA.HQ_STATS.basePowerCap,
     dayCharge: DATA.HQ_STATS.baseDayCharge,
@@ -54,7 +72,10 @@ window.ZS = window.ZS || {};
       rp: 0,
       wood: 0,
       scrap: 0,
-      digAp: 0
+      digAp: 0,
+      food: 0,
+      ammo: 0,
+      rocket: 0
     },
     popCap: DATA.HQ_STATS.basePopCap,
     popUsed: 0,
@@ -77,6 +98,20 @@ window.ZS = window.ZS || {};
     b1SupplyProdWood: 0,
     b1SupplyProdScrap: 0,
     b1SupplyCoin: 0,
+    b1FoodCap: 0,
+    b1AmmoCap: 0,
+    b1RocketCap: 0,
+    b1DawnFood: 0,
+    b1DawnAmmo: 0,
+    b1DawnRocket: 0,
+    b1ProdFoodAdd: 0,
+    b1ProdAmmoAdd: 0,
+    b1ProdRocketAdd: 0,
+    b1ArmoryDmgAdd: 0,
+    b1ArmoryWallHpAdd: 0,
+    b1ArmoryRepairDisc: 0,
+    b1ArmoryDroneHealAdd: 0,
+    b1ArmoryDroneCdRed: 0,
     b1TraderDisc: 0,
     b1MannedFireRateMult: 0,
     b1MannedXpMult: 0,
@@ -97,13 +132,17 @@ window.ZS = window.ZS || {};
     cozyDiversityBonus: 0,
     cozyGroupCounts: {},
     cozyTier: DATA.COZY_TIERS[0],
+    rawCozyTier: DATA.COZY_TIERS[0],
     cozyTierUpTimer: 0,
     cozyPulseSeq: 0,
 
     freeVouchers: {},
     traderOffers: [],
-    traderRefreshCost: 15,
+    traderRefreshCost: 20,
     traderRefreshCount: 0,
+    traderExchangeUsed: {},
+    traderEmergencyUsed: {},
+    b1LogisticsCount: 0,
     nightConsumables: {
       overpressureAmmo: false,
       reactiveArmor: false
@@ -1511,6 +1550,18 @@ window.ZS = window.ZS || {};
     state.wood = DATA.INITIAL_RESOURCES.wood;
     state.scrap = DATA.INITIAL_RESOURCES.scrap;
     state.coin = DATA.INITIAL_RESOURCES.coin;
+    state.food = (DATA.INITIAL_SUPPLIES && DATA.INITIAL_SUPPLIES.food) || 120;
+    state.foodCap = (DATA.BASE_SUPPLY_CAPS && DATA.BASE_SUPPLY_CAPS.food) || 160;
+    state.ammo = (DATA.INITIAL_SUPPLIES && DATA.INITIAL_SUPPLIES.ammo) || 80;
+    state.ammoCap = (DATA.BASE_SUPPLY_CAPS && DATA.BASE_SUPPLY_CAPS.ammo) || 140;
+    state.rocket = (DATA.INITIAL_SUPPLIES && DATA.INITIAL_SUPPLIES.rocket) || 20;
+    state.rocketCap = (DATA.BASE_SUPPLY_CAPS && DATA.BASE_SUPPLY_CAPS.rocket) || 40;
+    state.starving = false;
+    state.ammoDepletedBannered = false;
+    state.rocketDepletedBannered = false;
+    state.supplyDaily = { foodIn: 0, foodOut: 0, ammoIn: 0, rocketIn: 0 };
+    state.surfaceDawnFood = 0;
+    state.surfaceDawnAmmo = 0;
 
     const hqInfo = getHqLevelInfo(1);
     state.agents = DATA.HQ_STATS.startingAgents + (divDef.startingAgentsBonus || 0);
@@ -1524,7 +1575,7 @@ window.ZS = window.ZS || {};
       research: hqInfo.researchSlots || 2,
       prod: hqInfo.prodSlots || 2
     };
-    state.prodCarry = { rp: 0, wood: 0, scrap: 0, digAp: 0 };
+    state.prodCarry = { rp: 0, wood: 0, scrap: 0, digAp: 0, food: 0, ammo: 0, rocket: 0 };
     state.debugBonusPopCap = 0;
     state.rp = 0;
     state.researchedTechs = {};
@@ -1544,6 +1595,20 @@ window.ZS = window.ZS || {};
     state.b1SupplyProdWood = 0;
     state.b1SupplyProdScrap = 0;
     state.b1SupplyCoin = 0;
+    state.b1FoodCap = 0;
+    state.b1AmmoCap = 0;
+    state.b1RocketCap = 0;
+    state.b1DawnFood = 0;
+    state.b1DawnAmmo = 0;
+    state.b1DawnRocket = 0;
+    state.b1ProdFoodAdd = 0;
+    state.b1ProdAmmoAdd = 0;
+    state.b1ProdRocketAdd = 0;
+    state.b1ArmoryDmgAdd = 0;
+    state.b1ArmoryWallHpAdd = 0;
+    state.b1ArmoryRepairDisc = 0;
+    state.b1ArmoryDroneHealAdd = 0;
+    state.b1ArmoryDroneCdRed = 0;
     state.b1TraderDisc = 0;
     state.b1MannedFireRateMult = 0;
     state.b1MannedXpMult = 0;
@@ -1559,8 +1624,11 @@ window.ZS = window.ZS || {};
     if (ZS._UI && ZS._UI.onLayerChanged) ZS._UI.onLayerChanged('surface');
     state.freeVouchers = divDef.startingVouchers ? { ...divDef.startingVouchers } : {};
     state.showWindOverlay = false;
-    state.traderRefreshCost = 15;
+    state.traderRefreshCost = (DATA.TRADER_LIMITS && DATA.TRADER_LIMITS.refreshCosts && DATA.TRADER_LIMITS.refreshCosts[0]) || 20;
     state.traderRefreshCount = 0;
+    state.traderExchangeUsed = {};
+    state.traderEmergencyUsed = {};
+    state.b1LogisticsCount = 0;
     state.nightConsumables = { overpressureAmmo: false, reactiveArmor: false };
     state.agentRecruitProgress = 0;
     state.statsEpoch = 1;
@@ -1993,11 +2061,15 @@ window.ZS = window.ZS || {};
         wood: state.wood,
         scrap: state.scrap,
         coin: state.coin,
+        food: state.food,
+        ammo: state.ammo,
+        rocket: state.rocket,
+        starving: !!state.starving,
         power: state.power,
         agents: state.agents,
         jobs: state.jobs ? { ...state.jobs } : { combat: state.popUsed || 0, research: 0, prod: 0 },
         jobCaps: state.jobCaps ? { ...state.jobCaps } : { combat: 0, research: 2, prod: 2 },
-        prodCarry: state.prodCarry ? { ...state.prodCarry } : { rp: 0, wood: 0, scrap: 0, digAp: 0 },
+        prodCarry: state.prodCarry ? { ...state.prodCarry } : { rp: 0, wood: 0, scrap: 0, digAp: 0, food: 0, ammo: 0, rocket: 0 },
         crewSlottedV1: true,
         debugBonusPopCap: state.debugBonusPopCap || 0,
         rp: state.rp || 0,
@@ -2011,8 +2083,10 @@ window.ZS = window.ZS || {};
         nextWaveIntel: state.nextWaveIntel,
         freeVouchers: state.freeVouchers,
         traderOffers: state.traderOffers,
-        traderRefreshCost: state.traderRefreshCost || 15,
+        traderRefreshCost: state.traderRefreshCost || 20,
         traderRefreshCount: state.traderRefreshCount || 0,
+        traderExchangeUsed: state.traderExchangeUsed ? { ...state.traderExchangeUsed } : {},
+        traderEmergencyUsed: state.traderEmergencyUsed ? { ...state.traderEmergencyUsed } : {},
         nightConsumables: state.nightConsumables || { overpressureAmmo: false, reactiveArmor: false },
         agentRecruitProgress: state.agentRecruitProgress || 0,
         terrainSeed: state.terrainSeed || 0,
@@ -2150,6 +2224,19 @@ window.ZS = window.ZS || {};
       state.scrap = d.scrap ?? DATA.INITIAL_RESOURCES.scrap;
       state.coin = d.coin ?? DATA.INITIAL_RESOURCES.coin;
       state.agents = d.agents ?? DATA.HQ_STATS.startingAgents;
+      const initSup = DATA.INITIAL_SUPPLIES || { food: 120, ammo: 80, rocket: 20 };
+      state.food = d.food !== undefined && Number.isFinite(Number(d.food))
+        ? Math.max(0, Number(d.food))
+        : Math.max(initSup.food || 120, (state.agents || 10) * 4);
+      state.ammo = d.ammo !== undefined && Number.isFinite(Number(d.ammo))
+        ? Math.max(0, Number(d.ammo))
+        : (initSup.ammo || 80);
+      state.rocket = d.rocket !== undefined && Number.isFinite(Number(d.rocket))
+        ? Math.max(0, Number(d.rocket))
+        : (initSup.rocket || 20);
+      state.starving = d.food !== undefined ? !!d.starving : false;
+      state.ammoDepletedBannered = false;
+      state.rocketDepletedBannered = false;
       state.debugBonusPopCap = d.debugBonusPopCap || 0;
       state.rp = Math.max(0, Number(d.rp) || 0);
       state.digApCap = Math.max(16, Number(d.digApCap) || 24);
@@ -2209,8 +2296,10 @@ window.ZS = window.ZS || {};
         migratedTechOrJobs = true;
       }
       state.freeVouchers = d.freeVouchers || {};
-      state.traderRefreshCost = Math.max(15, Number(d.traderRefreshCost) || 15);
+      state.traderRefreshCost = Math.max(20, Number(d.traderRefreshCost) || 20);
       state.traderRefreshCount = Math.max(0, Number(d.traderRefreshCount) || 0);
+      state.traderExchangeUsed = (d.traderExchangeUsed && typeof d.traderExchangeUsed === 'object') ? { ...d.traderExchangeUsed } : {};
+      state.traderEmergencyUsed = (d.traderEmergencyUsed && typeof d.traderEmergencyUsed === 'object') ? { ...d.traderEmergencyUsed } : {};
       state.nightConsumables = {
         overpressureAmmo: !!(d.nightConsumables && d.nightConsumables.overpressureAmmo),
         reactiveArmor: !!(d.nightConsumables && d.nightConsumables.reactiveArmor)
@@ -2309,9 +2398,12 @@ window.ZS = window.ZS || {};
             rp: Math.max(0, Number(d.prodCarry.rp) || 0),
             wood: Math.max(0, Number(d.prodCarry.wood) || 0),
             scrap: Math.max(0, Number(d.prodCarry.scrap) || 0),
-            digAp: Math.max(0, Number(d.prodCarry.digAp) || 0)
+            digAp: Math.max(0, Number(d.prodCarry.digAp) || 0),
+            food: Math.max(0, Number(d.prodCarry.food) || 0),
+            ammo: Math.max(0, Number(d.prodCarry.ammo) || 0),
+            rocket: Math.max(0, Number(d.prodCarry.rocket) || 0)
           }
-        : { rp: 0, wood: 0, scrap: 0, digAp: 0 };
+        : { rp: 0, wood: 0, scrap: 0, digAp: 0, food: 0, ammo: 0, rocket: 0 };
 
       state.jobs = (d.jobs && typeof d.jobs === 'object')
         ? {
@@ -2446,6 +2538,22 @@ window.ZS = window.ZS || {};
     state.coin += add;
     ZS.Audio.playTrade();
     banner(`[DEBUG] +${add} 자원 지급`, `목재·고철·코인 각 +${add} 추가 완료`, 'good');
+    saveGame();
+    notifyUi();
+    return true;
+  }
+
+  function debugAddSupplies() {
+    if (!isDebugAllowed()) return false;
+    state.food = Math.min(state.foodCap || 160, (state.food || 0) + 100);
+    state.ammo = Math.min(state.ammoCap || 140, (state.ammo || 0) + 100);
+    state.rocket = Math.min(state.rocketCap || 40, (state.rocket || 0) + 40);
+    if (state.starving && state.food >= (state.agents || 0)) {
+      state.starving = false;
+    }
+    G.recalculateBaseStats(true);
+    ZS.Audio.playTrade();
+    banner('[DEBUG] 보급품 지급 완료', `식량 ${Math.floor(state.food)} · 탄환 ${Math.floor(state.ammo)} · 로켓 ${Math.floor(state.rocket)}`, 'good');
     saveGame();
     notifyUi();
     return true;
@@ -2621,6 +2729,7 @@ window.ZS = window.ZS || {};
     clearSaveAndReset,
     isDebugAllowed,
     debugAddResources,
+    debugAddSupplies,
     debugTogglePower,
     debugAddAgents,
     debugAddRp,

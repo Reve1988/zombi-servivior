@@ -1541,7 +1541,25 @@ window.ZS = window.ZS || {};
     let b1SupplyScrap = 0;
     const palletProdList = [];
     let b1SupplyCoin = 0;
+    let b1LogisticsCount = 0;
     let rawTraderDisc = 0;
+
+    let b1FoodCap = 0;
+    let b1AmmoCap = 0;
+    let b1RocketCap = 0;
+    let b1DawnFood = 0;
+    let b1DawnAmmo = 0;
+    let b1DawnRocket = 0;
+    let b1ProdFoodAdd = 0;
+    let b1ProdAmmoAdd = 0;
+    let b1ProdRocketAdd = 0;
+    let rawArmoryDmgAdd = 0;
+    let rawArmoryWallHpAdd = 0;
+    let rawArmoryRepairDisc = 0;
+    let rawArmoryDroneHealAdd = 0;
+    let rawArmoryDroneCdRed = 0;
+    const hydroFoodSources = [];
+    const roomGrowLedPct = {};
 
     let rawMannedFireRate = 0;
     let b1MannedXpMult = 0;
@@ -1558,6 +1576,7 @@ window.ZS = window.ZS || {};
     const div = G.getDivisionDef ? G.getDivisionDef() : null;
     const sbMult = (div && div.solarBatteryMult) ? div.solarBatteryMult : 1.0;
     const isBlackout = !!(state.isNight && state.blackoutActive);
+    const rules = DATA.SUPPLY_RULES || {};
 
     const isActiveB1BedAt = (bx, by) => {
       if (bx < 1 || by < 1 || bx > B1_SIZE - 2 || by > B1_SIZE - 2) return false;
@@ -1652,6 +1671,16 @@ window.ZS = window.ZS || {};
           rawB1IdleDrain += def.powerIdle;
         }
 
+        if (def.foodCap) {
+          b1FoodCap += Math.round(def.foodCap * mult);
+        }
+        if (def.ammoCap) {
+          b1AmmoCap += Math.round(def.ammoCap * mult);
+        }
+        if (def.rocketCap) {
+          b1RocketCap += Math.round(def.rocketCap * mult);
+        }
+
         if (!blackoutPaused) {
           if (g.id === 'b1_research_desk') {
             b1ResearchSlots += (def.researchSlots || 1);
@@ -1676,6 +1705,32 @@ window.ZS = window.ZS || {};
           } else if (g.id === 'b1_logistics_term') {
             b1SupplyCoin += (def.dawnCoin || 0) * mult;
             rawTraderDisc += (def.traderDiscAdd || 0) * mult;
+            b1LogisticsCount += 1;
+          } else if (g.id === 'b1_ammo_press') {
+            b1ProdSlots += (def.prodSlots || 1);
+            b1DawnAmmo += (def.dawnAmmo || 0) * mult;
+            b1ProdAmmoAdd += (def.prodAmmo || 0) * mult;
+          } else if (g.id === 'b1_rocket_rig') {
+            b1ProdSlots += (def.prodSlots || 1);
+            b1DawnRocket += (def.dawnRocket || 0) * mult;
+            b1ProdRocketAdd += (def.prodRocket || 0) * mult;
+          } else if (g.id === 'b1_grow_led' && room && def.roomFoodBonusPct) {
+            const capPct = rules.growLedRoomFoodCap || 0.40;
+            roomGrowLedPct[room.id] = Math.min(capPct, +((roomGrowLedPct[room.id] || 0) + def.roomFoodBonusPct * mult).toFixed(4));
+          } else if (g.id === 'b1_hydro_bed' || g.id === 'b1_nutrient_tank') {
+            hydroFoodSources.push({
+              roomId: room ? room.id : null,
+              dawnFood: (def.dawnFood || 0) * mult,
+              prodFood: (def.prodFood || 0) * mult
+            });
+          } else if (g.id === 'b1_powder_bench') {
+            rawArmoryDmgAdd += (def.armoryDmgAdd || 0) * mult;
+          } else if (g.id === 'b1_armor_welder') {
+            rawArmoryWallHpAdd += (def.armoryWallHpAdd || 0) * mult;
+            rawArmoryRepairDisc += (def.armoryRepairDisc || 0) * mult;
+          } else if (g.id === 'b1_drone_station') {
+            rawArmoryDroneHealAdd += (def.armoryDroneHealAdd || 0) * mult;
+            rawArmoryDroneCdRed += (def.armoryDroneCdRed || 0) * mult;
           } else if (g.id === 'vending_machine') {
             rawMannedFireRate += (def.mannedFireRateAdd || 0) * mult;
           } else if (g.id === 'b1_coffee_bar') {
@@ -1729,11 +1784,23 @@ window.ZS = window.ZS || {};
       b1SupplyProdScrap += palletProdList[i].s;
     }
 
+    for (let i = 0; i < hydroFoodSources.length; i++) {
+      const hs = hydroFoodSources[i];
+      const ledMult = 1 + Math.min(rules.growLedRoomFoodCap || 0.40, (hs.roomId != null ? (roomGrowLedPct[hs.roomId] || 0) : 0));
+      b1DawnFood += hs.dawnFood * ledMult;
+      b1ProdFoodAdd += hs.prodFood * ledMult;
+    }
+
     const b1PowerDrainSave = +Math.min(0.35, rawDrainSave).toFixed(4);
     const b1NightIdleDrain = +(rawB1IdleDrain * (1 - b1PowerDrainSave)).toFixed(3);
     const b1TraderDisc = +Math.min(0.24, rawTraderDisc).toFixed(4);
     const b1MannedFireRateMult = +Math.min(0.15, rawMannedFireRate).toFixed(4);
     const b1DigApBonusMult = +Math.min(0.30, rawDigApBonus).toFixed(4);
+    const b1ArmoryDmgAdd = +Math.min(rules.armoryDmgCap || 0.24, rawArmoryDmgAdd).toFixed(4);
+    const b1ArmoryWallHpAdd = +Math.min(rules.armoryWallHpCap || 0.30, rawArmoryWallHpAdd).toFixed(4);
+    const b1ArmoryRepairDisc = +Math.min(rules.armoryRepairDiscCap || 0.45, rawArmoryRepairDisc).toFixed(4);
+    const b1ArmoryDroneHealAdd = Math.min(rules.armoryDroneHealCap || 105, Math.round(rawArmoryDroneHealAdd));
+    const b1ArmoryDroneCdRed = +Math.min(rules.armoryDroneCdRedCap || 4.5, rawArmoryDroneCdRed).toFixed(2);
 
     state.b1PopCap = b1PopCap;
     state.b1ResearchSlots = b1ResearchSlots;
@@ -1748,6 +1815,21 @@ window.ZS = window.ZS || {};
     state.b1SupplyProdWood = +b1SupplyProdWood.toFixed(2);
     state.b1SupplyProdScrap = +b1SupplyProdScrap.toFixed(2);
     state.b1SupplyCoin = +b1SupplyCoin.toFixed(2);
+    state.b1FoodCap = b1FoodCap;
+    state.b1AmmoCap = b1AmmoCap;
+    state.b1RocketCap = b1RocketCap;
+    state.b1DawnFood = +b1DawnFood.toFixed(2);
+    state.b1DawnAmmo = +b1DawnAmmo.toFixed(2);
+    state.b1DawnRocket = +b1DawnRocket.toFixed(2);
+    state.b1ProdFoodAdd = +b1ProdFoodAdd.toFixed(2);
+    state.b1ProdAmmoAdd = +b1ProdAmmoAdd.toFixed(2);
+    state.b1ProdRocketAdd = +b1ProdRocketAdd.toFixed(2);
+    state.b1ArmoryDmgAdd = b1ArmoryDmgAdd;
+    state.b1ArmoryWallHpAdd = b1ArmoryWallHpAdd;
+    state.b1ArmoryRepairDisc = b1ArmoryRepairDisc;
+    state.b1ArmoryDroneHealAdd = b1ArmoryDroneHealAdd;
+    state.b1ArmoryDroneCdRed = b1ArmoryDroneCdRed;
+    state.b1LogisticsCount = b1LogisticsCount;
     state.b1TraderDisc = b1TraderDisc;
     state.b1MannedFireRateMult = b1MannedFireRateMult;
     state.b1MannedXpMult = +b1MannedXpMult.toFixed(4);
@@ -1764,6 +1846,20 @@ window.ZS = window.ZS || {};
       popCap: b1PopCap,
       researchSlots: b1ResearchSlots,
       prodSlots: b1ProdSlots,
+      foodCap: b1FoodCap,
+      ammoCap: b1AmmoCap,
+      rocketCap: b1RocketCap,
+      dawnFood: +b1DawnFood.toFixed(2),
+      dawnAmmo: +b1DawnAmmo.toFixed(2),
+      dawnRocket: +b1DawnRocket.toFixed(2),
+      prodFoodAdd: +b1ProdFoodAdd.toFixed(2),
+      prodAmmoAdd: +b1ProdAmmoAdd.toFixed(2),
+      prodRocketAdd: +b1ProdRocketAdd.toFixed(2),
+      armoryDmgAdd: b1ArmoryDmgAdd,
+      armoryWallHpAdd: b1ArmoryWallHpAdd,
+      armoryRepairDisc: b1ArmoryRepairDisc,
+      armoryDroneHealAdd: b1ArmoryDroneHealAdd,
+      armoryDroneCdRed: b1ArmoryDroneCdRed,
       powerCap: b1PowerCap,
       dayCharge: +b1DayCharge.toFixed(2),
       nightGen: +b1NightGen.toFixed(3),

@@ -253,8 +253,9 @@ window.ZS = window.ZS || {};
     const hqInfo = ZS.Game.getHqLevelInfo ? ZS.Game.getHqLevelInfo(st.hqLevel) : { baseRpPerScientist: 0.8 };
     const prodRates = (ZS.DATA && ZS.DATA.PROD_RATES) || { woodPerWorker: 2.0, scrapPerWorker: 1.5 };
     const prodCount = jobs.prod || 0;
-    const prodWood = prodCount * prodRates.woodPerWorker + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0);
-    const prodScrap = prodCount * prodRates.scrapPerWorker + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0);
+    const starveMult = st.starving ? (1 - ((ZS.DATA.SUPPLY_RULES && ZS.DATA.SUPPLY_RULES.starveOutputPenalty) || 0.35)) : 1.0;
+    const prodWood = (prodCount * prodRates.woodPerWorker + (st.b1SupplyWood || 0) + (st.b1SupplyProdWood || 0)) * starveMult;
+    const prodScrap = (prodCount * prodRates.scrapPerWorker + (st.b1SupplyScrap || 0) + (st.b1SupplyProdScrap || 0)) * starveMult;
     const supplyCoin = Math.round(st.b1SupplyCoin || 0);
     const wood = +(26 + wave * 9 + prodWood).toFixed(1);
     const scrap = +(16 + wave * 5 + prodScrap).toFixed(1);
@@ -264,8 +265,50 @@ window.ZS = window.ZS || {};
     const rawRp = (jobs.research || 0) * (hqInfo.baseRpPerScientist || 0.8) + (st.b1LabFlatRp || 0) + (st.b1LabFlatPerWaveRp || 0);
     const drill2 = ZS.Game.getTechLevel ? ZS.Game.getTechLevel('b1_drill_2') : 0;
     const rpMult = 1 + (st.b1LabMult || 0) + (drill2 > 0 ? 0.15 : 0);
-    const rp = +(rawRp * rpMult).toFixed(1);
+    const rp = +(rawRp * rpMult * starveMult).toFixed(1);
     return { wood, scrap, coin, rp };
+  }
+
+  function syncSupplyPillHud(st) {
+    if (!st) return;
+    const foodVal = Math.floor(st.food || 0);
+    const ammoVal = Math.floor(st.ammo || 0);
+    const rocketVal = Math.floor(st.rocket || 0);
+    const foodEl = document.getElementById('res-food');
+    const ammoEl = document.getElementById('res-ammo');
+    const rocketEl = document.getElementById('res-rocket');
+    if (foodEl) foodEl.textContent = foodVal;
+    if (ammoEl) ammoEl.textContent = ammoVal;
+    if (rocketEl) rocketEl.textContent = rocketVal;
+
+    const agents = Math.max(0, st.agents || 0);
+    const foodChip = document.getElementById('sup-chip-food');
+    const ammoChip = document.getElementById('sup-chip-ammo');
+    const rocketChip = document.getElementById('sup-chip-rocket');
+    const supplyPill = document.getElementById('supply-pill');
+
+    if (foodChip) {
+      const critFood = !!st.starving || foodVal < agents;
+      const lowFood = !critFood && foodVal < agents * 2;
+      foodChip.classList.toggle('is-critical', critFood);
+      foodChip.classList.toggle('is-low', lowFood);
+    }
+    if (ammoChip) {
+      const critAmmo = (st.ammo || 0) < 1;
+      const lowAmmo = !critAmmo && (st.ammo || 0) < 30;
+      ammoChip.classList.toggle('is-critical', critAmmo);
+      ammoChip.classList.toggle('is-low', lowAmmo);
+    }
+    if (rocketChip) {
+      const rocketActive = (st.hqLevel || 1) >= 3 || (st.rocketCap || 40) > 40;
+      const critRocket = rocketActive && (st.rocket || 0) < 1;
+      const lowRocket = rocketActive && !critRocket && (st.rocket || 0) < 10;
+      rocketChip.classList.toggle('is-critical', critRocket);
+      rocketChip.classList.toggle('is-low', lowRocket);
+    }
+    if (supplyPill) {
+      supplyPill.classList.toggle('is-starving', !!st.starving);
+    }
   }
 
   function formatDeltaVal(v) {
@@ -393,6 +436,7 @@ window.ZS = window.ZS || {};
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
     updateDailyResourceDeltas(st);
+    syncSupplyPillHud(st);
 
     if (st.phase !== 'night') {
       syncNightPhaseAndPowerHud(st);
@@ -430,6 +474,9 @@ window.ZS = window.ZS || {};
     document.getElementById('res-cozy').textContent = `Lv.${tier.level}`;
 
     const cozyPillEl = document.getElementById('cozy-pill');
+    if (cozyPillEl) {
+      cozyPillEl.classList.toggle('is-starving', !!st.starving);
+    }
     if (cozyPillEl && st.cozyPulseSeq && st.cozyPulseSeq !== lastCozyPulseSeq) {
       lastCozyPulseSeq = st.cozyPulseSeq;
       cozyPillEl.classList.remove('tier-up-pulse');
@@ -439,7 +486,7 @@ window.ZS = window.ZS || {};
       cozyPillEl.classList.add('tier-up-pulse');
     }
 
-    const cozySig = `${st.cozyScore}|${st.cozyFloorRaw || 0}|${st.cozyStructScore || 0}|${st.cozySynergyScore || 0}|${st.cozyDiversityBonus || 0}|${tier.level}`;
+    const cozySig = `${st.cozyScore}|${st.cozyFloorRaw || 0}|${st.cozyStructScore || 0}|${st.cozySynergyScore || 0}|${st.cozyDiversityBonus || 0}|${tier.level}|${st.starving ? 1 : 0}`;
     if (cozySig !== lastCozySig) {
       lastCozySig = cozySig;
       const heartPath = document.getElementById('res-cozy-heart-path');
@@ -473,6 +520,9 @@ window.ZS = window.ZS || {};
       if (tier.coinBonus > 0) buffParts.push(`코인 +${Math.round(tier.coinBonus * 100)}%`);
       if ((tier.xpBonus || 0) > 0) buffParts.push(`숙련 +${Math.round(tier.xpBonus * 100)}%`);
       const buffLine = buffParts.length > 0 ? buffParts.join(' · ') : '모던 꾸미기로 등급 상승';
+      const starveNote = st.starving
+        ? `<div class="cozy-popover-foot" style="color:${P.danger};font-weight:700;">기아 디버프 적용 중 (-2티어)</div>`
+        : '';
 
       document.getElementById('cozy-tooltip').innerHTML = `
         <div class="cozy-popover-head">
@@ -480,6 +530,7 @@ window.ZS = window.ZS || {};
           <span style="font-size:12px;color:#e6eef7;"><b>${st.cozyScore}점</b></span>
         </div>
         <div class="cozy-buff-line">${escapeHtml(buffLine)}</div>
+        ${starveNote}
         ${
           nextTier
             ? `<div class="cozy-popover-foot">다음 등급(Lv.${nextTier.level})까지 <b>${nextTier.min - st.cozyScore}점</b></div>`
@@ -777,13 +828,30 @@ window.ZS = window.ZS || {};
     }
 
     const alerts = [];
+    if (report.starving) {
+      alerts.push({
+        cls: 'is-danger',
+        icon: 'state-alert',
+        iconCls: 'icon-danger',
+        title: '식량 고갈 — 기아 페널티 발생!',
+        sub: '신규 생존자 유입 중단 · 유인 화력 -25% · 연구/생산 -35% · 안락함 -2티어. 상점 긴급 보급이나 수경재배실로 식량을 채우면 즉시 해제됩니다.'
+      });
+    } else if (report.recoveredFromStarve) {
+      alerts.push({
+        cls: 'is-hq',
+        icon: 'res-food',
+        iconCls: 'icon-food',
+        title: '식량 수급 안정 — 기아 페널티 해제!',
+        sub: '전투원 화력·생산 효율·안락함 등급이 정상 수치로 복구되었습니다.'
+      });
+    }
     if (report.arrivedAgent > 0) {
       alerts.push({
         cls: 'is-arrival',
         icon: 'res-agent',
         iconCls: 'icon-coin',
         title: `생존자 ${report.arrivedAgent}명이 쉘터에 합류하였습니다.`,
-        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 (미배정 대기 풀 합류) · 인구 배치 [P]에서 직무를 배정하세요.`
+        sub: `현재 총원 ${report.totalAgents}/${report.popCap}명 (다음 모집 ${report.recruitProgress || 0}% · +${report.recruitRate || 0}명/일) · 인구 배치 [P]에서 직무를 배정하세요.`
       });
     }
     if ((report.turnedAway || 0) > 0) {
@@ -794,17 +862,17 @@ window.ZS = window.ZS || {};
         title: `숙소 부족으로 생존자 ${report.turnedAway}명이 되돌아갔습니다.`,
         sub: `새벽 방문 ${report.incomingAgents}명 중 ${report.arrivedAgent}명만 수용됨 (${report.totalAgents}/${report.popCap}명). [전력·숙소] 탭에서 막사/숙소를 증설하세요.`
       });
-    } else if (report.arrivedAgent <= 0 && (report.incomingAgents || 0) === 0) {
+    } else if (report.arrivedAgent <= 0 && (report.incomingAgents || 0) === 0 && !report.starveBlockedArrival) {
       alerts.push({
         cls: 'is-info',
         icon: 'res-agent',
         iconCls: 'icon-muted',
         title: report.popFull
           ? `요원 수용 한도 도달 (${report.totalAgents}/${report.popCap}명)`
-          : '오늘은 새벽 합류 생존자가 없었습니다.',
+          : `생존자 모집 진행 중 (${report.recruitProgress || 0}%)`,
         sub: report.popFull
-          ? '전술 막사나 모듈러 숙소를 증설하면 추가 생존자를 수용할 수 있습니다.'
-          : `현재 총원 ${report.totalAgents}/${report.popCap}명 · 안락함 등급이 높을수록 더 많은 생존자가 찾아옵니다.`
+          ? `모집 대기 ${report.recruitProgress || 0}% · 막사나 지하 침대를 증설하면 새벽마다 순차 합류합니다.`
+          : `현재 총원 ${report.totalAgents}/${report.popCap}명 · 일일 모집 +${report.recruitRate || 0}명 (100% 도달 시 새벽 합류, 급할 땐 상점 요원 스카우트 활용)`
       });
     }
 
@@ -898,7 +966,28 @@ window.ZS = window.ZS || {};
             label: '생존 인원',
             val: `${report.totalAgents || 0}/${report.popCap || 4}명`,
             sub: ''
-          }
+          },
+      {
+        icon: 'res-food',
+        iconCls: report.starving ? 'icon-danger' : 'icon-food',
+        label: '식량 결산',
+        val: `${report.foodAfter || 0}/${report.foodCap || 160}`,
+        sub: `+${report.foodGain || 0} / -${report.foodUsed || 0} 소비${report.starving ? ' (기아)' : ''}`
+      },
+      {
+        icon: 'res-ammo',
+        iconCls: 'icon-ammo',
+        label: '탄환 보급',
+        val: `+${report.ammoGain || 0}`,
+        sub: `보유 ${report.ammoAfter || 0}/${report.ammoCap || 140}`
+      },
+      {
+        icon: 'res-rocket',
+        iconCls: 'icon-rocket',
+        label: '로켓 탄두',
+        val: `+${report.rocketGain || 0}`,
+        sub: `보유 ${report.rocketAfter || 0}/${report.rocketCap || 40}`
+      }
     ];
 
     gridEl.innerHTML = cells
@@ -938,6 +1027,7 @@ window.ZS = window.ZS || {};
     document.getElementById('res-scrap').textContent = Math.floor(st.scrap);
     document.getElementById('res-coin').textContent = Math.floor(st.coin);
     updateDailyResourceDeltas(st);
+    syncSupplyPillHud(st);
     const jobs = st.jobs || { combat: st.agents, research: 0, prod: 0 };
     const nextPopSig = `${st.popUsed}/${st.agents}/${st.popCap}/${jobs.combat}/${jobs.research}/${jobs.prod}/${Math.floor(st.rp || 0)}`;
     if (nextPopSig !== lastPopSig) {
@@ -972,10 +1062,12 @@ window.ZS = window.ZS || {};
     document.getElementById('hud-enemies-left').textContent = `${left}기`;
     document.getElementById('speed-label').textContent = `${st.gameSpeed}x`;
 
+    const healAmt = 95 + (st.b1ArmoryDroneHealAdd || 0);
+    const effMaxCd = Math.max(6, Math.round((st.skills.repairMaxCd || 18) - (st.b1ArmoryDroneCdRed || 0)));
     const rBtn = document.getElementById('btn-skill-repair');
     rBtn.disabled = st.skills.repairCd > 0;
     document.getElementById('skill-repair-cd').textContent =
-      st.skills.repairCd > 0 ? `재충전 중 (${Math.ceil(st.skills.repairCd)}초)` : `즉시 전체 시설 +95 HP (${st.skills.repairMaxCd || 18}초)`;
+      st.skills.repairCd > 0 ? `재충전 중 (${Math.ceil(st.skills.repairCd)}초)` : `즉시 전체 시설 +${healAmt} HP (${effMaxCd}초)`;
 
     const sBtn = document.getElementById('btn-skill-airstrike');
     sBtn.disabled = st.skills.airstrikeCd > 0;
@@ -1017,6 +1109,7 @@ window.ZS = window.ZS || {};
       </div>
       <div class="debug-body">
         <button id="btn-dbg-res" class="debug-btn" title="목재·고철·코인 즉시 +500">${ozIcon('res-coin', 13, 'icon-coin')}<span>+500 자원</span></button>
+        <button id="btn-dbg-supply" class="debug-btn" title="식량+100 · 탄환+100 · 로켓+40 즉시 보급">${ozIcon('res-ammo', 13, 'icon-ammo')}<span>+보급품</span></button>
         <button id="btn-dbg-rp" class="debug-btn" title="연구포인트(RP) 즉시 +20">${ozIcon('res-rp', 13, 'icon-rp')}<span>+20 RP</span></button>
         <button id="btn-dbg-digap" class="debug-btn" title="굴착력 +20 AP 지급 (본부 Lv.2 증축 후 사용)">${ozIcon('b1-dig', 13, 'icon-ap')}<span>+20 굴착 AP</span></button>
         <button id="btn-dbg-pwr" class="debug-btn" title="배터리 전력 완충 / 방전(0) 토글">${ozIcon('res-power', 13, 'icon-power')}<span>전력 완충/방전</span></button>
@@ -1041,6 +1134,7 @@ window.ZS = window.ZS || {};
       if (el) el.addEventListener('click', fn);
     };
     bind('btn-dbg-res', () => ZS.Game.debugAddResources(500));
+    bind('btn-dbg-supply', () => ZS.Game.debugAddSupplies && ZS.Game.debugAddSupplies());
     bind('btn-dbg-rp', () => ZS.Game.debugAddRp && ZS.Game.debugAddRp(20));
     bind('btn-dbg-digap', () => ZS.Game.debugAddDigAp && ZS.Game.debugAddDigAp(20));
     bind('btn-dbg-pwr', () => ZS.Game.debugTogglePower());
@@ -1089,6 +1183,7 @@ window.ZS = window.ZS || {};
     '#btn-open-trader-pill',
     '#pop-pill',
     '#rp-pill',
+    '#supply-pill',
     '#cozy-pill',
     '#btn-trader',
     '#btn-open-pop',
@@ -1289,6 +1384,29 @@ window.ZS = window.ZS || {};
           badge: `${Math.floor(st.rp || 0)} RP`,
           body: '연구 요원이 매일 아침 생산하며 5계열 연구 트리를 해금',
           foot: `연구 요원 ${jobs.research || 0}명 배치 · 상단 연구 버튼 [T]`
+        })
+      };
+    }
+
+    if (id === 'supply-pill') {
+      const dSup = st.supplyDaily || { foodIn: 0, foodOut: 0, ammoIn: 0, rocketIn: 0 };
+      const armParts = [];
+      if ((st.b1ArmoryDmgAdd || 0) > 0) armParts.push(`화기 +${Math.round(st.b1ArmoryDmgAdd * 100)}%`);
+      if ((st.b1ArmoryWallHpAdd || 0) > 0) armParts.push(`성벽 +${Math.round(st.b1ArmoryWallHpAdd * 100)}%`);
+      if ((st.b1ArmoryDroneHealAdd || 0) > 0) armParts.push(`드론 +${st.b1ArmoryDroneHealAdd}HP`);
+      const armLine = armParts.length > 0 ? `병기 공방: ${armParts.join(' · ')}` : '새벽 정산 및 상점 [긴급 보급]으로 보충';
+      return {
+        tone: st.starving ? 'danger' : 'gold',
+        html: renderPopoverHtml({
+          icon: 'res-ammo',
+          iconCls: st.starving ? 'icon-danger' : 'icon-ammo',
+          title: '기지 보급품 3종',
+          badge: st.starving ? '기아 경보' : '보급 가동',
+          highlight: `식량 ${Math.floor(st.food || 0)}/${st.foodCap || 160} (+${dSup.foodIn}/-${dSup.foodOut}) · 탄환 ${Math.floor(st.ammo || 0)}/${st.ammoCap || 140} (+${dSup.ammoIn}) · 로켓 ${Math.floor(st.rocket || 0)}/${st.rocketCap || 40} (+${dSup.rocketIn})`,
+          body: st.starving
+            ? '식량 고갈 상태! 유인 화력 -25%, 연구·생산 -35%, 안락함 -2티어, 신규 유입 중단이 적용 중입니다.'
+            : '발칸 포대는 탄환, 다연장 로켓은 로켓 탄두를 소모하며 고갈 시 즉시 정지(OFF)됩니다. 유인 초소는 무탄약·무전력 작동.',
+          foot: armLine
         })
       };
     }

@@ -1149,8 +1149,8 @@ button, input, select {
   }
 
   #hud-secondary.hud-res-compact .res-secondary {
-    padding: 3px 11px;
-    gap: 7px;
+    padding: 3px 10px;
+    gap: 6px;
   }
 
   #hud-secondary.hud-res-compact .res-secondary:first-child {
@@ -1169,6 +1169,14 @@ button, input, select {
   #hud-secondary .res-val,
   #hud-secondary .pop-pill .res-val {
     font-size: 16px;
+  }
+
+  .supply-micro-group {
+    gap: 7px;
+  }
+
+  .supply-val {
+    font-size: 14px;
   }
 
   #hud-secondary .cozy-segments {
@@ -5358,6 +5366,72 @@ body.main-menu-active #game-canvas {
   color: #BBF7D0;
 }
 
+.pop-recruit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.pop-recruit-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #E2E8F0;
+}
+
+.pop-recruit-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pop-recruit-meta > strong {
+  color: #FCD34D;
+  font-variant-numeric: tabular-nums;
+}
+
+.pop-recruit-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+
+.pop-recruit-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #D97706 0%, #FBBF24 100%);
+  transition: width 0.2s ease;
+}
+
+.pop-recruit-row.is-full .pop-recruit-fill {
+  background: linear-gradient(90deg, #64748B 0%, #94A3B8 100%);
+}
+
+.pop-recruit-row.is-full .pop-recruit-meta > strong {
+  color: #CBD5E1;
+}
+
+.pop-recruit-row.is-starving {
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.pop-recruit-row.is-starving .pop-recruit-fill {
+  background: linear-gradient(90deg, #DC2626 0%, #F87171 100%);
+}
+
+.pop-recruit-row.is-starving .pop-recruit-meta > strong {
+  color: #FCA5A5;
+}
+
 .pop-roles-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6680,5 +6754,112 @@ body.main-menu-active #game-canvas {
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0, transparent 6px),
     linear-gradient(180deg, #1E2734 0%, #121821 100%);
 }
+
+/* ================= V0.9.0 SUPPLY LOGISTICS UI ================= */
+.icon-food {
+  color: #4ADE80;
+}
+
+.icon-ammo {
+  color: #FBBF24;
+}
+
+.icon-rocket {
+  color: #FB923C;
+}
+
+.res-cell.supply-pill {
+  padding: 2px 10px;
+}
+
+#hud-secondary.hud-res-compact .res-secondary.supply-pill {
+  padding: 3px 9px;
+}
+
+.supply-micro-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.supply-micro-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #F8FAFC;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.supply-val {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #F8FAFC;
+}
+
+.supply-micro-item.is-low .supply-val {
+  color: #FACC15;
+}
+
+.supply-micro-item.is-critical .supply-val,
+.supply-micro-item.is-critical .oz-icon {
+  color: #FF4D6D;
+}
+
+.res-cell.supply-pill.is-starving {
+  background: rgba(127, 29, 29, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 77, 109, 0.72);
+}
+
+.cozy-pill.is-starving .res-val {
+  color: #FF4D6D;
+}
+
+.trader-emergency-subhead {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(148, 178, 210, 0.22);
+}
+
+.exchange-row.supply-emg-row {
+  background: rgba(18, 30, 44, 0.94);
+  border-color: rgba(74, 222, 128, 0.22);
+}
+
+.exchange-quota-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9CB4CD;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-quota-badge.is-soldout {
+  color: #FF4D6D;
+  background: rgba(65, 16, 28, 0.72);
+  border-color: rgba(255, 77, 109, 0.48);
+}
+
+.pop-starve-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 77, 109, 0.65);
+  background: rgba(65, 16, 28, 0.72);
+  color: #FECDD3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 
 
