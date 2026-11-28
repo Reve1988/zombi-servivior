@@ -196,6 +196,8 @@ window.ZS = window.ZS || {};
     }
     state.phase = 'night';
     state.isNight = true;
+    state.ammoDepletedBannered = false;
+    state.rocketDepletedBannered = false;
     const nightStartsDry = state.power <= 0.001 && (state.nightGen || 0) < state.nightIdleDrain;
     state.blackoutActive = nightStartsDry;
     state.blackoutTriggered = nightStartsDry;
@@ -279,29 +281,31 @@ window.ZS = window.ZS || {};
   // ================= ACTIVE TACTICAL SKILLS =================
   function triggerNanoRepair() {
     if (state.skills.repairCd > 0 || state.phase === 'gameover') return false;
-    state.skills.repairCd = state.skills.repairMaxCd;
+    const cdRed = Math.max(0, state.b1ArmoryDroneCdRed || 0);
+    const healAmt = 95 + (state.b1ArmoryDroneHealAdd || 0);
+    state.skills.repairCd = Math.max(6, (state.skills.repairMaxCd || 18) - cdRed);
 
     let count = 0;
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const st = state.structGrid[y][x];
         if (st && st.hp < st.maxHp) {
-          st.hp = Math.min(st.maxHp, st.hp + 95);
+          st.hp = Math.min(st.maxHp, st.hp + healAmt);
           G.spawnBurstParticles(x + 0.5, y + 0.5, 10, DATA.PALETTE.health, 6);
           count++;
         }
         if (st && st.mounted && st.mounted.hp < st.mounted.maxHp) {
-          st.mounted.hp = Math.min(st.mounted.maxHp, st.mounted.hp + 95);
+          st.mounted.hp = Math.min(st.mounted.maxHp, st.mounted.hp + healAmt);
           G.spawnBurstParticles(x + 0.5, y + 0.5, 8, DATA.PALETTE.health, 16);
           count++;
         }
       }
     }
     ZS.Audio.playBuild();
-    G.addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, '+95 HP', DATA.PALETTE.heal || DATA.PALETTE.health, 14, DATA.PALETTE.outlineDark);
+    G.addFloatingText(DATA.HQ_POS.x + 0.5, DATA.HQ_POS.y + 0.5, 30, `+${healAmt} HP`, DATA.PALETTE.heal || DATA.PALETTE.health, 14, DATA.PALETTE.outlineDark);
     G.banner(
       '긴급 나노 수리 드론 가동',
-      count > 0 ? `${count}개 시설의 내구도를 +95 회복했습니다.` : '모든 시설 내구도가 이미 최대입니다.',
+      count > 0 ? `${count}개 시설의 내구도를 +${healAmt} 회복했습니다.` : '모든 시설 내구도가 이미 최대입니다.',
       'good'
     );
     G.notifyUi();
@@ -659,6 +663,7 @@ window.ZS = window.ZS || {};
       if (!st || st.id === 'command_hq') return;
       const def = DATA.ITEMS[st.id];
       if (!def || (def.subType !== 'manned' && def.subType !== 'turret')) return;
+      st.supplyOffReason = null;
       if (def.subType === 'manned' && (st.crew || 0) <= 0) return;
 
       if (st.cooldown > 0) st.cooldown -= dt;
@@ -666,10 +671,28 @@ window.ZS = window.ZS || {};
       // Power & EMP stun check for automated electric facilities
       const hasWindSurplus = (state.nightGen || 0) >= (state.nightIdleDrain || 0) && (state.nightGen || 0) > 0;
       if (def.requiresPower && (state.blackoutActive || (state.power <= 0.001 && !hasWindSurplus) || (st.empStunTimer || 0) > 0)) return;
-      if (st.cooldown > 0) return;
-      if (state.zombies.length === 0) return;
 
       const eff = G.getStructureEffectiveStats(st, x, y, undefined, isMounted);
+      const ammoNeed = eff.ammoShot || 0;
+      const rocketNeed = eff.rocketShot || 0;
+      if (ammoNeed > 0 && (state.ammo || 0) + 1e-6 < ammoNeed) {
+        st.supplyOffReason = 'ammo';
+        if (!state.ammoDepletedBannered) {
+          state.ammoDepletedBannered = true;
+          G.banner('탄환 고갈 — 발칸 포대 정지!', '주간 작업장·지하 탄약 프레스 또는 교역소 긴급 보급으로 탄환을 보충하세요.', 'warn');
+        }
+        return;
+      }
+      if (rocketNeed > 0 && (state.rocket || 0) + 1e-6 < rocketNeed) {
+        st.supplyOffReason = 'rocket';
+        if (!state.rocketDepletedBannered) {
+          state.rocketDepletedBannered = true;
+          G.banner('로켓 고갈 — 다연장 로켓 포대 정지!', '지하 로켓 조립대 또는 교역소 긴급 보급으로 로켓 탄두를 보충하세요.', 'warn');
+        }
+        return;
+      }
+      if (st.cooldown > 0) return;
+      if (state.zombies.length === 0) return;
       const cx = x + 0.5;
       const cy = y + 0.5;
       const SNIPER_PRIORITY = {
@@ -738,6 +761,13 @@ window.ZS = window.ZS || {};
           state.power = Math.max(0, state.power - shotCost);
           if (state.power <= 0.001) enterBlackout();
         }
+      }
+
+      if (ammoNeed > 0) {
+        state.ammo = Math.max(0, +((state.ammo || 0) - ammoNeed).toFixed(4));
+      }
+      if (rocketNeed > 0) {
+        state.rocket = Math.max(0, +((state.rocket || 0) - rocketNeed).toFixed(4));
       }
 
       const target = state.zombies[bestIdx];

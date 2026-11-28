@@ -313,6 +313,11 @@ window.ZS = window.ZS || {};
     let popUse = 0;
     let prodSlots = def.prodSlots || 0;
     let researchSlots = def.researchSlots || 0;
+    let dawnFood = def.dawnFood || 0;
+    let dawnAmmo = def.dawnAmmo || 0;
+    let ammoCap = def.ammoCap || 0;
+    let ammoShot = def.ammoShot || 0;
+    let rocketShot = def.rocketShot || 0;
     let cozy = def.cozy || 0;
     let cozyGroup = normalizeCozyGroup(def.cozyGroup || null);
     let lightRadius = def.lightRadius || 0;
@@ -350,6 +355,9 @@ window.ZS = window.ZS || {};
       if (tier.popCap !== undefined) popCap = tier.popCap;
       if (tier.prodSlots !== undefined) prodSlots = tier.prodSlots;
       if (tier.researchSlots !== undefined) researchSlots = tier.researchSlots;
+      if (tier.dawnFood !== undefined) dawnFood = tier.dawnFood;
+      if (tier.dawnAmmo !== undefined) dawnAmmo = tier.dawnAmmo;
+      if (tier.ammoCap !== undefined) ammoCap = tier.ammoCap;
       if (tier.cozy !== undefined) cozy = tier.cozy;
       if (tier.cozyGroup !== undefined) cozyGroup = normalizeCozyGroup(tier.cozyGroup);
       if (tier.lightRadius !== undefined) lightRadius = tier.lightRadius;
@@ -454,6 +462,7 @@ window.ZS = window.ZS || {};
         powerIdle = +(powerIdle * 1.30).toFixed(2);
         if (def.id === 'vulcan_turret') {
           powerShot = 0.16;
+          ammoShot = 0.09;
           critAdd = 0.15;
         } else if (def.id === 'emp_coil') {
           chainCount = 5;
@@ -536,6 +545,11 @@ window.ZS = window.ZS || {};
       popUse,
       prodSlots,
       researchSlots,
+      dawnFood,
+      dawnAmmo,
+      ammoCap,
+      ammoShot,
+      rocketShot,
       cozy,
       cozyGroup,
       lightRadius,
@@ -601,6 +615,10 @@ window.ZS = window.ZS || {};
       if (G.exitUnderground) G.exitUnderground();
       else state.activeLayer = 'surface';
     }
+    // Aggregate active Underground B1 gadgets first so Armory wall HP applies to surface walls/gates
+    const ugEff = G.recomputeUndergroundEffects ? G.recomputeUndergroundEffects() : null;
+    const armoryWallHpMult = 1 + ((ugEff && ugEff.armoryWallHpAdd) || 0);
+
     const hqInfo = G.getHqLevelInfo(state.hqLevel);
     const hqAura = hqInfo && hqInfo.globalAura ? hqInfo.globalAura : null;
     const hqStructHpMult = (hqAura && hqAura.structHpMult) || 1.0;
@@ -618,6 +636,9 @@ window.ZS = window.ZS || {};
     let combatCap = hqInfo.combatSlots || 0;
     let researchCap = hqInfo.researchSlots || 2;
     let prodCap = hqInfo.prodSlots || 2;
+    let workshopDawnFood = 0;
+    let workshopDawnAmmo = 0;
+    let workshopAmmoCap = 0;
     let floorRaw = 0;
     let synergyScore = 0;
     const structGroups = {};
@@ -651,11 +672,12 @@ window.ZS = window.ZS || {};
           const def = DATA.ITEMS[targetSt.id];
           if (!def) return;
 
-          // Update maxHp & infra stats with upgrade level/tier + floor bonus + HQ aura + def_repeat tech
+          // Update maxHp & infra stats with upgrade level/tier + floor bonus + HQ aura + def_repeat + B1 armory
           const prof = getStructLevelProfile(def, targetSt.level || 1);
           const isFort = def.subType === 'wall' || def.subType === 'gate' || def.subType === 'trap';
+          const isArmoryFort = def.subType === 'wall' || def.subType === 'gate';
           const defHpTechMult = isFort && defRepeatLv > 0 ? (1 + 0.15 * defRepeatLv) : 1.0;
-          const hpMult = (1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0)) * hqStructHpMult * defHpTechMult;
+          const hpMult = (1 + (fDef && fDef.hpMultBonus ? fDef.hpMultBonus : 0)) * hqStructHpMult * defHpTechMult * (isArmoryFort ? armoryWallHpMult : 1.0);
           const targetMax = Math.round(prof.baseMaxHp * hpMult);
           if (targetSt.maxHp !== targetMax) {
             const ratio = targetSt.maxHp > 0 ? targetSt.hp / targetSt.maxHp : 1;
@@ -671,6 +693,9 @@ window.ZS = window.ZS || {};
           if (prof.popCap) popCap += prof.popCap;
           if (prof.prodSlots) prodCap += prof.prodSlots;
           if (prof.researchSlots) researchCap += prof.researchSlots;
+          if (prof.dawnFood) workshopDawnFood += prof.dawnFood;
+          if (prof.dawnAmmo) workshopDawnAmmo += prof.dawnAmmo;
+          if (prof.ammoCap) workshopAmmoCap += prof.ammoCap;
           if (def.subType === 'manned') {
             const maxC = G.getStructMaxCrew ? G.getStructMaxCrew(targetSt) : 1;
             targetSt.crew = Math.max(0, Math.min(maxC, Math.floor(Number(targetSt.crew) || 0)));
@@ -701,8 +726,7 @@ window.ZS = window.ZS || {};
       }
     }
 
-    // Aggregate active Underground B1 gadgets (connectivity, 4th-copy diminishing, blackout pause)
-    const ugEff = G.recomputeUndergroundEffects ? G.recomputeUndergroundEffects() : null;
+    // Apply B1 Underground aggregate already computed before the surface loop
     if (ugEff) {
       powerCap += ugEff.powerCap || 0;
       dayCharge += ugEff.dayCharge || 0;
@@ -723,6 +747,16 @@ window.ZS = window.ZS || {};
       }
     }
 
+    const baseCaps = DATA.BASE_SUPPLY_CAPS || { food: 160, ammo: 140, rocket: 40 };
+    state.foodCap = (baseCaps.food || 160) + (hqInfo.foodCapAdd || 0) + ((ugEff && ugEff.foodCap) || 0);
+    state.ammoCap = (baseCaps.ammo || 140) + (hqInfo.ammoCapAdd || 0) + workshopAmmoCap + ((ugEff && ugEff.ammoCap) || 0);
+    state.rocketCap = (baseCaps.rocket || 40) + (hqInfo.rocketCapAdd || 0) + ((ugEff && ugEff.rocketCap) || 0);
+    state.food = Math.min(state.foodCap, Math.max(0, Number(state.food) || 0));
+    state.ammo = Math.min(state.ammoCap, Math.max(0, Number(state.ammo) || 0));
+    state.rocket = Math.min(state.rocketCap, Math.max(0, Number(state.rocket) || 0));
+    state.surfaceDawnFood = workshopDawnFood;
+    state.surfaceDawnAmmo = workshopDawnAmmo;
+
     const floorCap = DATA.COZY_FLOOR_CAP || 60;
     const floorScore = Math.min(floorCap, floorRaw);
 
@@ -739,12 +773,18 @@ window.ZS = window.ZS || {};
     const diversityBonus = uniqueGroups.size * 5;
     const totalCozy = floorScore + structScore + synergyScore + diversityBonus;
 
-    let tier = DATA.COZY_TIERS[0];
+    let rawTierIdx = 0;
     for (let i = 0; i < DATA.COZY_TIERS.length; i++) {
       if (totalCozy >= DATA.COZY_TIERS[i].min) {
-        tier = DATA.COZY_TIERS[i];
+        rawTierIdx = i;
       }
     }
+    const rules = DATA.SUPPLY_RULES || {};
+    state.rawCozyTier = DATA.COZY_TIERS[rawTierIdx];
+    const effTierIdx = state.starving
+      ? Math.max(0, rawTierIdx - (rules.starveCozyTierPenalty || 2))
+      : rawTierIdx;
+    const tier = DATA.COZY_TIERS[effTierIdx];
 
     state.powerCap = Math.round(powerCap * infraPowerMult);
     state.dayCharge = +(dayCharge * infraPowerMult).toFixed(2);
@@ -759,6 +799,16 @@ window.ZS = window.ZS || {};
       state.jobs.combat = popUsed;
     }
     if (G.normalizeJobs) G.normalizeJobs();
+
+    const prodWorkers = Math.max(0, Math.floor((state.jobs && state.jobs.prod) || 0));
+    const starveOutMult = state.starving ? (1 - (rules.starveOutputPenalty || 0.35)) : 1.0;
+    const pRates = DATA.PROD_RATES || { foodPerWorker: 1.5, ammoPerWorker: 2.0, rocketPerWorker: 0 };
+    state.supplyDaily = {
+      foodIn: +((hqInfo.baseFoodRation || 0) + workshopDawnFood + prodWorkers * ((pRates.foodPerWorker || 1.5) + ((ugEff && ugEff.prodFoodAdd) || 0)) + ((ugEff && ugEff.dawnFood) || 0)).toFixed(1),
+      foodOut: Math.max(0, (state.agents || 0) * (rules.foodPerAgent || 1)),
+      ammoIn: +(((hqInfo.baseAmmoSupply || 0) + workshopDawnAmmo + prodWorkers * ((pRates.ammoPerWorker || 2.0) + ((ugEff && ugEff.prodAmmoAdd) || 0)) + ((ugEff && ugEff.dawnAmmo) || 0)) * starveOutMult).toFixed(1),
+      rocketIn: +(((hqInfo.baseRocketSupply || 0) + prodWorkers * ((pRates.rocketPerWorker || 0) + ((ugEff && ugEff.prodRocketAdd) || 0)) + ((ugEff && ugEff.dawnRocket) || 0)) * starveOutMult).toFixed(1)
+    };
     state.cozyFloorRaw = floorRaw;
     state.cozyFloorScore = floorScore;
     state.cozyStructScore = structScore;
@@ -877,9 +927,15 @@ window.ZS = window.ZS || {};
       crew = Math.max(0, Math.min(maxCrew, Math.floor(Number(st.crew) || 0)));
       crewRateMult = G.getStructCrewRateMult ? G.getStructCrewRateMult(st) : 1.0;
       isInactive = crew <= 0;
-      dmgMult += state.cozyTier.agentDmg;
+      dmgMult += state.cozyTier.agentDmg + (state.b1ArmoryDmgAdd || 0);
+      if (state.starving) {
+        const starvePenalty = (DATA.SUPPLY_RULES && DATA.SUPPLY_RULES.starveMannedDmgPenalty) || 0.25;
+        dmgMult *= Math.max(0.2, 1 - starvePenalty);
+      }
       rateMult += (state.b1MannedFireRateMult || 0);
       if (crew > 0) rateMult *= crewRateMult;
+    } else if ((def.id === 'vulcan_turret' || def.id === 'missile_pod') && state.b1ArmoryDmgAdd) {
+      dmgMult += state.b1ArmoryDmgAdd;
     }
 
     if (state.phase === 'night' && state.nightConsumables && state.nightConsumables.overpressureAmmo) {
@@ -1036,6 +1092,10 @@ window.ZS = window.ZS || {};
       if (auraRadius > 0) auraRadius = +(auraRadius * flMult).toFixed(3);
     }
 
+    const supplyMult = (div && div.supplyCostMult) || 1.0;
+    const rawAmmoShot = prof.ammoShot !== undefined ? prof.ammoShot : (def.ammoShot || 0);
+    const rawRocketShot = prof.rocketShot !== undefined ? prof.rocketShot : (def.rocketShot || 0);
+
     return {
       level: lv,
       rank,
@@ -1054,6 +1114,8 @@ window.ZS = window.ZS || {};
       critChance: Math.min(0.85, critChance),
       powerIdle: prof.powerIdle,
       powerShot: effPowerShot,
+      ammoShot: rawAmmoShot > 0 ? +(rawAmmoShot * supplyMult).toFixed(4) : 0,
+      rocketShot: rawRocketShot > 0 ? +(rawRocketShot * supplyMult).toFixed(4) : 0,
       pellets: prof.pellets,
       knockback: prof.knockback,
       pierceCount: prof.pierceCount,
@@ -2049,9 +2111,10 @@ window.ZS = window.ZS || {};
         }
       }
     }
-    if (missingTotal <= 0) return { needed: false, woodCost: 0, scrapCost: 0 };
-    let woodCost = Math.round(woodWeight / 26);
-    let scrapCost = Math.round(scrapWeight / 20);
+    if (missingTotal <= 0) return { needed: false, woodCost: 0, scrapCost: 0, repairDisc: state.b1ArmoryRepairDisc || 0 };
+    const repairDisc = Math.max(0, Math.min(0.45, state.b1ArmoryRepairDisc || 0));
+    let woodCost = Math.round((woodWeight / 26) * (1 - repairDisc));
+    let scrapCost = Math.round((scrapWeight / 20) * (1 - repairDisc));
     if (woodCost === 0 && scrapCost === 0) {
       if (scrapWeight >= woodWeight) scrapCost = 1;
       else woodCost = 1;
@@ -2059,7 +2122,8 @@ window.ZS = window.ZS || {};
     return {
       needed: true,
       woodCost,
-      scrapCost
+      scrapCost,
+      repairDisc
     };
   }
 
@@ -2102,10 +2166,45 @@ window.ZS = window.ZS || {};
     return Math.max(1, Math.round(offer.coinCost * (1 - disc)));
   }
 
+  function getTraderRefreshLimit() {
+    const limits = DATA.TRADER_LIMITS || {};
+    const base = limits.baseRefreshLimit || 2;
+    const bonus = (state.b1LogisticsCount || 0) > 0 ? (limits.logisticsRefreshBonus || 1) : 0;
+    return base + bonus;
+  }
+
   function getEffectiveTraderRefreshCost() {
-    const baseCost = state.traderRefreshCost || 15;
+    const limits = DATA.TRADER_LIMITS || {};
+    const costs = Array.isArray(limits.refreshCosts) && limits.refreshCosts.length > 0 ? limits.refreshCosts : [20, 40, 65];
+    const count = Math.max(0, state.traderRefreshCount || 0);
+    const baseCost = count < costs.length ? costs[count] : (costs[costs.length - 1] + (count - costs.length + 1) * 25);
     const disc = Math.max(0, Math.min(0.24, state.b1TraderDisc || 0));
     return Math.max(1, Math.round(baseCost * (1 - disc)));
+  }
+
+  function getExchangeRouteLimit(routeId) {
+    const routes = DATA.TRADER_EXCHANGE_ROUTES || [];
+    let route = null;
+    for (let i = 0; i < routes.length; i++) {
+      if (routes[i].id === routeId) {
+        route = routes[i];
+        break;
+      }
+    }
+    const base = (route && route.dailyLimit) || 4;
+    const limits = DATA.TRADER_LIMITS || {};
+    const bonus = Math.min(limits.logisticsExchangeBonusCap || 2, Math.max(0, state.b1LogisticsCount || 0));
+    return base + bonus;
+  }
+
+  function getEmergencySupplyLimit(supplyId) {
+    const list = DATA.TRADER_EMERGENCY_SUPPLIES || [];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === supplyId) {
+        return list[i].dailyLimit || 3;
+      }
+    }
+    return 3;
   }
 
   function refreshTraderOffers(paid) {
@@ -2114,7 +2213,13 @@ window.ZS = window.ZS || {};
         ZS.Audio.playError();
         return false;
       }
-      const baseCurCost = state.traderRefreshCost || 15;
+      const maxRefresh = getTraderRefreshLimit();
+      const usedRefresh = Math.max(0, state.traderRefreshCount || 0);
+      if (usedRefresh >= maxRefresh) {
+        ZS.Audio.playError();
+        G.banner('금일 목록 갱신 한도 도달', `오늘 보급 목록 갱신(${maxRefresh}/${maxRefresh}회)을 모두 사용했습니다. 내일 새벽 초기화됩니다.`, 'warn');
+        return false;
+      }
       const curCost = getEffectiveTraderRefreshCost();
       if (state.coin < curCost) {
         ZS.Audio.playError();
@@ -2122,8 +2227,10 @@ window.ZS = window.ZS || {};
         return false;
       }
       state.coin -= curCost;
-      state.traderRefreshCount = (state.traderRefreshCount || 0) + 1;
-      state.traderRefreshCost = baseCurCost + 10 + (state.traderRefreshCount - 1) * 5;
+      state.traderRefreshCount = usedRefresh + 1;
+      const limits = DATA.TRADER_LIMITS || {};
+      const costs = Array.isArray(limits.refreshCosts) && limits.refreshCosts.length > 0 ? limits.refreshCosts : [20, 40, 65];
+      state.traderRefreshCost = costs[Math.min(costs.length - 1, state.traderRefreshCount)] || (curCost + 20);
       ZS.Audio.playTrade();
     }
 
@@ -2165,6 +2272,21 @@ window.ZS = window.ZS || {};
       ZS.Audio.playError();
       return false;
     }
+    if (!state.traderExchangeUsed || typeof state.traderExchangeUsed !== 'object') {
+      state.traderExchangeUsed = {};
+    }
+    const used = Math.max(0, state.traderExchangeUsed[routeId] || 0);
+    const limit = getExchangeRouteLimit(routeId);
+    const remaining = Math.max(0, limit - used);
+    if (count > remaining) {
+      ZS.Audio.playError();
+      G.banner(
+        '일일 환전 한도 도달',
+        remaining > 0 ? `${route.label} 오늘 남은 횟수는 ${remaining}회입니다.` : `${route.label} 금일 한도(${limit}회)를 모두 사용했습니다. 내일 새벽 초기화됩니다.`,
+        'warn'
+      );
+      return false;
+    }
     const totalCost = route.cost * count;
     const totalGive = route.give * count;
     const RES_NAMES = { wood: '목재', scrap: '고철', coin: '코인' };
@@ -2175,6 +2297,93 @@ window.ZS = window.ZS || {};
     }
     state[route.from] -= totalCost;
     state[route.to] = (state[route.to] || 0) + totalGive;
+    state.traderExchangeUsed[routeId] = used + count;
+    ZS.Audio.playTrade();
+    G.saveGame();
+    G.notifyUi();
+    return true;
+  }
+
+  function getEmergencySupplyCost(supplyId) {
+    const list = DATA.TRADER_EMERGENCY_SUPPLIES || [];
+    let entry = null;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === supplyId) {
+        entry = list[i];
+        break;
+      }
+    }
+    if (!entry) return 0;
+    const disc = Math.max(0, Math.min(0.24, state.b1TraderDisc || 0));
+    return Math.max(1, Math.round(entry.coin * (1 - disc)));
+  }
+
+  function buyEmergencySupply(supplyId, mult) {
+    if (state.phase !== 'day') {
+      ZS.Audio.playError();
+      return false;
+    }
+    const list = DATA.TRADER_EMERGENCY_SUPPLIES || [];
+    let entry = null;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === supplyId) {
+        entry = list[i];
+        break;
+      }
+    }
+    const count = Math.floor(Number(mult));
+    if (!entry || !Number.isFinite(count) || count <= 0) {
+      ZS.Audio.playError();
+      return false;
+    }
+    if (!state.traderEmergencyUsed || typeof state.traderEmergencyUsed !== 'object') {
+      state.traderEmergencyUsed = {};
+    }
+    const used = Math.max(0, state.traderEmergencyUsed[supplyId] || 0);
+    const limit = getEmergencySupplyLimit(supplyId);
+    const remaining = Math.max(0, limit - used);
+    if (count > remaining) {
+      ZS.Audio.playError();
+      G.banner(
+        '일일 긴급 보급 한도 도달',
+        remaining > 0 ? `${entry.name} 오늘 남은 횟수는 ${remaining}회입니다.` : `${entry.name} 금일 한도(${limit}회)를 모두 사용했습니다. 내일 새벽 초기화됩니다.`,
+        'warn'
+      );
+      return false;
+    }
+    const unitCoin = getEmergencySupplyCost(supplyId);
+    const totalCoin = unitCoin * count;
+    const capMap = {
+      food: state.foodCap || 160,
+      ammo: state.ammoCap || 140,
+      rocket: state.rocketCap || 40
+    };
+    const key = entry.supply;
+    const cap = capMap[key] || 140;
+    if ((state[key] || 0) >= cap - 1e-6) {
+      ZS.Audio.playError();
+      G.banner('보급 저장고 가득 참', `${entry.name} 저장고가 이미 최대 용량(${cap})입니다.`, 'info');
+      return false;
+    }
+    if (state.coin < totalCoin) {
+      ZS.Audio.playError();
+      G.banner('코인 부족', `${entry.name} ×${count} 보급에 ${totalCoin} 코인이 필요합니다.`, 'warn');
+      return false;
+    }
+    state.coin -= totalCoin;
+    state.traderEmergencyUsed[supplyId] = used + count;
+    const totalGive = entry.give * count;
+    const prevVal = state[key] || 0;
+    state[key] = Math.min(cap, +(prevVal + totalGive).toFixed(2));
+    const gained = Math.round(state[key] - prevVal);
+    if (key === 'food' && state.starving && state.food >= (state.agents || 0)) {
+      state.starving = false;
+      recalculateBaseStats(true);
+      G.banner('긴급 식량 배급 완료 — 기아 디버프 해제!', `식량 +${gained} (${Math.floor(state.food)}/${cap}) · 전투·생산 효율 정상화`, 'good');
+    } else {
+      recalculateBaseStats(true);
+      G.banner(`긴급 보급 완료: ${entry.name}`, `+${gained} 확보 (${Math.floor(state[key])}/${cap})`, 'good');
+    }
     ZS.Audio.playTrade();
     G.saveGame();
     G.notifyUi();
@@ -2329,8 +2538,13 @@ window.ZS = window.ZS || {};
     repairAllStructures,
     getEffectiveTraderOfferCost,
     getEffectiveTraderRefreshCost,
+    getTraderRefreshLimit,
+    getExchangeRouteLimit,
+    getEmergencySupplyLimit,
     refreshTraderOffers,
     exchangeResource,
+    getEmergencySupplyCost,
+    buyEmergencySupply,
     getNightConsumableCost,
     buyNightConsumable,
     buyTraderOffer

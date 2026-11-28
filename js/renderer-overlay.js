@@ -574,6 +574,42 @@ window.ZS = window.ZS || {};
     ctx.fillText('OFF', warnPos.x + 6.5 * badgeScale, textY);
   }
 
+  /** Renders a crimson NO AMMO or NO ROCKET pill badge above depleted Vulcan / Missile turrets. */
+  function drawSupplyOffPillBadge(ctx, gx, gy, warnZ, zScale, P, label) {
+    const warnPos = ZS.Iso.gridToScreen(gx, gy, warnZ);
+    const badgeScale = Math.max(1.0, Math.min(1.65, zScale));
+    const fontPx = Math.max(12, Math.round(12 * badgeScale));
+    const text = label || 'NO AMMO';
+    ctx.font = `800 ${fontPx}px 'Pretendard', 'Segoe UI', sans-serif`;
+    const textW = ctx.measureText(text).width;
+    const triW = 12 * badgeScale;
+    const pillW = Math.max(72 * badgeScale, textW + triW + 20 * badgeScale);
+    const pillH = 16 * badgeScale;
+    const pillY = warnPos.y - pillH + 2 * badgeScale;
+    ctx.fillStyle = P.outlineDark || '#1B2430';
+    ctx.fillRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+    ctx.strokeStyle = P.danger;
+    ctx.lineWidth = 1.3;
+    ctx.strokeRect(warnPos.x - pillW * 0.5, pillY, pillW, pillH);
+
+    // Crisp geometric warning triangle (0 OS emojis)
+    const tx = warnPos.x - pillW * 0.5 + 9 * badgeScale;
+    const ty = pillY + pillH * 0.5;
+    const r = 4.2 * badgeScale;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty - r);
+    ctx.lineTo(tx + r * 0.95, ty + r * 0.85);
+    ctx.lineTo(tx - r * 0.95, ty + r * 0.85);
+    ctx.closePath();
+    ctx.fillStyle = P.danger;
+    ctx.fill();
+
+    ctx.textAlign = 'center';
+    const textY = pillY + pillH * 0.5 + fontPx * 0.35;
+    ctx.fillStyle = P.danger;
+    ctx.fillText(text, warnPos.x + 6.5 * badgeScale, textY);
+  }
+
   /** Renders an amber 0명 badge above unmanned outposts or uncrewed HQ turrets. */
   function drawDormantCrewPillBadge(ctx, gx, gy, warnZ, zScale, P, label) {
     const warnPos = ZS.Iso.gridToScreen(gx, gy, warnZ);
@@ -1006,12 +1042,21 @@ window.ZS = window.ZS || {};
             const isMountUnpowered = state.isNight && mDef && mDef.requiresPower && !powered;
             const isMountEmpStunned = !isMountUnpowered && mDef && mDef.requiresPower && (m.empStunTimer || 0) > 0;
             const isMountUncrewed = !isMountUnpowered && !isMountEmpStunned && mDef && mDef.subType === 'manned' && (m.crew || 0) <= 0;
+            const mEffSupply = (!isMountUnpowered && !isMountEmpStunned && mDef && (mDef.id === 'vulcan_turret' || mDef.id === 'missile_pod'))
+              ? (ZS.Game && ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(m, tx, ty, undefined, true) : null)
+              : null;
+            const mSupplyOffLabel = mEffSupply && mEffSupply.ammoShot > 0 && (state.ammo || 0) + 1e-6 < mEffSupply.ammoShot
+              ? 'NO AMMO'
+              : (mEffSupply && mEffSupply.rocketShot > 0 && (state.rocket || 0) + 1e-6 < mEffSupply.rocketShot ? 'NO ROCKET' : null);
             if (isMountUnpowered) {
               const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
               drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
             } else if (isMountEmpStunned) {
               const empZ = showDualHp ? dualHpZ + 8 : topZ + (hasPips || hasRank ? 14 : 6);
               drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, m.empStunTimer || 0, timeSec, badgeScaleCap, zScale, P);
+            } else if (mSupplyOffLabel) {
+              const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
+              drawSupplyOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P, mSupplyOffLabel);
             } else if (isMountUncrewed) {
               const warnZ = showDualHp ? dualHpZ + 13 : topZ + (hasPips || hasRank ? 19 : 11);
               drawDormantCrewPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P, '0명');
@@ -1061,12 +1106,21 @@ window.ZS = window.ZS || {};
               (def && def.subType === 'manned' && (st.crew || 0) <= 0) ||
               (id === 'command_hq' && lv >= 2 && (st.crew || 0) <= 0)
             );
+            const gEffSupply = (!isUnpowered && !isEmpStunned && def && (id === 'vulcan_turret' || id === 'missile_pod'))
+              ? (ZS.Game && ZS.Game.getStructureEffectiveStats ? ZS.Game.getStructureEffectiveStats(st, tx, ty, undefined, false) : null)
+              : null;
+            const gSupplyOffLabel = gEffSupply && gEffSupply.ammoShot > 0 && (state.ammo || 0) + 1e-6 < gEffSupply.ammoShot
+              ? 'NO AMMO'
+              : (gEffSupply && gEffSupply.rocketShot > 0 && (state.rocket || 0) + 1e-6 < gEffSupply.rocketShot ? 'NO ROCKET' : null);
             if (isUnpowered) {
               const warnZ = isDamaged ? 35 : 29;
               drawPowerOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P);
             } else if (isEmpStunned) {
               const empZ = Math.max(topZ + (hasPips || hasRank ? 12 : 4), isDamaged ? 32 : 24);
               drawEmpStunIndicator(ctx, tx + 0.5, ty + 0.5, empZ, st.empStunTimer || 0, timeSec, Math.max(1.0, Math.min(1.65, zScale)), zScale, P);
+            } else if (gSupplyOffLabel) {
+              const warnZ = Math.max(topZ + (hasPips || hasRank ? 15 : 8), isDamaged ? 35 : 29);
+              drawSupplyOffPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P, gSupplyOffLabel);
             } else if (isUncrewed) {
               const warnZ = Math.max(topZ + (hasPips || hasRank ? 15 : 8), isDamaged ? 35 : 26);
               drawDormantCrewPillBadge(ctx, tx + 0.5, ty + 0.5, warnZ, zScale, P, '0명');
