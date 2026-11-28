@@ -399,15 +399,15 @@ window.ZS = window.ZS || {};
       }
     } else if (def.subType === 'manned') {
       if (lv === 2) {
-        dmgScale = 1.28;
-        rateScale = 1.10;
+        dmgScale = 1.24;
+        rateScale = 1.08;
         hpScale = 1.25;
       } else if (lv === 3) {
-        dmgScale = 1.92;
-        rateScale = 1.32;
-        hpScale = 1.70;
+        dmgScale = 1.52;
+        rateScale = 1.20;
+        hpScale = 1.65;
         if (def.id === 'rifle_bunker') {
-          burstSecondMult = 0.50;
+          burstSecondMult = 0.40;
         } else if (def.id === 'shotgun_post') {
           pellets = 6;
           knockback = 0.20;
@@ -420,41 +420,41 @@ window.ZS = window.ZS || {};
       if (lv === 1) {
         salvoCount = 2;
         salvoScatter = 0.25;
-        powerShot = 2.4;
+        powerShot = 1.7;
         splashRadius = 1.20;
       } else if (lv === 2) {
-        dmgScale = 26 / 24;
+        dmgScale = 34 / 30;
         rateScale = 1.0;
         hpScale = 1.25;
         powerIdle = +(powerIdle * 1.15).toFixed(2);
-        powerShot = 3.1;
+        powerShot = 2.2;
         salvoCount = 3;
         salvoScatter = 0.50;
         splashRadius = 1.20;
       } else if (lv === 3) {
-        dmgScale = 28 / 24;
+        dmgScale = 38 / 30;
         rateScale = 1.0;
         hpScale = 1.55;
         powerIdle = +(powerIdle * 1.30).toFixed(2);
-        powerShot = 4.0;
+        powerShot = 2.8;
         salvoCount = 6;
         salvoScatter = 0.80;
         splashRadius = 1.20;
       }
     } else if (def.subType === 'turret') {
       if (lv === 2) {
-        dmgScale = 1.30;
-        rateScale = 1.12;
+        dmgScale = 1.38;
+        rateScale = 1.15;
         hpScale = 1.25;
         powerIdle = +(powerIdle * 1.15).toFixed(2);
       } else if (lv === 3) {
-        dmgScale = 1.68;
-        rateScale = 1.25;
+        dmgScale = 1.90;
+        rateScale = 1.32;
         hpScale = 1.55;
         powerIdle = +(powerIdle * 1.30).toFixed(2);
         if (def.id === 'vulcan_turret') {
-          powerShot = 0.28;
-          critAdd = 0.12;
+          powerShot = 0.16;
+          critAdd = 0.15;
         } else if (def.id === 'emp_coil') {
           chainCount = 5;
           slowDuration = 2.4;
@@ -962,7 +962,7 @@ window.ZS = window.ZS || {};
     if (onPlateau && isCombatUnit) {
       critChance += pBonus.critAdd != null ? pBonus.critAdd : 0.08;
     }
-    if (isCombatUnit && div && div.rangeMult) {
+    if (isCombatUnit && div && div.rangeMult && !(onWall && div.wallMountExemptRangePenalty)) {
       rangeMult *= div.rangeMult;
     }
     if (div && div.id === 'nightwatch' && state.blackoutActive && def.subType === 'manned') {
@@ -992,10 +992,15 @@ window.ZS = window.ZS || {};
 
     const turRepeatLv = getTechLevel('tur_repeat');
     let effPowerShot = prof.powerShot;
-    if (def.subType === 'turret' && turRepeatLv > 0) {
-      dmgMult *= 1 + 0.12 * turRepeatLv;
-      if (effPowerShot > 0) {
-        effPowerShot = +(effPowerShot * Math.max(0.4, 1 - 0.06 * turRepeatLv)).toFixed(3);
+    if (def.subType === 'turret') {
+      if (turRepeatLv > 0) {
+        dmgMult *= 1 + 0.12 * turRepeatLv;
+        if (effPowerShot > 0) {
+          effPowerShot = +(effPowerShot * Math.max(0.4, 1 - 0.06 * turRepeatLv)).toFixed(3);
+        }
+      }
+      if (effPowerShot > 0 && div && div.turretPowerShotMult) {
+        effPowerShot = +(effPowerShot * div.turretPowerShotMult).toFixed(3);
       }
     }
 

@@ -87,12 +87,13 @@ window.ZS = window.ZS || {};
 
   function computeBossHpScale(waveNum) {
     const tier = Math.max(1, Math.floor((waveNum || 5) / 5));
+    if (tier === 1) return 1.15;
     if (tier <= 6) {
-      const quad = Math.max(0, tier - 2);
-      return 1 + (tier - 1) * 0.55 + quad * quad * 0.20;
+      const d = tier - 1;
+      return +(1.15 + d * 0.95 + d * d * 0.34).toFixed(3);
     }
     const dt = tier - 6;
-    return 6.95 + dt * 2.40 + Math.pow(dt, 1.35) * 0.55;
+    return +(14.4 + dt * 4.2 + Math.pow(dt, 1.35) * 1.1).toFixed(3);
   }
 
   function buildWaveQueue(waveNum, sideWeights, bossSide) {

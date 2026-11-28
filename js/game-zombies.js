@@ -18,8 +18,8 @@ window.ZS = window.ZS || {};
 
   function scaleWaveDrop(rawAmount, waveNum, isBoss) {
     const w = waveNum || 1;
-    if (w < 10 || rawAmount <= 0) return rawAmount;
-    const baseScale = Math.max(0.35, 1 / (1 + (w - 9) * 0.08));
+    if (w < 9 || rawAmount <= 0) return rawAmount;
+    const baseScale = Math.max(0.25, 1 / (1 + (w - 8) * 0.11));
     const scale = isBoss ? Math.max(0.70, baseScale) : baseScale;
     const exact = rawAmount * scale;
     const whole = Math.floor(exact);
@@ -783,9 +783,11 @@ window.ZS = window.ZS || {};
     if (G.invalidateStatsCache) G.invalidateStatsCache();
 
     // 1. Wave clearance rewards + Cozy dividend bonus
-    const woodReward = 26 + clearedWave * 9;
-    const scrapReward = 16 + clearedWave * 5;
-    const baseCoin = 16 + clearedWave * 4;
+    const wEarly = Math.min(clearedWave, 12);
+    const wLate = Math.max(0, clearedWave - 12);
+    const woodReward = Math.round(34 + wEarly * 7.5 + Math.sqrt(wLate) * 18);
+    const scrapReward = Math.round(14 + wEarly * 4.0 + Math.sqrt(wLate) * 11);
+    const baseCoin = Math.round(14 + wEarly * 3.2 + Math.sqrt(wLate) * 9);
     const bonusCoin = Math.round(baseCoin * state.cozyTier.coinBonus);
     const totalCoin = baseCoin + bonusCoin;
 
