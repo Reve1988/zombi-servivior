@@ -202,10 +202,10 @@ ZS.DATA = (function () {
   };
 
   const BARRACKS_TIERS = {
-    1: { level: 1, name: '전술 돔 막사', reqTech: null, cost: { wood: 85, scrap: 35 }, maxHp: 170, popCap: 4, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
+    1: { level: 1, name: '전술 돔 막사', reqTech: null, cost: { wood: 60, scrap: 30 }, maxHp: 170, popCap: 4, cozy: 5, cozyGroup: 'infra_housing', lightRadius: 1.8, lightColor: 'rgba(255, 206, 112, 0.34)', topZ: 16 },
     2: { level: 2, name: '확장형 야전 막사', reqTech: 'inf_tier2', upCost: { wood: 60, scrap: 75, coin: 35 }, maxHp: 230, popCap: 6, cozy: 10, cozyGroup: 'infra_housing', lightRadius: 2.0, lightColor: 'rgba(255, 206, 112, 0.35)', topZ: 19 },
     3: { level: 3, name: '모듈러 컨테이너 숙소', reqTech: 'inf_tier3', upCost: { wood: 90, scrap: 140, coin: 75 }, maxHp: 310, popCap: 12, cozy: 18, cozyGroup: 'infra_housing', lightRadius: 2.3, lightColor: 'rgba(255, 214, 145, 0.36)', topZ: 22 },
-    4: { level: 4, name: '강화 작전 생활관', reqTech: 'inf_tier4', upCost: { wood: 140, scrap: 240, coin: 140 }, maxHp: 420, popCap: 24, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
+    4: { level: 4, name: '강화 작전 생활관', reqTech: 'inf_tier4', upCost: { wood: 140, scrap: 240, coin: 140 }, maxHp: 420, popCap: 18, cozy: 28, cozyGroup: 'infra_housing', lightRadius: 2.7, lightColor: 'rgba(255, 214, 145, 0.38)', topZ: 32 }
   };
 
   const WORKSHOP_TIERS = {
@@ -252,7 +252,7 @@ ZS.DATA = (function () {
   };
 
   return {
-  VERSION: 'v0.8.4',
+  VERSION: 'v0.8.5',
   GRID_SIZE: 26,
   HQ_POS: { x: 13, y: 13 },
   B1_SIZE: 23,
@@ -467,8 +467,8 @@ ZS.DATA = (function () {
   PALETTE,
 
   INITIAL_RESOURCES: {
-    wood: 100,
-    scrap: 95,
+    wood: 120,
+    scrap: 90,
     coin: 60
   },
 
@@ -511,7 +511,7 @@ ZS.DATA = (function () {
       basePowerCap: 105,
       baseDayCharge: 46,
       basePopCap: 14,
-      baseRpPerScientist: 1.2,
+      baseRpPerScientist: 1.0,
       combatSlots: 2,
       researchSlots: 2,
       prodSlots: 2,
@@ -542,7 +542,7 @@ ZS.DATA = (function () {
       basePowerCap: 145,
       baseDayCharge: 64,
       basePopCap: 18,
-      baseRpPerScientist: 1.6,
+      baseRpPerScientist: 1.25,
       combatSlots: 3,
       researchSlots: 3,
       prodSlots: 3,
@@ -571,7 +571,7 @@ ZS.DATA = (function () {
       basePowerCap: 195,
       baseDayCharge: 88,
       basePopCap: 24,
-      baseRpPerScientist: 2.0,
+      baseRpPerScientist: 1.5,
       combatSlots: 4,
       researchSlots: 4,
       prodSlots: 4,
@@ -600,7 +600,7 @@ ZS.DATA = (function () {
       basePowerCap: 260,
       baseDayCharge: 120,
       basePopCap: 30,
-      baseRpPerScientist: 2.8,
+      baseRpPerScientist: 2.0,
       combatSlots: 4,
       researchSlots: 5,
       prodSlots: 5,
@@ -757,10 +757,10 @@ ZS.DATA = (function () {
       id: 'tur_lv3',
       branch: 'auto_turret',
       name: '초전도 오토터렛 특전 Lv.3',
-      costRp: 20,
+      costRp: 16,
       maxLv: 1,
-      reqHqLevel: 4,
-      req: ['tur_lv2', 'tur_missile'],
+      reqHqLevel: 3,
+      req: ['tur_lv2'],
       desc: '모든 자동 포탑 Lv.3 특수 개조(초전도 급탄·6연장·5연쇄) 해금'
     },
     tur_repeat: {
@@ -850,12 +850,12 @@ ZS.DATA = (function () {
   COZY_TIERS: [
     { level: 1, min: 0,   title: '임시 전초기지',         agentDmg: 0.00, fireRate: 0.00, coinBonus: 0.00, xpBonus: 0.00, freeRepair: 0.06 },
     { level: 2, min: 25,  title: '정비된 작전소',         agentDmg: 0.08, fireRate: 0.03, coinBonus: 0.08, xpBonus: 0.10, freeRepair: 0.12 },
-    { level: 3, min: 65,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.18 },
-    { level: 4, min: 130, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.24 },
-    { level: 5, min: 225, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.30 },
-    { level: 6, min: 340, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.36 },
-    { level: 7, min: 480, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.42 },
-    { level: 8, min: 640, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.48 }
+    { level: 3, min: 60,  title: '모던 전술 쉘터',        agentDmg: 0.16, fireRate: 0.06, coinBonus: 0.15, xpBonus: 0.20, freeRepair: 0.18 },
+    { level: 4, min: 115, title: '하이라이즈 아웃포스트', agentDmg: 0.25, fireRate: 0.10, coinBonus: 0.22, xpBonus: 0.30, freeRepair: 0.24 },
+    { level: 5, min: 185, title: '네오 어반 요새',        agentDmg: 0.35, fireRate: 0.14, coinBonus: 0.30, xpBonus: 0.45, freeRepair: 0.30 },
+    { level: 6, min: 270, title: '택티컬 라운지 시타델',  agentDmg: 0.45, fireRate: 0.18, coinBonus: 0.38, xpBonus: 0.60, freeRepair: 0.36 },
+    { level: 7, min: 370, title: '사이버 헤이븐 코어',    agentDmg: 0.56, fireRate: 0.22, coinBonus: 0.46, xpBonus: 0.80, freeRepair: 0.42 },
+    { level: 8, min: 480, title: '엘리트 파라다이스',     agentDmg: 0.68, fireRate: 0.27, coinBonus: 0.55, xpBonus: 1.00, freeRepair: 0.48 }
   ],
 
   COZY_FLOOR_CAP: 60,
@@ -879,7 +879,7 @@ ZS.DATA = (function () {
   TIER_MAPS,
 
   CREW_SPECS: {
-    rifle_bunker: { maxByLv: { 1: 2, 2: 3, 3: 4 }, rateByCrew: [0, 0.75, 1.00, 1.30, 1.65] },
+    rifle_bunker: { maxByLv: { 1: 2, 2: 3, 3: 4 }, rateByCrew: [0, 0.75, 1.00, 1.22, 1.45] },
     shotgun_post: { maxByLv: { 1: 1, 2: 2, 3: 2 }, rateByCrew: [0, 1.00, 1.45] },
     sniper_tower: { maxByLv: { 1: 1, 2: 2, 3: 2 }, rateByCrew: [0, 1.00, 1.45] },
     command_hq:   { maxByLv: { 1: 0, 2: 2, 3: 3, 4: 4, 5: 4 }, rateByCrew: [0, 0.85, 1.15, 1.40, 1.65] }
@@ -893,10 +893,10 @@ ZS.DATA = (function () {
   },
 
   LV3_PERK_LABELS: {
-    rifle_bunker: '전술 2점사 (50% 피해 보조탄 추가 발사)',
+    rifle_bunker: '전술 2점사 (40% 피해 보조탄 추가 발사)',
     shotgun_post: '중산탄 제압 (펠릿 6발 + 0.20칸 넉백)',
     sniper_tower: '대구경 관통탄 (사거리 +1.0 · 최대 2기 관통)',
-    vulcan_turret: '초전도 급탄 (사격 전력 0.28 절감 · 치명타 +12%p)',
+    vulcan_turret: '초전도 급탄 (사격 전력 0.16 절감 · 치명타 +15%p)',
     missile_pod: '6연장 융단 포격 (1회 6발 연속 포격 · 광역 제압)',
     emp_coil: '연쇄 과부하 (최대 5기 연쇄 · 둔화 2.4초)'
   },
@@ -1080,11 +1080,11 @@ ZS.DATA = (function () {
       reqTech: 'tur_vulcan',
       cost: { wood: 8, scrap: 36 },
       requiresPower: true,
-      powerIdle: 0.70,
-      powerShot: 0.44,
+      powerIdle: 0.55,
+      powerShot: 0.28,
       maxHp: 240,
       range: 4.6,
-      damage: 13,
+      damage: 15,
       fireRate: 5.6,
       projType: 'vulcan',
       canMountOnWall: true,
@@ -1100,12 +1100,12 @@ ZS.DATA = (function () {
       reqTech: 'tur_missile',
       cost: { wood: 12, scrap: 48 },
       requiresPower: true,
-      powerIdle: 1.05,
-      powerShot: 2.4,
+      powerIdle: 0.85,
+      powerShot: 1.7,
       maxHp: 260,
       minRange: 2.2,
       range: 8.0,
-      damage: 24,
+      damage: 30,
       salvoCount: 2,
       salvoScatter: 0.25,
       splashRadius: 1.20,
@@ -1122,11 +1122,11 @@ ZS.DATA = (function () {
       reqTech: 'tur_emp',
       cost: { wood: 10, scrap: 52, coin: 15 },
       requiresPower: true,
-      powerIdle: 1.25,
-      powerShot: 2.7,
+      powerIdle: 0.95,
+      powerShot: 1.8,
       maxHp: 235,
       range: 3.8,
-      damage: 30,
+      damage: 38,
       chainCount: 3,
       slowDuration: 1.6,
       fireRate: 0.95,
@@ -1190,14 +1190,14 @@ ZS.DATA = (function () {
       layer: 'struct',
       subType: 'housing',
       reqHqLevel: 1,
-      cost: { wood: 85, scrap: 35 },
+      cost: { wood: 60, scrap: 30 },
       maxHp: 170,
       popCap: 4,
       cozy: 5,
       cozyGroup: 'housing_t1',
       lightRadius: 1.8,
       lightColor: 'rgba(255, 206, 112, 0.34)',
-      desc: '[요원 숙소 · 4단 진화] 요원 수용량 +4명(+4→+6→+12→+24)을 확장합니다. 인프라 연구 시 모듈러 숙소·강화 작전 생활관으로 진화합니다.'
+      desc: '[요원 숙소 · 4단 진화] 요원 수용량 +4명(+4→+6→+12→+18)을 확장합니다. 인프라 연구 시 모듈러 숙소·강화 작전 생활관으로 진화합니다.'
     },
     supply_workshop: {
       id: 'supply_workshop',
@@ -1379,11 +1379,11 @@ ZS.DATA = (function () {
       category: 'b1_living',
       layer: 'struct',
       subType: 'housing',
-      cost: { wood: 55, scrap: 35, coin: 15 },
-      popCap: 2,
-      cozy: 6,
+      cost: { wood: 40, scrap: 30, coin: 12 },
+      popCap: 4,
+      cozy: 8,
       cozyGroup: 'b1_bunk_bed',
-      desc: '[생활관 전용] 2층 강철 침대. 요원 수용 +2명 (고정 · 감쇠 없음) · 안락함 +6 (안락함 4개째부터 감쇠).'
+      desc: '[생활관 전용] 2층 강철 침대. 요원 수용 +4명 (고정 · 감쇠 없음) · 안락함 +8 (안락함 4개째부터 감쇠).'
     },
     b1_locker: {
       id: 'b1_locker',
@@ -1927,7 +1927,8 @@ ZS.DATA = (function () {
       thornsMult: 1.5,
       trapDpsMult: 1.5,
       repairMaxCd: 12,
-      rangeMult: 0.85,
+      rangeMult: 0.90,
+      wallMountExemptRangePenalty: true,
       badgeTag: '축성 +35% · 수리 12s',
       pros: [
         '시작 시 강철 스파이크 트랩 보급권 ×3 지급',
@@ -1936,7 +1937,7 @@ ZS.DATA = (function () {
         '긴급 나노 수리 드론 대기시간 18초 → 12초'
       ],
       cons: [
-        '모든 요원 초소 및 자동 포탑 사거리 -15%'
+        '지상 배치 초소·포탑 사거리 -10% (성벽 상부 거치 시 면제)'
       ],
       hasPenalty: true
     },
@@ -1950,20 +1951,20 @@ ZS.DATA = (function () {
       unlockedByDefault: false,
       unlockCondition: 'survive_blackout',
       unlockHint: '블랙아웃이 발생한 야간 웨이브 방어에 1회 생존하면 해금',
-      startingAgentsBonus: 4,
-      basePopCapBonus: 4,
+      startingAgentsBonus: 2,
+      basePopCapBonus: 2,
       startingVouchers: { rifle_bunker: 1 },
       voucherRank1: { rifle_bunker: 1 },
-      mannedXpMult: 2.0,
+      mannedXpMult: 1.65,
       blackoutMannedFireRateMult: 1.40,
       blackoutMannedCritAdd: 0.20,
       solarBatteryMult: 0.60,
       turretCostMult: 1.30,
-      badgeTag: '숙련 ×2 · 정전 유격',
+      badgeTag: '숙련 ×1.65 · 정전 유격',
       pros: [
-        '시작 가용 요원 +4명 & 본부 기본 수용량 +4',
+        '시작 가용 요원 +2명 & 본부 기본 수용량 +2',
         '소총 벙커 보급권 ×1 (첫 보급 배치 숙련 Rank 1)',
-        '요원 초소 전투 숙련 XP 획득량 2배',
+        '요원 초소 전투 숙련 XP 획득량 +65%',
         '정전(블랙아웃) 중 요원 초소 연사 +40% · 치명 +20%p'
       ],
       cons: [
@@ -1984,20 +1985,22 @@ ZS.DATA = (function () {
       unlockCondition: 'reach_wave_15',
       unlockHint: 'WAVE 15에 도달하면 영구 해금',
       startingVouchers: { wind_turbine: 1, battery_bank: 1 },
-      overdriveThreshold: 0.70,
+      overdriveThreshold: 0.50,
+      turretPowerShotMult: 0.75,
       overdriveTurretFireRateMult: 1.25,
       overdriveFloodlightMult: 1.25,
       overdriveEmpDurationMult: 0.35,
-      fieldTentPopCapMult: 0.65,
-      badgeTag: 'ARC ≥70%',
+      fieldTentPopCapMult: 0.80,
+      badgeTag: 'ARC ≥50%',
       pros: [
         '시작 시 풍력 터빈 보급권 ×1 + 배터리 보급권 ×1 지급',
-        '전력 ≥70% 유지 시 자동 포탑 연사력 +25%',
-        '전력 ≥70% 유지 시 LED 투광등 조명·오라 반경 +25%',
-        '전력 ≥70% 유지 시 전기 시설 EMP 기절 시간 -65%'
+        '자동 포탑 사격 전력 소모 -25%',
+        '전력 ≥50% 유지 시 자동 포탑 연사력 +25%',
+        '전력 ≥50% 유지 시 LED 투광등 조명·오라 반경 +25%',
+        '전력 ≥50% 유지 시 전기 시설 EMP 기절 시간 -65%'
       ],
       cons: [
-        '모든 티어 야전 숙소 요원 수용량 -35%'
+        '모든 티어 야전 숙소 요원 수용량 -20%'
       ],
       hasPenalty: true
     }

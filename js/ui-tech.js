@@ -123,12 +123,12 @@ window.ZS = window.ZS || {};
     tur_lv3: {
       icon: 'tech-turret3',
       shortLabel: '포탑 특전 Lv.3',
-      x: 735,
+      x: 558,
       y: 186,
       chips: [
         { icon: 'stat-unlock', tone: 'orange', text: '자동 포탑 Lv.3 특수 개조' },
         { icon: 'stat-dmg', tone: 'orange', text: '초전도 급탄 · 6연장 · 5연쇄' },
-        { icon: 'hud-hq', tone: 'muted', text: '포탑 Lv.2 + 로켓 포대 합류' }
+        { icon: 'hud-hq', tone: 'muted', text: '본부 Lv.3 (W20) 인가' }
       ]
     },
     tur_emp: {
@@ -630,9 +630,7 @@ window.ZS = window.ZS || {};
 
     // Keep multi-lane branches cleanly routed in gap corridors
     const corridorX = Math.round((fromNode.x + toNode.x) * 0.5);
-    const midX = toNode.id === 'tur_lv3' && fromNode.id === 'tur_missile'
-      ? 648
-      : toNode.id === 'tur_missile' && fromNode.id === 'tur_vulcan'
+    const midX = toNode.id === 'tur_missile' && fromNode.id === 'tur_vulcan'
       ? 294
       : corridorX;
 

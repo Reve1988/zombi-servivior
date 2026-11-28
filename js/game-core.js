@@ -362,7 +362,7 @@ window.ZS = window.ZS || {};
   function isArcOverdriveActive() {
     if (state.divisionId !== 'arc_tech') return false;
     if (state.blackoutActive) return false;
-    const thresh = (getDivisionDef('arc_tech').overdriveThreshold != null) ? getDivisionDef('arc_tech').overdriveThreshold : 0.70;
+    const thresh = (getDivisionDef('arc_tech').overdriveThreshold != null) ? getDivisionDef('arc_tech').overdriveThreshold : 0.50;
     return state.powerCap > 0 && state.power >= state.powerCap * thresh;
   }
 
