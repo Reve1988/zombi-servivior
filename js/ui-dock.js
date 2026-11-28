@@ -2618,7 +2618,7 @@ window.ZS = window.ZS || {};
       } else if (def.subType === 'housing') {
         statSummary = `${ozIcon('res-agent', 13)}수용 +${prof.popCap}명 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       } else if (def.id === 'supply_workshop') {
-        statSummary = `${ozIcon('act-repair', 13, 'icon-ap')}생산 +${prof.prodSlots}자리 · 식량+${prof.dawnFood || 0} · 탄환+${prof.dawnAmmo || 0} · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
+        statSummary = `${ozIcon('act-repair', 13, 'icon-ap')}생산 +${prof.prodSlots}자리 · 탄환+${prof.dawnAmmo || 0} · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       } else if (def.id === 'research_lab') {
         statSummary = `${ozIcon('res-rp', 13, 'icon-rp')}연구 직무 +${prof.researchSlots}자리 · ${ozIcon('res-cozy', 13, 'icon-coin')}안락함 +${prof.cozy}`;
       }

@@ -209,9 +209,9 @@ ZS.DATA = (function () {
   };
 
   const WORKSHOP_TIERS = {
-    1: { level: 1, name: '작업장', reqTech: null, cost: { wood: 45, scrap: 20 }, maxHp: 150, prodSlots: 2, dawnFood: 4, dawnAmmo: 8, ammoCap: 30, cozy: 3, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 17 },
-    2: { level: 2, name: '보급창고', reqTech: 'inf_tier3', upCost: { wood: 55, scrap: 50, coin: 25 }, maxHp: 240, prodSlots: 4, dawnFood: 8, dawnAmmo: 15, ammoCap: 60, cozy: 6, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 21 },
-    3: { level: 3, name: '보급소', reqTech: 'inf_tier4', upCost: { wood: 80, scrap: 95, coin: 55 }, maxHp: 360, prodSlots: 6, dawnFood: 12, dawnAmmo: 24, ammoCap: 100, cozy: 10, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 25 }
+    1: { level: 1, name: '작업장', reqTech: null, cost: { wood: 45, scrap: 20 }, maxHp: 150, prodSlots: 2, dawnFood: 0, dawnAmmo: 8, ammoCap: 30, cozy: 3, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 17 },
+    2: { level: 2, name: '보급창고', reqTech: 'inf_tier3', upCost: { wood: 55, scrap: 50, coin: 25 }, maxHp: 240, prodSlots: 4, dawnFood: 0, dawnAmmo: 15, ammoCap: 60, cozy: 6, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 21 },
+    3: { level: 3, name: '보급소', reqTech: 'inf_tier4', upCost: { wood: 80, scrap: 95, coin: 55 }, maxHp: 360, prodSlots: 6, dawnFood: 0, dawnAmmo: 24, ammoCap: 100, cozy: 10, cozyGroup: 'infra_workshop', lightRadius: 0, topZ: 25 }
   };
 
   const RESEARCH_LAB_TIERS = {
@@ -512,7 +512,7 @@ ZS.DATA = (function () {
   },
 
   INITIAL_SUPPLIES: {
-    food: 120,
+    food: 130,
     ammo: 80,
     rocket: 20
   },
@@ -572,7 +572,7 @@ ZS.DATA = (function () {
       baseDayCharge: 32,
       basePopCap: 9,
       baseRpPerScientist: 0.8,
-      baseFoodRation: 14,
+      baseFoodRation: 0,
       baseAmmoSupply: 14,
       baseRocketSupply: 0,
       foodCapAdd: 0,
@@ -597,7 +597,7 @@ ZS.DATA = (function () {
       baseDayCharge: 46,
       basePopCap: 13,
       baseRpPerScientist: 1.0,
-      baseFoodRation: 20,
+      baseFoodRation: 0,
       baseAmmoSupply: 24,
       baseRocketSupply: 4,
       foodCapAdd: 40,
@@ -634,7 +634,7 @@ ZS.DATA = (function () {
       baseDayCharge: 64,
       basePopCap: 17,
       baseRpPerScientist: 1.25,
-      baseFoodRation: 28,
+      baseFoodRation: 0,
       baseAmmoSupply: 36,
       baseRocketSupply: 12,
       foodCapAdd: 90,
@@ -669,7 +669,7 @@ ZS.DATA = (function () {
       baseDayCharge: 88,
       basePopCap: 22,
       baseRpPerScientist: 1.5,
-      baseFoodRation: 38,
+      baseFoodRation: 0,
       baseAmmoSupply: 50,
       baseRocketSupply: 20,
       foodCapAdd: 160,
@@ -704,7 +704,7 @@ ZS.DATA = (function () {
       baseDayCharge: 120,
       basePopCap: 28,
       baseRpPerScientist: 2.0,
-      baseFoodRation: 50,
+      baseFoodRation: 0,
       baseAmmoSupply: 66,
       baseRocketSupply: 30,
       foodCapAdd: 240,
@@ -1325,12 +1325,12 @@ ZS.DATA = (function () {
       cost: { wood: 45, scrap: 20 },
       maxHp: 150,
       prodSlots: 2,
-      dawnFood: 4,
+      dawnFood: 0,
       dawnAmmo: 8,
       ammoCap: 30,
       cozy: 3,
       cozyGroup: 'infra_workshop',
-      desc: '[생산 슬롯 +2 · 식량+4/탄환+8 · 무전력] 야전 공방 작업장. 생산 슬롯과 매일 아침 식량·탄환 비축량을 늘립니다.'
+      desc: '[생산 슬롯 +2 · 탄환+8 · 무전력] 야전 공방 작업장. 생산 슬롯과 매일 아침 탄환 비축량을 늘립니다.'
     },
     research_lab: {
       id: 'research_lab',
